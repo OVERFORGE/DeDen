@@ -1,0 +1,538 @@
+// Decentralized Den - Production-Ready Prisma Schema
+// Optimized for MongoDB with proper indexing, enums, and relations
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS - Type-safe status values
+// ============================================================================
+
+enum BookingStatus {
+  PENDING           // Payment initiated but not confirmed
+  CONFIRMED         // Payment confirmed, booking active
+  WAITLISTED        // User on waitlist
+  CANCELLED         // Cancelled by user
+  REFUNDED          // Refund processed
+  EXPIRED           // Payment session expired
+  FAILED            // Payment failed
+}
+
+enum PaymentToken {
+  USDC
+  USDT
+}
+
+enum RoomType {
+  SHARED
+  PRIVATE
+  SUITE
+}
+
+enum UserRole {
+  GUEST
+  ADMIN
+  HOST
+  SPONSOR
+}
+
+// ============================================================================
+// USER MODEL - Authentication, profile, and privacy
+// ============================================================================
+
+model User {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Authentication
+  walletAddress   String    @unique
+  email           String?   // ✅ REMOVED @unique - allows same email for different events
+  emailVerified   Boolean   @default(false)
+  
+  // Profile Information
+  displayName     String?
+  firstName       String?
+  lastName        String?
+  role            String?   // Professional role (e.g., "Founder", "Developer")
+  bio             String?
+  avatar          String?   // URL to profile image
+  
+  // Social Links (structured)
+  socialTwitter   String?
+  socialTelegram  String?
+  socialLinkedin  String?
+  socialGithub    String?
+  socialWebsite   String?
+  
+  // Privacy & Preferences
+  optInGuestList      Boolean   @default(false)
+  optInEmailMarketing Boolean   @default(false)
+  shareContactInfo    Boolean   @default(false)
+  contentReuseConsent Boolean   @default(false)
+  
+  // System
+  userRole        UserRole  @default(GUEST)
+  isActive        Boolean   @default(true)
+  lastLoginAt     DateTime?
+  
+  // Relations
+  bookings        Booking[]
+  reviews         Review[]
+  waitlistEntries WaitlistEntry[]
+  refunds         Refund[]
+  activities      ActivityLog[]
+  
+  // Metadata
+  metadata        Json?     // For extensibility
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userRole])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// STAY MODEL - The core product/event
+// ============================================================================
+
+model Stay {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  stayId          String    @unique // Human-readable: "IBW-2025-001"
+  
+  // Basic Information
+  title           String
+  slug            String    @unique // URL-friendly
+  description     String    @default("")
+  shortDescription String?  // For card previews
+  location        String
+  venue           String?   // Specific venue name
+  
+  // Dates & Capacity
+  startDate       DateTime
+  endDate         DateTime
+  duration        Int?      // Days calculated
+  slotsTotal      Int
+  slotsAvailable  Int
+  guestCapacity   Int?
+  
+  // Pricing
+  priceUSDC       Float
+  priceUSDT       Float
+  currency        String    @default("USD") // For fiat display
+  depositAmount   Float?    // Optional deposit
+  
+  // ✅ NEW: Media & Gallery
+  heroImage       String?
+  galleryImages   String[]  @default([])
+  images          String[]  @default([])  // Additional images array
+  videoUrl        String?
+  
+  // ✅ NEW: Rooms Configuration
+  rooms           Json[]    @default([])  // Array of room objects
+  // Room structure: { id, name, description, capacity, price, images[], amenities[] }
+  
+  // ✅ NEW: Amenities & Features
+  amenities       String[]  @default([])  // ["WiFi", "Pool", "Coworking"]
+  
+  // Content
+  programHighlights Json?   // Structured schedule data
+  highlights        String[] @default([]) // Key selling points
+  rules             String[] @default([]) // House rules, code of conduct
+  
+  // Logistics
+  checkInTime     String?
+  checkOutTime    String?
+  address         Json?     // {street, city, country, lat, lng}
+  
+  // Configuration
+  isPublished     Boolean   @default(false)
+  isFeatured      Boolean   @default(false)
+  allowWaitlist   Boolean   @default(true)
+  autoConfirm     Boolean   @default(false) // Or require manual approval
+  
+  // Cancellation Policy
+  refundableUntil DateTime? // Null = non-refundable
+  cancellationPolicy Json?  // Detailed policy
+  
+  // SEO & Marketing
+  metaTitle       String?
+  metaDescription String?
+  tags            String[]  @default([])
+  
+  // Relations
+  bookings        Booking[]
+  sponsors        Sponsor[]   @relation(fields: [sponsorIds], references: [id])
+  sponsorIds      String[]    @db.ObjectId
+  reviews         Review[]
+  waitlistEntries WaitlistEntry[]
+  addons          Addon[]
+  
+  // Metadata
+  metadata        Json?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([startDate])
+  @@index([isPublished, isFeatured])
+  @@index([tags])
+}
+
+// ============================================================================
+// BOOKING MODEL - Core transaction/reservation
+// ============================================================================
+
+model Booking {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId       String        @unique // "DEN-2025-0001"
+  
+  // Relations
+  user            User          @relation(fields: [userId], references: [id])
+  userId          String        @db.ObjectId
+  stay            Stay          @relation(fields: [stayId], references: [id])
+  stayId          String        @db.ObjectId
+  
+  // Booking Details
+  status          BookingStatus @default(PENDING)
+  roomType        RoomType?
+  selectedRoomId  String?       // ✅ NEW: Reference to specific room from Stay.rooms
+  guestCount      Int           @default(1)
+  
+  // Guest Info Snapshot (at time of booking)
+  guestName       String?
+  guestEmail      String?
+  guestPhone      String?
+  
+  // Payment Information
+  paymentToken    PaymentToken?
+  paymentAmount   Float?        // Human-readable (300.0)
+  amountBaseUnits String?       // Blockchain units ("300000000")
+  chain           String?       // "polygon", "ethereum", "bsc"
+  chainId         Int?          // 137, 1, 56
+  txHash          String?       // ✅ REMOVED @unique - allows multiple NULL values
+  blockNumber     Int?
+  
+  // Payment Details
+  senderAddress   String?       // Actual sender wallet
+  receiverAddress String?       // Platform wallet
+  gasUsed         String?
+  gasFeeUSD       Float?
+  
+  // Session Management
+  sessionToken    String?       // ✅ REMOVED @unique - allows multiple NULL values
+  expiresAt       DateTime?
+  confirmedAt     DateTime?
+  
+  // Add-ons
+  selectedAddons  String[]      @db.ObjectId // IDs of Addon model
+  addonsTotal     Float         @default(0)
+  
+  // Pricing Breakdown
+  subtotal        Float?
+  serviceFee      Float         @default(0)
+  totalPaid       Float?
+  
+  // Privacy & Consent
+  optInGuestList      Boolean   @default(false)
+  shareContactInfo    Boolean   @default(false)
+  contentReuseConsent Boolean   @default(false)
+  
+  // Travel Assistance
+  needsTravelHelp Boolean       @default(false)
+  travelNotes     String?
+  
+  // Admin Notes
+  adminNotes      String?
+  internalTags    String[]      @default([])
+  
+  // NFT Ticket (optional)
+  nftTokenId      String?
+  nftContractAddress String?
+  nftMinted       Boolean       @default(false)
+  
+  // Relations
+  refund          Refund?
+  activities      ActivityLog[]
+  
+  // Metadata
+  metadata        Json?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // ✅ ADDED: Compound unique constraint - one user can't book same stay twice
+  @@unique([userId, stayId])
+  @@index([userId])
+  @@index([stayId])
+  @@index([status])
+  @@index([confirmedAt])
+  @@index([createdAt])
+  @@index([txHash]) // ✅ Regular index for txHash lookups (not unique)
+  @@index([sessionToken]) // ✅ Regular index for sessionToken lookups (not unique)
+}
+
+// ============================================================================
+// WAITLIST MODEL - For sold-out stays
+// ============================================================================
+
+model WaitlistEntry {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  user            User      @relation(fields: [userId], references: [id])
+  userId          String    @db.ObjectId
+  stay            Stay      @relation(fields: [stayId], references: [id])
+  stayId          String    @db.ObjectId
+  
+  position        Int       // Queue position
+  status          String    @default("active") // active, notified, converted, expired
+  
+  notifiedAt      DateTime?
+  convertedAt     DateTime?
+  expiresAt       DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([userId, stayId])
+  @@index([stayId, status])
+  @@index([position])
+}
+
+// ============================================================================
+// SPONSOR MODEL - Partners for stays
+// ============================================================================
+
+model Sponsor {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  name            String
+  logo            String?
+  website         String?
+  description     String?
+  
+  // Relation
+  stays           Stay[]    @relation(fields: [stayIds], references: [id])
+  stayIds         String[]  @db.ObjectId
+  
+  isActive        Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([name])
+}
+
+// ============================================================================
+// ADDON MODEL - Optional extras (meals, transport, etc.)
+// ============================================================================
+
+model Addon {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  stay            Stay      @relation(fields: [stayId], references: [id])
+  stayId          String    @db.ObjectId
+  
+  name            String
+  description     String?
+  priceUSDC       Float
+  priceUSDT       Float
+  
+  isAvailable     Boolean   @default(true)
+  maxQuantity     Int?      // Null = unlimited
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([stayId])
+}
+
+// ============================================================================
+// REFUND MODEL - Track refund requests and processing
+// ============================================================================
+
+model Refund {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  booking         Booking   @relation(fields: [bookingId], references: [id])
+  bookingId       String    @unique @db.ObjectId
+  user            User      @relation(fields: [userId], references: [id])
+  userId          String    @db.ObjectId
+  
+  amount          Float
+  token           PaymentToken
+  status          String    @default("requested") // requested, approved, processing, completed, rejected
+  
+  reason          String?
+  adminNotes      String?
+  
+  // Refund transaction details
+  refundTxHash    String?
+  refundedAt      DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([status])
+  @@index([userId])
+}
+
+// ============================================================================
+// REVIEW MODEL - Post-stay feedback
+// ============================================================================
+
+model Review {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  user            User      @relation(fields: [userId], references: [id])
+  userId          String    @db.ObjectId
+  stay            Stay      @relation(fields: [stayId], references: [id])
+  stayId          String    @db.ObjectId
+  
+  rating          Int       // 1-5
+  title           String?
+  comment         String?
+  
+  isPublished     Boolean   @default(true)
+  isVerified      Boolean   @default(false) // Verified attendee
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([stayId, isPublished])
+  @@index([rating])
+}
+
+// ============================================================================
+// ACTIVITY LOG - Audit trail for important actions
+// ============================================================================
+
+model ActivityLog {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  user            User?     @relation(fields: [userId], references: [id])
+  userId          String?   @db.ObjectId
+  booking         Booking?  @relation(fields: [bookingId], references: [id])
+  bookingId       String?   @db.ObjectId
+  
+  action          String    // "booking_created", "payment_confirmed", "refund_requested"
+  entity          String    // "booking", "user", "payment"
+  entityId        String?
+  
+  details         Json?     // Flexible payload
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([bookingId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// PROMO CODE MODEL - Discount codes
+// ============================================================================
+
+model PromoCode {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  code            String    @unique
+  description     String?
+  
+  discountType    String    // "percentage", "fixed"
+  discountValue   Float     // 10 (for 10%) or 50 (for $50 off)
+  
+  maxUses         Int?      // Null = unlimited
+  usedCount       Int       @default(0)
+  
+  validFrom       DateTime
+  validUntil      DateTime
+  
+  isActive        Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([validFrom, validUntil])
+}
+
+// ============================================================================
+// NOTIFICATION MODEL - Email/push notification queue
+// ============================================================================
+
+model Notification {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  recipientEmail  String
+  recipientId     String?   @db.ObjectId
+  
+  type            String    // "booking_confirmation", "payment_pending", "guest_list_update"
+  subject         String
+  body            String
+  
+  status          String    @default("pending") // pending, sent, failed
+  sentAt          DateTime?
+  error           String?
+  
+  metadata        Json?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([status])
+  @@index([recipientEmail])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// SYSTEM CONFIG - App-wide settings
+// ============================================================================
+
+model SystemConfig {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  key             String    @unique // "platform_wallet_address", "gas_threshold"
+  value           String
+  description     String?
+  
+  updatedAt       DateTime  @updatedAt
+}
+
+// ============================================================================
+// NOTES ON NEW FIELDS
+// ============================================================================
+
+// Stay.rooms JSON structure example:
+// [
+//   {
+//     "id": "room_1",
+//     "name": "Shared Bedroom",
+//     "description": "Comfortable shared accommodation for 2-4 people",
+//     "capacity": 4,
+//     "price": 300,
+//     "images": ["https://...", "https://..."],
+//     "amenities": ["Air conditioning", "Shared bathroom", "Desk space"]
+//   },
+//   {
+//     "id": "room_2",
+//     "name": "Private Room",
+//     "description": "Your own private space with ensuite bathroom",
+//     "capacity": 2,
+//     "price": 600,
+//     "images": ["https://..."],
+//     "amenities": ["Private bathroom", "King bed", "Work desk", "Balcony"]
+//   }
+// ]
+
+// Stay.images array:
+// ["https://example.com/villa-front.jpg", "https://example.com/pool.jpg", ...]
+
+// Stay.amenities array:
+// ["High-speed WiFi", "Swimming Pool", "Co-working Space", "Daily Meals", ...]
