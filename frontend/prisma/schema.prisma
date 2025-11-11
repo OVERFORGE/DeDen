@@ -1,5 +1,5 @@
 // Decentralized Den - Production-Ready Prisma Schema
-// Optimized for MongoDB with proper indexing, enums, and relations
+// Optimized for MongoDB with NextAuth integration
 
 generator client {
   provider = "prisma-client-js"
@@ -11,17 +11,60 @@ datasource db {
 }
 
 // ============================================================================
+// NEXTAUTH ADAPTER MODELS - Required for authentication
+// ============================================================================
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================================================
 // ENUMS - Type-safe status values
 // ============================================================================
 
 enum BookingStatus {
-  PENDING           // Payment initiated but not confirmed
-  CONFIRMED         // Payment confirmed, booking active
-  WAITLISTED        // User on waitlist
-  CANCELLED         // Cancelled by user
-  REFUNDED          // Refund processed
-  EXPIRED           // Payment session expired
-  FAILED            // Payment failed
+  PENDING
+  CONFIRMED
+  WAITLISTED
+  CANCELLED
+  REFUNDED
+  EXPIRED
+  FAILED
 }
 
 enum PaymentToken {
@@ -45,24 +88,31 @@ enum UserRole {
 // ============================================================================
 // USER MODEL - Authentication, profile, and privacy
 // ============================================================================
+// ============================================================================
+// USER MODEL - Authentication, profile, and privacy
+// ============================================================================
 
 model User {
   id              String    @id @default(auto()) @map("_id") @db.ObjectId
   
-  // Authentication
-  walletAddress   String    @unique
-  email           String?   // ✅ REMOVED @unique - allows same email for different events
-  emailVerified   Boolean   @default(false)
+  // Authentication - NextAuth fields
+  name            String?   // NextAuth uses 'name' field
+  email           String?   @unique
+  emailVerified   DateTime? // NextAuth uses DateTime? for this
+  image           String?   // NextAuth profile image
+  
+  // Web3 Authentication
+  walletAddress   String?   @unique  // @unique already creates an index
   
   // Profile Information
   displayName     String?
   firstName       String?
   lastName        String?
-  role            String?   // Professional role (e.g., "Founder", "Developer")
+  role            String?
   bio             String?
-  avatar          String?   // URL to profile image
+  avatar          String?
   
-  // Social Links (structured)
+  // Social Links
   socialTwitter   String?
   socialTelegram  String?
   socialLinkedin  String?
@@ -80,7 +130,11 @@ model User {
   isActive        Boolean   @default(true)
   lastLoginAt     DateTime?
   
-  // Relations
+  // NextAuth Relations
+  accounts        Account[]
+  sessions        Session[]
+  
+  // App Relations
   bookings        Booking[]
   reviews         Review[]
   waitlistEntries WaitlistEntry[]
@@ -88,13 +142,14 @@ model User {
   activities      ActivityLog[]
   
   // Metadata
-  metadata        Json?     // For extensibility
+  metadata        Json?
   
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   
   @@index([userRole])
   @@index([createdAt])
+  // REMOVED: @@index([walletAddress]) - not needed since @unique already creates an index
 }
 
 // ============================================================================
@@ -103,20 +158,20 @@ model User {
 
 model Stay {
   id              String    @id @default(auto()) @map("_id") @db.ObjectId
-  stayId          String    @unique // Human-readable: "IBW-2025-001"
+  stayId          String    @unique
   
   // Basic Information
   title           String
-  slug            String    @unique // URL-friendly
+  slug            String    @unique
   description     String    @default("")
-  shortDescription String?  // For card previews
+  shortDescription String?
   location        String
-  venue           String?   // Specific venue name
+  venue           String?
   
   // Dates & Capacity
   startDate       DateTime
   endDate         DateTime
-  duration        Int?      // Days calculated
+  duration        Int?
   slotsTotal      Int
   slotsAvailable  Int
   guestCapacity   Int?
@@ -124,41 +179,40 @@ model Stay {
   // Pricing
   priceUSDC       Float
   priceUSDT       Float
-  currency        String    @default("USD") // For fiat display
-  depositAmount   Float?    // Optional deposit
+  currency        String    @default("USD")
+  depositAmount   Float?
   
-  // ✅ NEW: Media & Gallery
+  // Media & Gallery
   heroImage       String?
   galleryImages   String[]  @default([])
-  images          String[]  @default([])  // Additional images array
+  images          String[]  @default([])
   videoUrl        String?
   
-  // ✅ NEW: Rooms Configuration
-  rooms           Json[]    @default([])  // Array of room objects
-  // Room structure: { id, name, description, capacity, price, images[], amenities[] }
+  // Rooms Configuration
+  rooms           Json[]    @default([])
   
-  // ✅ NEW: Amenities & Features
-  amenities       String[]  @default([])  // ["WiFi", "Pool", "Coworking"]
+  // Amenities & Features
+  amenities       String[]  @default([])
   
   // Content
-  programHighlights Json?   // Structured schedule data
-  highlights        String[] @default([]) // Key selling points
-  rules             String[] @default([]) // House rules, code of conduct
+  programHighlights Json?
+  highlights        String[] @default([])
+  rules             String[] @default([])
   
   // Logistics
   checkInTime     String?
   checkOutTime    String?
-  address         Json?     // {street, city, country, lat, lng}
+  address         Json?
   
   // Configuration
   isPublished     Boolean   @default(false)
   isFeatured      Boolean   @default(false)
   allowWaitlist   Boolean   @default(true)
-  autoConfirm     Boolean   @default(false) // Or require manual approval
+  autoConfirm     Boolean   @default(false)
   
   // Cancellation Policy
-  refundableUntil DateTime? // Null = non-refundable
-  cancellationPolicy Json?  // Detailed policy
+  refundableUntil DateTime?
+  cancellationPolicy Json?
   
   // SEO & Marketing
   metaTitle       String?
@@ -190,7 +244,7 @@ model Stay {
 
 model Booking {
   id              String        @id @default(auto()) @map("_id") @db.ObjectId
-  bookingId       String        @unique // "DEN-2025-0001"
+  bookingId       String        @unique
   
   // Relations
   user            User          @relation(fields: [userId], references: [id])
@@ -201,36 +255,36 @@ model Booking {
   // Booking Details
   status          BookingStatus @default(PENDING)
   roomType        RoomType?
-  selectedRoomId  String?       // ✅ NEW: Reference to specific room from Stay.rooms
+  selectedRoomId  String?
   guestCount      Int           @default(1)
   
-  // Guest Info Snapshot (at time of booking)
+  // Guest Info Snapshot
   guestName       String?
   guestEmail      String?
   guestPhone      String?
   
   // Payment Information
   paymentToken    PaymentToken?
-  paymentAmount   Float?        // Human-readable (300.0)
-  amountBaseUnits String?       // Blockchain units ("300000000")
-  chain           String?       // "polygon", "ethereum", "bsc"
-  chainId         Int?          // 137, 1, 56
-  txHash          String?       // ✅ REMOVED @unique - allows multiple NULL values
+  paymentAmount   Float?
+  amountBaseUnits String?
+  chain           String?
+  chainId         Int?
+  txHash          String?
   blockNumber     Int?
   
   // Payment Details
-  senderAddress   String?       // Actual sender wallet
-  receiverAddress String?       // Platform wallet
+  senderAddress   String?
+  receiverAddress String?
   gasUsed         String?
   gasFeeUSD       Float?
   
   // Session Management
-  sessionToken    String?       // ✅ REMOVED @unique - allows multiple NULL values
+  sessionToken    String?
   expiresAt       DateTime?
   confirmedAt     DateTime?
   
   // Add-ons
-  selectedAddons  String[]      @db.ObjectId // IDs of Addon model
+  selectedAddons  String[]      @db.ObjectId
   addonsTotal     Float         @default(0)
   
   // Pricing Breakdown
@@ -251,7 +305,7 @@ model Booking {
   adminNotes      String?
   internalTags    String[]      @default([])
   
-  // NFT Ticket (optional)
+  // NFT Ticket
   nftTokenId      String?
   nftContractAddress String?
   nftMinted       Boolean       @default(false)
@@ -266,19 +320,18 @@ model Booking {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   
-  // ✅ ADDED: Compound unique constraint - one user can't book same stay twice
   @@unique([userId, stayId])
   @@index([userId])
   @@index([stayId])
   @@index([status])
   @@index([confirmedAt])
   @@index([createdAt])
-  @@index([txHash]) // ✅ Regular index for txHash lookups (not unique)
-  @@index([sessionToken]) // ✅ Regular index for sessionToken lookups (not unique)
+  @@index([txHash])
+  @@index([sessionToken])
 }
 
 // ============================================================================
-// WAITLIST MODEL - For sold-out stays
+// WAITLIST MODEL
 // ============================================================================
 
 model WaitlistEntry {
@@ -289,8 +342,8 @@ model WaitlistEntry {
   stay            Stay      @relation(fields: [stayId], references: [id])
   stayId          String    @db.ObjectId
   
-  position        Int       // Queue position
-  status          String    @default("active") // active, notified, converted, expired
+  position        Int
+  status          String    @default("active")
   
   notifiedAt      DateTime?
   convertedAt     DateTime?
@@ -305,7 +358,7 @@ model WaitlistEntry {
 }
 
 // ============================================================================
-// SPONSOR MODEL - Partners for stays
+// SPONSOR MODEL
 // ============================================================================
 
 model Sponsor {
@@ -316,7 +369,6 @@ model Sponsor {
   website         String?
   description     String?
   
-  // Relation
   stays           Stay[]    @relation(fields: [stayIds], references: [id])
   stayIds         String[]  @db.ObjectId
   
@@ -329,7 +381,7 @@ model Sponsor {
 }
 
 // ============================================================================
-// ADDON MODEL - Optional extras (meals, transport, etc.)
+// ADDON MODEL
 // ============================================================================
 
 model Addon {
@@ -344,7 +396,7 @@ model Addon {
   priceUSDT       Float
   
   isAvailable     Boolean   @default(true)
-  maxQuantity     Int?      // Null = unlimited
+  maxQuantity     Int?
   
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -353,7 +405,7 @@ model Addon {
 }
 
 // ============================================================================
-// REFUND MODEL - Track refund requests and processing
+// REFUND MODEL
 // ============================================================================
 
 model Refund {
@@ -366,12 +418,11 @@ model Refund {
   
   amount          Float
   token           PaymentToken
-  status          String    @default("requested") // requested, approved, processing, completed, rejected
+  status          String    @default("requested")
   
   reason          String?
   adminNotes      String?
   
-  // Refund transaction details
   refundTxHash    String?
   refundedAt      DateTime?
   
@@ -383,7 +434,7 @@ model Refund {
 }
 
 // ============================================================================
-// REVIEW MODEL - Post-stay feedback
+// REVIEW MODEL
 // ============================================================================
 
 model Review {
@@ -394,12 +445,12 @@ model Review {
   stay            Stay      @relation(fields: [stayId], references: [id])
   stayId          String    @db.ObjectId
   
-  rating          Int       // 1-5
+  rating          Int
   title           String?
   comment         String?
   
   isPublished     Boolean   @default(true)
-  isVerified      Boolean   @default(false) // Verified attendee
+  isVerified      Boolean   @default(false)
   
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -409,7 +460,7 @@ model Review {
 }
 
 // ============================================================================
-// ACTIVITY LOG - Audit trail for important actions
+// ACTIVITY LOG
 // ============================================================================
 
 model ActivityLog {
@@ -420,11 +471,11 @@ model ActivityLog {
   booking         Booking?  @relation(fields: [bookingId], references: [id])
   bookingId       String?   @db.ObjectId
   
-  action          String    // "booking_created", "payment_confirmed", "refund_requested"
-  entity          String    // "booking", "user", "payment"
+  action          String
+  entity          String
   entityId        String?
   
-  details         Json?     // Flexible payload
+  details         Json?
   ipAddress       String?
   userAgent       String?
   
@@ -437,7 +488,7 @@ model ActivityLog {
 }
 
 // ============================================================================
-// PROMO CODE MODEL - Discount codes
+// PROMO CODE MODEL
 // ============================================================================
 
 model PromoCode {
@@ -446,10 +497,10 @@ model PromoCode {
   code            String    @unique
   description     String?
   
-  discountType    String    // "percentage", "fixed"
-  discountValue   Float     // 10 (for 10%) or 50 (for $50 off)
+  discountType    String
+  discountValue   Float
   
-  maxUses         Int?      // Null = unlimited
+  maxUses         Int?
   usedCount       Int       @default(0)
   
   validFrom       DateTime
@@ -464,7 +515,7 @@ model PromoCode {
 }
 
 // ============================================================================
-// NOTIFICATION MODEL - Email/push notification queue
+// NOTIFICATION MODEL
 // ============================================================================
 
 model Notification {
@@ -473,11 +524,11 @@ model Notification {
   recipientEmail  String
   recipientId     String?   @db.ObjectId
   
-  type            String    // "booking_confirmation", "payment_pending", "guest_list_update"
+  type            String
   subject         String
   body            String
   
-  status          String    @default("pending") // pending, sent, failed
+  status          String    @default("pending")
   sentAt          DateTime?
   error           String?
   
@@ -492,47 +543,15 @@ model Notification {
 }
 
 // ============================================================================
-// SYSTEM CONFIG - App-wide settings
+// SYSTEM CONFIG
 // ============================================================================
 
 model SystemConfig {
   id              String    @id @default(auto()) @map("_id") @db.ObjectId
   
-  key             String    @unique // "platform_wallet_address", "gas_threshold"
+  key             String    @unique
   value           String
   description     String?
   
   updatedAt       DateTime  @updatedAt
 }
-
-// ============================================================================
-// NOTES ON NEW FIELDS
-// ============================================================================
-
-// Stay.rooms JSON structure example:
-// [
-//   {
-//     "id": "room_1",
-//     "name": "Shared Bedroom",
-//     "description": "Comfortable shared accommodation for 2-4 people",
-//     "capacity": 4,
-//     "price": 300,
-//     "images": ["https://...", "https://..."],
-//     "amenities": ["Air conditioning", "Shared bathroom", "Desk space"]
-//   },
-//   {
-//     "id": "room_2",
-//     "name": "Private Room",
-//     "description": "Your own private space with ensuite bathroom",
-//     "capacity": 2,
-//     "price": 600,
-//     "images": ["https://..."],
-//     "amenities": ["Private bathroom", "King bed", "Work desk", "Balcony"]
-//   }
-// ]
-
-// Stay.images array:
-// ["https://example.com/villa-front.jpg", "https://example.com/pool.jpg", ...]
-
-// Stay.amenities array:
-// ["High-speed WiFi", "Swimming Pool", "Co-working Space", "Daily Meals", ...]

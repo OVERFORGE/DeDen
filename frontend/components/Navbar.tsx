@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ConnectKitButton } from "connectkit";
-import { useAccount } from "wagmi";
-import { Menu, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Menu, X, User, LogOut } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
 
 export function Navbar() {
-  const { isConnected } = useAccount();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { data: session, status } = useSession();
+  const router = useRouter();
 
   const navLinks = [
     { href: "/experiences", label: "EXPERIENCES" },
@@ -18,9 +19,17 @@ export function Navbar() {
     { href: "/contact", label: "CONTACT" },
   ];
 
+  const handleSignIn = () => {
+    router.push("/auth/signin");
+  };
+
+  const handleDashboard = () => {
+    router.push("/dashboard");
+  };
+
   return (
     <nav className="bg-transparent text-white w-full z-50 sticky top-0">
-      <div className="max-w-screen-xl mx-auto px-6 py-6 ">
+      <div className="max-w-screen-xl mx-auto px-6 py-6">
         {/* Desktop Navigation */}
         <div className="hidden md:flex justify-between items-center bg-[#172a46] border-2 border-[#2a4562] rounded-full py-4 px-10 shadow-xl">
           {/* Left side links */}
@@ -51,7 +60,7 @@ export function Navbar() {
             />
           </Link>
 
-          {/* Right side links & Wallet Button */}
+          {/* Right side links & Auth */}
           <div className="flex items-center gap-8">
             <Link
               href="/about"
@@ -65,31 +74,57 @@ export function Navbar() {
             >
               Contact
             </Link>
-            <ConnectKitButton.Custom>
-              {({ isConnected, show, truncatedAddress, ensName }) => {
-                return (
-                  <button
-                    onClick={show}
-                    className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full transition-all hover:scale-105 hover:bg-white shadow-lg flex items-center gap-2"
-                  >
-                    {isConnected ? (
-                      <>
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        {ensName ?? truncatedAddress}
-                      </>
-                    ) : (
-                      "CONNECT WALLET"
-                    )}
-                  </button>
-                );
-              }}
-            </ConnectKitButton.Custom>
+
+            {/* Auth Section */}
+            {status === "loading" ? (
+              <button className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full shadow-lg">
+                ...
+              </button>
+            ) : status === "authenticated" && session.user ? (
+              <div className="flex items-center gap-3">
+                {/* User Profile */}
+                <button
+                  onClick={handleDashboard}
+                  className="flex items-center gap-2 bg-[#2a4562] hover:bg-[#3a5572] text-white px-4 py-2 rounded-full transition-all"
+                >
+                  {session.user.image ? (
+                    <Image
+                      src={session.user.image}
+                      alt={session.user.name || "User"}
+                      width={28}
+                      height={28}
+                      className="rounded-full"
+                    />
+                  ) : (
+                    <User size={20} />
+                  )}
+                  <span className="text-sm font-semibold">
+                    {session.user.name || "Dashboard"}
+                  </span>
+                </button>
+
+                {/* Sign Out */}
+                <button
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full transition-all"
+                  title="Sign Out"
+                >
+                  <LogOut size={20} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleSignIn}
+                className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full transition-all hover:scale-105 hover:bg-white shadow-lg"
+              >
+                SIGN IN
+              </button>
+            )}
           </div>
         </div>
 
         {/* Mobile Navigation */}
         <div className="md:hidden flex justify-between items-center">
-          {/* Logo */}
           <Link href="/">
             <Image
               src="/images/logo-no-bg.png"
@@ -101,7 +136,6 @@ export function Navbar() {
             />
           </Link>
 
-          {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="p-2 rounded-lg hover:bg-[#2a4562] transition-colors"
@@ -125,25 +159,38 @@ export function Navbar() {
             </Link>
           ))}
           <div className="pt-4 flex justify-center">
-            <ConnectKitButton.Custom>
-              {({ isConnected, show, truncatedAddress, ensName }) => {
-                return (
-                  <button
-                    onClick={show}
-                    className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full transition-all hover:scale-105 hover:bg-white shadow-lg w-full flex items-center justify-center gap-2"
-                  >
-                    {isConnected ? (
-                      <>
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        {ensName ?? truncatedAddress}
-                      </>
-                    ) : (
-                      "CONNECT WALLET"
-                    )}
-                  </button>
-                );
-              }}
-            </ConnectKitButton.Custom>
+            {status === "authenticated" && session.user ? (
+              <div className="flex flex-col gap-3 w-full">
+                <button
+                  onClick={() => {
+                    handleDashboard();
+                    setIsMenuOpen(false);
+                  }}
+                  className="bg-[#2a4562] hover:bg-[#3a5572] text-white py-3 px-6 rounded-full transition-all w-full"
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => {
+                    signOut({ callbackUrl: "/" });
+                    setIsMenuOpen(false);
+                  }}
+                  className="bg-red-500 hover:bg-red-600 text-white py-3 px-6 rounded-full transition-all w-full"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  handleSignIn();
+                  setIsMenuOpen(false);
+                }}
+                className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full transition-all hover:scale-105 hover:bg-white shadow-lg w-full"
+              >
+                SIGN IN
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -1,10 +1,11 @@
 "use client"; // This must be a client component
 
-import { WagmiProvider, createConfig, http } from "wagmi"; // <-- Import http
+import { WagmiProvider, createConfig, http } from "wagmi";
 import { bscTestnet } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConnectKitProvider, getDefaultConfig } from "connectkit";
-import React from "react"; // <-- Import React
+import React from "react";
+import { SessionProvider } from "next-auth/react"; // <-- Import SessionProvider
 
 // 1. Get your environment variables
 const alchemyApiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BSC_TESTNET;
@@ -16,8 +17,7 @@ const queryClient = new QueryClient();
 // 3. Create the provider component
 export function Providers({ children }: { children: React.ReactNode }) {
   
-  // --- FIX ---
-  // The validation checks MUST be inside the React component
+  // --- Your validation logic ---
   if (!alchemyApiKey) {
     console.error("Missing NEXT_PUBLIC_ALCHEMY_API_KEY_BSC_TESTNET env var");
     return (
@@ -47,30 +47,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
       </html>
     );
   }
-  // --- END OF FIX ---
+  // --- END OF VALIDATION ---
 
 
   // We use React.useState to create the config only once.
-  // This prevents it from being re-created on every render.
   const [config] = React.useState(() =>
     createConfig(
       getDefaultConfig({
         // Your dApp's name
         appName: "Payment Gateway",
         
-        // --- THIS IS THE FIX ---
-        // We remove alchemyId and add the transports property
-        //
-        // REMOVED:
-        // alchemyId: alchemyApiKey,
-        //
-        // ADDED:
+        // Your transports config
         transports: {
           [bscTestnet.id]: http(
             `https://bnb-testnet.g.alchemy.com/v2/${alchemyApiKey}`
           ),
         },
-        // --- END OF FIX ---
 
         // We only support BSC Testnet
         chains: [bscTestnet],
@@ -83,13 +75,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
 
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <ConnectKitProvider>
-          {children}
-        </ConnectKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    // Wrap your providers with SessionProvider
+    <SessionProvider>
+      <WagmiProvider config={config}>
+        <QueryClientProvider client={queryClient}>
+          <ConnectKitProvider>
+            {children}
+          </ConnectKitProvider>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </SessionProvider>
   );
 }
-
