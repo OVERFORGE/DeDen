@@ -2,7 +2,7 @@
 
 @font-face {
   font-family: berlin;
-  src: url("../public/fonts/berlin.TTF");
+  src: url("./fonts/berlin.TTF");
 }
 
 @theme {
