@@ -1,19 +1,17 @@
 // app/auth/signin/page.tsx
 "use client";
 
-// NEW: Import React and Suspense
 import React, { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useAccount, useSignMessage, useConnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { SiweMessage } from "siwe";
-// NEW: Import useSearchParams
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { GoogleIcon, WalletIcon } from "@/components/Icons";
 
-// --- WaveDivider component (unchanged) ---
+// --- WaveDivider component ---
 const WaveDivider: React.FC<{
   colorClassName: string;
   inverted?: boolean;
@@ -28,48 +26,56 @@ const WaveDivider: React.FC<{
     }}
   />
 );
-// ---------------------------------
 
-// NEW: Create a child component for the sign-in logic
+// --- SignInForm component ---
 function SignInForm() {
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
   const [isLoadingWallet, setIsLoadingWallet] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
-  const searchParams = useSearchParams(); // <-- Get search params
+  const searchParams = useSearchParams();
 
-  // --- Wallet & SIWE Logic (Unchanged) ---
+  // Wagmi hooks
   const { connectAsync } = useConnect();
-  const { address, chainId } = useAccount();
+  const { address, chainId, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
+  // --- Wallet & SIWE Logic ---
   const handleWalletSignIn = async () => {
     setIsLoadingWallet(true);
     setError(null);
     try {
-      // 1. Connect wallet
+      // 1. Connect wallet if not already connected
+      if (!isConnected || !address) {
+        await connectAsync({ connector: injected() });
+      }
+
+      // 2. Wait for account state to update and verify we have the required data
+      let attempts = 0;
+      const maxAttempts = 10;
       let currentAddress = address;
       let currentChainId = chainId;
 
-      if (!currentAddress) {
-        const { address: connectedAddress, chainId: connectedChainId } =
-          await connectAsync({ connector: injected() });
-        currentAddress = connectedAddress;
-        currentChainId = connectedChainId;
+      while ((!currentAddress || !currentChainId) && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        // Re-check the hook values
+        currentAddress = address;
+        currentChainId = chainId;
+        attempts++;
       }
 
       if (!currentAddress || !currentChainId) {
-        throw new Error("Wallet connection failed.");
+        throw new Error("Wallet connection failed. Please try again.");
       }
 
-      // 2. Fetch nonce
+      // 3. Fetch nonce (CSRF token)
       const csrfRes = await fetch("/api/auth/csrf");
       if (!csrfRes.ok) throw new Error("Failed to fetch nonce.");
       const { csrfToken } = await csrfRes.json();
       if (!csrfToken) throw new Error("Invalid nonce received.");
 
-      // 3. Create SIWE message
+      // 4. Create SIWE message
       const message = new SiweMessage({
         domain: window.location.host,
         address: currentAddress,
@@ -82,10 +88,10 @@ function SignInForm() {
 
       const messageToSign = message.prepareMessage();
 
-      // 4. Sign the message
+      // 5. Sign the message
       const signature = await signMessageAsync({ message: messageToSign });
 
-      // 5. Sign in
+      // 6. Sign in with NextAuth
       const res = await signIn("credentials", {
         message: JSON.stringify(message),
         signature,
@@ -96,24 +102,23 @@ function SignInForm() {
       if (res?.error) {
         throw new Error(res.error);
       } else if (res?.ok) {
-        router.push(res.callbackUrl || "/dashboard");
+        router.push("/dashboard");
       } else {
         throw new Error("Unknown error during sign-in.");
       }
     } catch (e: any) {
       console.error("Wallet sign-in error:", e);
-      // NEW: Show a friendlier wallet error
-      if (e.message.includes("User rejected")) {
+      if (e.message.includes("User rejected") || e.message.includes("User denied")) {
         setError("Sign-in request rejected.");
       } else {
-         setError(e.message || "Failed to sign in with wallet.");
+        setError(e.message || "Failed to sign in with wallet.");
       }
     } finally {
       setIsLoadingWallet(false);
     }
   };
 
-  // --- Google Logic (Unchanged) ---
+  // --- Google Sign-In Logic ---
   const handleGoogleSignIn = () => {
     setIsLoadingGoogle(true);
     setError(null);
@@ -124,7 +129,7 @@ function SignInForm() {
     });
   };
 
-  // --- NEW: Handle NextAuth errors from URL ---
+  // --- Handle NextAuth errors from URL ---
   useEffect(() => {
     const authError = searchParams.get("error");
     if (authError) {
@@ -141,7 +146,6 @@ function SignInForm() {
   }, [searchParams, router]);
 
   return (
-    // Page background
     <div className="min-h-screen flex items-center justify-center bg-[#f5f5f3] p-4 relative overflow-hidden">
       {/* Sign-In Card */}
       <div className="max-w-md w-full bg-[#172a46] rounded-2xl shadow-2xl p-8 z-10">
@@ -174,7 +178,7 @@ function SignInForm() {
           Choose your preferred method to log in.
         </p>
 
-        {/* Error message (This will now show the OAuth error!) */}
+        {/* Error message */}
         {error && (
           <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded-lg mb-6 text-sm">
             <strong>Error:</strong> {error}
@@ -210,17 +214,16 @@ function SignInForm() {
   );
 }
 
-// --- NEW: Default export that wraps the form in Suspense ---
+// --- Default export with Suspense wrapper ---
 export default function SignInPage() {
   return (
-    <React.Suspense fallback={<div>Loading...</div>}>
+    <React.Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#f5f5f3]"><div className="text-[#172a46] text-lg">Loading...</div></div>}>
       <SignInForm />
     </React.Suspense>
   );
 }
 
-
-// --- Spinner component (unchanged) ---
+// --- Spinner component ---
 function Spinner() {
   return (
     <svg
