@@ -1,10 +1,14 @@
 // File: app/api/user/bookings/route.ts
 // Fixed version for MongoDB with proper ObjectId handling
 
-import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+
 
 export async function GET(request: Request) {
+  
+  
   try {
     const { searchParams } = new URL(request.url);
     const walletAddress = searchParams.get('wallet');

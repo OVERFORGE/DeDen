@@ -3,26 +3,33 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useAccount } from "wagmi";
 import { ConnectKitButton } from "connectkit";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowRight, Check, Mail, User, Briefcase, Twitter, Linkedin, Wallet, AlertCircle } from "lucide-react";
+import { ArrowRight, Check, Mail, User, Briefcase, Twitter, Linkedin, Wallet, AlertCircle, LogIn } from "lucide-react";
 
 // Define the form validation schema with Zod
 const applySchema = z.object({
   displayName: z.string().min(3, "Name is required"),
   email: z.string().email("Invalid email address"),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
   role: z.string().optional(),
   socialTwitter: z.string().optional(),
   socialLinkedin: z.string().optional(),
+  socialTelegram: z.string().optional(),
 });
 
 type ApplyFormInputs = z.infer<typeof applySchema>;
 
 // Wave Divider Component
-const WaveDivider: React.FC<{ colorClassName: string; inverted?: boolean }> = ({ colorClassName, inverted = false }) => (
+const WaveDivider: React.FC<{ colorClassName: string; inverted?: boolean }> = ({ 
+  colorClassName, 
+  inverted = false 
+}) => (
   <div
     className={`w-full h-20 ${colorClassName}`}
     style={{
@@ -39,7 +46,12 @@ export default function ApplyPage() {
   const router = useRouter();
   const stayId = params.stayId as string;
 
+  // NextAuth session
+  const { data: session, status: sessionStatus } = useSession();
+  
+  // Wallet connection
   const { address, isConnected } = useAccount();
+  
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -47,27 +59,44 @@ export default function ApplyPage() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
+    reset,
   } = useForm<ApplyFormInputs>({
     resolver: zodResolver(applySchema),
   });
 
-  // Debug: Log the params to see what's available
+  // Pre-fill form with session data
   useEffect(() => {
-    console.log("All params:", params);
-    console.log("stayId from params:", stayId);
-  }, [params, stayId]);
+    if (session?.user) {
+      reset({
+        displayName: session.user.name || "",
+        email: session.user.email || "",
+        // These might be in your extended session type
+        firstName: (session.user as any).firstName || "",
+        lastName: (session.user as any).lastName || "",
+        role: (session.user as any).role || "",
+        socialTwitter: (session.user as any).socialTwitter || "",
+        socialLinkedin: (session.user as any).socialLinkedin || "",
+        socialTelegram: (session.user as any).socialTelegram || "",
+      });
+    }
+  }, [session, reset]);
 
   const onSubmit: SubmitHandler<ApplyFormInputs> = async (data) => {
-    if (!isConnected || !address) {
-      setApiError("Please connect your wallet to apply.");
+    // Check authentication - user must be logged in
+    if (sessionStatus !== "authenticated") {
+      setApiError("Please sign in to apply for this stay.");
       return;
     }
 
-    // Validate stayId before submitting
+    // Check if wallet is connected
+    if (!isConnected || !address) {
+      setApiError("Please connect your wallet to complete your application. This is required for payment processing.");
+      return;
+    }
+
+    // Validate stayId
     if (!stayId || stayId === "undefined") {
-      setApiError(
-        "A valid stay ID is missing from the URL. Please check the link."
-      );
+      setApiError("Invalid stay ID. Please check the URL and try again.");
       console.error("Invalid stayId:", stayId);
       return;
     }
@@ -75,7 +104,7 @@ export default function ApplyPage() {
     setApiError(null);
 
     try {
-      console.log("Submitting to:", `/api/stays/${stayId}/apply`);
+      console.log("Submitting application to:", `/api/stays/${stayId}/apply`);
       console.log("Data:", { ...data, walletAddress: address });
 
       const response = await fetch(`/api/stays/${stayId}/apply`, {
@@ -90,6 +119,10 @@ export default function ApplyPage() {
       const result = await response.json();
 
       if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 409) {
+          throw new Error("You have already applied for this stay. Check your dashboard for status.");
+        }
         throw new Error(result.error || "Failed to submit application");
       }
 
@@ -100,7 +133,7 @@ export default function ApplyPage() {
     }
   };
 
-  // Show loading state while params are being resolved
+  // Loading state
   if (!stayId) {
     return (
       <div className="min-h-screen bg-[#f5f5f3] flex items-center justify-center">
@@ -191,7 +224,7 @@ export default function ApplyPage() {
               Apply for {stayId}
             </h1>
             <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-              Fill out the application below. Your wallet address will be used to verify your identity and process payment once approved.
+              Complete your application below. You need to be signed in and have a wallet connected for payment processing.
             </p>
           </div>
         </div>
@@ -203,34 +236,70 @@ export default function ApplyPage() {
 
       {/* Form Section */}
       <section className="max-w-3xl mx-auto px-6 -mt-20 relative z-10 pb-20">
-        {!isConnected ? (
-          // Connect Wallet Card
+        {/* Not Authenticated */}
+        {sessionStatus === "unauthenticated" && (
           <div className="bg-white rounded-3xl p-12 shadow-2xl text-center">
             <div className="w-20 h-20 bg-[#172a46] rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <Wallet className="text-white" size={36} />
+              <LogIn className="text-white" size={36} />
             </div>
             <h2 className="text-3xl font-bold text-[#172a46] mb-4">
-              Connect Your Wallet
+              Sign In Required
             </h2>
             <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              Please connect your Web3 wallet to begin the application process. We use this to verify your identity and process payments.
+              Please sign in with your wallet or Gmail to begin the application process.
             </p>
-            <div className="flex justify-center">
-              <ConnectKitButton />
-            </div>
+            <Link
+              href="/auth/signin"
+              className="bg-[#172a46] text-white text-lg font-semibold py-4 px-8 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-transform shadow-xl"
+            >
+              <span>Sign In</span>
+              <ArrowRight size={20} />
+            </Link>
           </div>
-        ) : (
-          // Application Form
+        )}
+
+        {/* Loading Authentication */}
+        {sessionStatus === "loading" && (
+          <div className="bg-white rounded-3xl p-12 shadow-2xl text-center">
+            <div className="w-16 h-16 border-4 border-[#172a46] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-lg text-gray-600">Verifying authentication...</p>
+          </div>
+        )}
+
+        {/* Authenticated - Show Form */}
+        {sessionStatus === "authenticated" && (
           <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            {/* Wallet Connected Status */}
+            {/* Authentication Status */}
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-b-2 border-green-200 p-6">
-              <div className="flex items-center justify-center gap-3 flex-wrap">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="font-semibold text-green-800">
-                  Wallet Connected: {address}
-                </span>
+              <div className="flex items-center justify-center gap-3 flex-wrap mb-4">
                 <Check className="text-green-600" size={20} />
+                <span className="font-semibold text-green-800">
+                  Signed in as: {session.user?.email}
+                </span>
               </div>
+              
+              {/* Wallet Connection Status */}
+              {isConnected && address ? (
+                <div className="flex items-center justify-center gap-3 flex-wrap text-sm">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-green-700">
+                    Wallet: {address.slice(0, 6)}...{address.slice(-4)}
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-3">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="text-yellow-600 flex-shrink-0 mt-0.5" size={20} />
+                    <div>
+                      <p className="font-semibold text-yellow-800 mb-2">Wallet Not Connected</p>
+                      <p className="text-yellow-700 text-sm mb-3">
+                        Connect your wallet to complete the application. This is required for payment processing.
+                      </p>
+                      <ConnectKitButton />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-8 md:p-12 space-y-8">
@@ -277,6 +346,32 @@ export default function ApplyPage() {
                 </p>
               </div>
 
+              {/* Name Fields (Optional) */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
+                    First Name
+                  </label>
+                  <input
+                    {...register("firstName")}
+                    type="text"
+                    placeholder="First name"
+                    className="w-full px-5 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
+                    Last Name
+                  </label>
+                  <input
+                    {...register("lastName")}
+                    type="text"
+                    placeholder="Last name"
+                    className="w-full px-5 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors"
+                  />
+                </div>
+              </div>
+
               {/* Professional Role */}
               <div>
                 <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
@@ -296,7 +391,6 @@ export default function ApplyPage() {
 
               {/* Social Links */}
               <div className="grid md:grid-cols-2 gap-6">
-                {/* Twitter/X */}
                 <div>
                   <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
                     <Twitter size={20} />
@@ -310,7 +404,6 @@ export default function ApplyPage() {
                   />
                 </div>
 
-                {/* LinkedIn */}
                 <div>
                   <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
                     <Linkedin size={20} />
@@ -350,9 +443,9 @@ export default function ApplyPage() {
               {/* Submit Button */}
               <button
                 onClick={handleSubmit(onSubmit)}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !isConnected}
                 className={`w-full text-lg font-semibold py-5 rounded-full inline-flex items-center justify-center gap-3 transition-all shadow-xl ${
-                  isSubmitting 
+                  isSubmitting || !isConnected
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                     : 'bg-[#172a46] text-white hover:scale-105'
                 }`}
@@ -361,6 +454,11 @@ export default function ApplyPage() {
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     <span>Submitting Application...</span>
+                  </>
+                ) : !isConnected ? (
+                  <>
+                    <Wallet size={20} />
+                    <span>Connect Wallet to Continue</span>
                   </>
                 ) : (
                   <>

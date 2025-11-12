@@ -1,17 +1,19 @@
+// app/auth/signin/page.tsx
 "use client";
 
-import { useState } from "react";
+// NEW: Import React and Suspense
+import React, { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useAccount, useSignMessage, useConnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { SiweMessage } from "siwe";
-import { useRouter } from "next/navigation";
+// NEW: Import useSearchParams
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { GoogleIcon, WalletIcon } from "@/components/Icons"; // Assuming these are still correct
+import { GoogleIcon, WalletIcon } from "@/components/Icons";
 
-// --- Copied from HomePage.tsx ---
-// SVG component for the wave dividers
+// --- WaveDivider component (unchanged) ---
 const WaveDivider: React.FC<{
   colorClassName: string;
   inverted?: boolean;
@@ -28,12 +30,14 @@ const WaveDivider: React.FC<{
 );
 // ---------------------------------
 
-export default function SignInPage() {
+// NEW: Create a child component for the sign-in logic
+function SignInForm() {
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
   const [isLoadingWallet, setIsLoadingWallet] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
+  const searchParams = useSearchParams(); // <-- Get search params
 
   // --- Wallet & SIWE Logic (Unchanged) ---
   const { connectAsync } = useConnect();
@@ -44,7 +48,7 @@ export default function SignInPage() {
     setIsLoadingWallet(true);
     setError(null);
     try {
-      // 1. Connect wallet if not already connected
+      // 1. Connect wallet
       let currentAddress = address;
       let currentChainId = chainId;
 
@@ -59,15 +63,11 @@ export default function SignInPage() {
         throw new Error("Wallet connection failed.");
       }
 
-      // 2. Fetch nonce (CSRF token) from NextAuth
+      // 2. Fetch nonce
       const csrfRes = await fetch("/api/auth/csrf");
-      if (!csrfRes.ok) {
-        throw new Error("Failed to fetch nonce.");
-      }
+      if (!csrfRes.ok) throw new Error("Failed to fetch nonce.");
       const { csrfToken } = await csrfRes.json();
-      if (!csrfToken) {
-        throw new Error("Invalid nonce received.");
-      }
+      if (!csrfToken) throw new Error("Invalid nonce received.");
 
       // 3. Create SIWE message
       const message = new SiweMessage({
@@ -77,7 +77,7 @@ export default function SignInPage() {
         uri: window.location.origin,
         version: "1",
         chainId: currentChainId,
-        nonce: csrfToken, // Use NextAuth's CSRF token as the nonce
+        nonce: csrfToken,
       });
 
       const messageToSign = message.prepareMessage();
@@ -85,7 +85,7 @@ export default function SignInPage() {
       // 4. Sign the message
       const signature = await signMessageAsync({ message: messageToSign });
 
-      // 5. Sign in with NextAuth
+      // 5. Sign in
       const res = await signIn("credentials", {
         message: JSON.stringify(message),
         signature,
@@ -96,14 +96,18 @@ export default function SignInPage() {
       if (res?.error) {
         throw new Error(res.error);
       } else if (res?.ok) {
-        // Success! Redirect to dashboard
         router.push(res.callbackUrl || "/dashboard");
       } else {
         throw new Error("Unknown error during sign-in.");
       }
     } catch (e: any) {
       console.error("Wallet sign-in error:", e);
-      setError(e.message || "Failed to sign in with wallet.");
+      // NEW: Show a friendlier wallet error
+      if (e.message.includes("User rejected")) {
+        setError("Sign-in request rejected.");
+      } else {
+         setError(e.message || "Failed to sign in with wallet.");
+      }
     } finally {
       setIsLoadingWallet(false);
     }
@@ -113,7 +117,6 @@ export default function SignInPage() {
   const handleGoogleSignIn = () => {
     setIsLoadingGoogle(true);
     setError(null);
-    // This will redirect to Google and then to the callbackUrl
     signIn("google", { callbackUrl: "/dashboard" }).catch((e) => {
       console.error("Google sign-in error:", e);
       setError("Failed to sign in with Google.");
@@ -121,17 +124,33 @@ export default function SignInPage() {
     });
   };
 
+  // --- NEW: Handle NextAuth errors from URL ---
+  useEffect(() => {
+    const authError = searchParams.get("error");
+    if (authError) {
+      if (authError === "OAuthAccountNotLinked") {
+        setError(
+          "This email is already linked to another account. Please sign in with your original method (e.g., wallet) and link Google from your profile."
+        );
+      } else {
+        setError("An unknown authentication error occurred. Please try again.");
+      }
+      // Clear the error from the URL
+      router.replace("/auth/signin", { scroll: false });
+    }
+  }, [searchParams, router]);
+
   return (
-    // Page background matches the light hero section
+    // Page background
     <div className="min-h-screen flex items-center justify-center bg-[#f5f5f3] p-4 relative overflow-hidden">
-      {/* Sign-In Card, styled with the dark brand color */}
+      {/* Sign-In Card */}
       <div className="max-w-md w-full bg-[#172a46] rounded-2xl shadow-2xl p-8 z-10">
         
-        {/* Logo at the top, linking to home */}
+        {/* Logo */}
         <div className="flex justify-center mb-6">
           <Link href="/">
             <Image
-              src="/images/logo-no-bg.png" // Using the white logo from your footer
+              src="/images/logo-no-bg.png"
               alt="DEDEN Logo"
               width={140}
               height={50}
@@ -140,7 +159,7 @@ export default function SignInPage() {
           </Link>
         </div>
 
-        {/* Branded Heading */}
+        {/* Heading */}
         <h1
           className="text-5xl font-bold text-center text-white mb-6"
           style={{
@@ -155,7 +174,7 @@ export default function SignInPage() {
           Choose your preferred method to log in.
         </p>
 
-        {/* Error message (styling is fine for a dark card) */}
+        {/* Error message (This will now show the OAuth error!) */}
         {error && (
           <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded-lg mb-6 text-sm">
             <strong>Error:</strong> {error}
@@ -163,41 +182,27 @@ export default function SignInPage() {
         )}
 
         <div className="space-y-4">
-          {/* Google Sign-In Button (light button on dark card) */}
+          {/* Google Button */}
           <button
             onClick={handleGoogleSignIn}
             disabled={isLoadingGoogle || isLoadingWallet}
             className="w-full flex items-center justify-center gap-3 bg-white text-[#172a46] font-semibold py-3 px-5 rounded-full shadow-lg transition-all hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoadingGoogle ? (
-              <Spinner />
-            ) : (
-              <>
-                <GoogleIcon />
-                Sign in with Google
-              </>
-            )}
+            {isLoadingGoogle ? <Spinner /> : <><GoogleIcon /> Sign in with Google</>}
           </button>
 
-          {/* Wallet Sign-In Button (darker button on dark card) */}
+          {/* Wallet Button */}
           <button
             onClick={handleWalletSignIn}
             disabled={isLoadingWallet || isLoadingGoogle}
             className="w-full flex items-center justify-center gap-3 bg-[#2a4562] text-white font-semibold py-3 px-5 rounded-full shadow-lg transition-all hover:bg-[#3a5572] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoadingWallet ? (
-              <Spinner />
-            ) : (
-              <>
-                <WalletIcon />
-                Sign in with Wallet
-              </>
-            )}
+            {isLoadingWallet ? <Spinner /> : <><WalletIcon /> Sign in with Wallet</>}
           </button>
         </div>
       </div>
 
-      {/* Bottom Wave (matches the hero section's bottom wave) */}
+      {/* Bottom Wave */}
       <div className="absolute bottom-0 left-0 right-0">
         <WaveDivider colorClassName="bg-[#172a46]" />
       </div>
@@ -205,7 +210,17 @@ export default function SignInPage() {
   );
 }
 
-// Simple SVG Spinner (Unchanged)
+// --- NEW: Default export that wraps the form in Suspense ---
+export default function SignInPage() {
+  return (
+    <React.Suspense fallback={<div>Loading...</div>}>
+      <SignInForm />
+    </React.Suspense>
+  );
+}
+
+
+// --- Spinner component (unchanged) ---
 function Spinner() {
   return (
     <svg

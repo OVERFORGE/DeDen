@@ -11,7 +11,6 @@ export async function POST(
   context: { params: Promise<{ stayId: string }> }
 ) {
   try {
-    // IMPORTANT: In Next.js 15+, params is now a Promise
     const { stayId } = await context.params;
     
     console.log('[API] Received stayId from URL:', stayId);
@@ -40,7 +39,6 @@ export async function POST(
       );
     }
 
-    // Check for required fields from the form body
     if (!walletAddress || !email || !displayName) {
       console.error('[API] Missing required fields');
       return NextResponse.json(
@@ -70,32 +68,65 @@ export async function POST(
       );
     }
 
-    // 3. --- Find or Create User (wallet-based identity only) ---
-    // ✅ Only check by wallet address - email is no longer unique
+    // 3. --- Find or Create User (wallet-based identity) ---
     let user = await db.user.findUnique({
       where: { walletAddress: walletAddress },
     });
 
     if (user) {
-      // User exists - update their info (email can be different per event)
+      // ✅ FIX: Only update fields that won't cause unique constraint violations
+      // Don't update email if it would conflict with another user
+      const updateData: any = {
+        displayName: displayName,
+        firstName: firstName,
+        lastName: lastName,
+        role: role,
+        socialTwitter: socialTwitter,
+        socialTelegram: socialTelegram,
+        socialLinkedin: socialLinkedin,
+      };
+
+      // Only update email if it's different AND doesn't conflict
+      if (user.email !== email) {
+        // Check if this email is already used by another user
+        const emailConflict = await db.user.findFirst({
+          where: {
+            email: email,
+            id: { not: user.id }, // Exclude current user
+          },
+        });
+
+        if (!emailConflict) {
+          // Safe to update email
+          updateData.email = email;
+        } else {
+          console.log('[API] Email already in use by another user, skipping email update');
+          // Don't update email, but continue with the application
+        }
+      }
+
       user = await db.user.update({
         where: { walletAddress: walletAddress },
-        data: {
-          // Update user info - email can change per event application
-          email: email,
-          displayName: displayName,
-          firstName: firstName,
-          lastName: lastName,
-          role: role,
-          socialTwitter: socialTwitter,
-          socialTelegram: socialTelegram,
-          socialLinkedin: socialLinkedin,
-        },
+        data: updateData,
       });
       
       console.log('[API] User updated:', user.displayName);
     } else {
-      // New user - create with wallet-based identity
+      // New user - check if email is already taken
+      const existingEmailUser = await db.user.findUnique({
+        where: { email: email },
+      });
+
+      if (existingEmailUser) {
+        return NextResponse.json(
+          { 
+            error: 'This email is already registered with another wallet. Please use a different email or sign in with your existing account.',
+          },
+          { status: 409 }
+        );
+      }
+
+      // Create new user
       user = await db.user.create({
         data: {
           walletAddress: walletAddress,
@@ -114,8 +145,7 @@ export async function POST(
       console.log('[API] User created:', user.displayName);
     }
 
-    // 4. --- Check for Duplicate Application (same wallet, same stay) ---
-    // ✅ This uses the compound unique constraint @@unique([userId, stayId])
+    // 4. --- Check for Duplicate Application ---
     const existingBooking = await db.booking.findFirst({
       where: {
         userId: user.id,
@@ -124,9 +154,10 @@ export async function POST(
     });
 
     if (existingBooking) {
+      console.log('[API] Duplicate booking found:', existingBooking.bookingId);
       return NextResponse.json(
         {
-          error: 'You have already applied for this stay',
+          error: 'You have already applied for this stay. Check your dashboard for status.',
           bookingId: existingBooking.bookingId,
           status: existingBooking.status,
         },
@@ -134,20 +165,18 @@ export async function POST(
       );
     }
 
-    // 5. --- Create the WAITLISTED Booking (awaiting admin approval) ---
+    // 5. --- Create the WAITLISTED Booking ---
     const randomId = `${stayId}-${Date.now()}`;
 
-    // ✅ Create booking in WAITLISTED status (no payment details yet)
     const newBooking = await db.booking.create({
       data: {
         bookingId: randomId,
-        status: BookingStatus.WAITLISTED, // ✅ Changed back to WAITLISTED
+        status: BookingStatus.WAITLISTED,
         userId: user.id,
         stayId: stay.id,
         guestName: displayName,
-        guestEmail: email, // Email stored per event booking
+        guestEmail: email,
         optInGuestList: false,
-        // ❌ NO payment details - added after approval
       },
     });
 
@@ -164,6 +193,7 @@ export async function POST(
         details: {
           stayId: stay.stayId,
           email: email,
+          walletAddress: walletAddress,
         },
       },
     });
@@ -172,14 +202,11 @@ export async function POST(
     return NextResponse.json(
       {
         success: true,
-        message: 'Application submitted successfully. Please proceed to payment.',
+        message: 'Application submitted successfully. Check your dashboard for status updates.',
         booking: {
           bookingId: newBooking.bookingId,
           status: newBooking.status,
           stayTitle: stay.title,
-          paymentAmount: newBooking.paymentAmount,
-          paymentToken: newBooking.paymentToken,
-          expiresAt: newBooking.expiresAt,
         },
       },
       { status: 201 }
@@ -194,8 +221,15 @@ export async function POST(
       );
     }
 
-    // Handle unique constraint errors (should only be for duplicate bookings now)
+    // Handle unique constraint errors
     if ((error as any).code === 'P2002') {
+      const meta = (error as any).meta;
+      if (meta?.target?.includes('email')) {
+        return NextResponse.json(
+          { error: 'This email is already registered. Please use a different email or sign in.' },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         { error: 'You have already applied for this stay' },
         { status: 409 }
