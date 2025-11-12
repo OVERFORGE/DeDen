@@ -37,7 +37,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Add Google Fonts for New Rocker */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
