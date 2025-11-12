@@ -16,22 +16,31 @@ const transferInterface = new ethers.Interface(ERC20_TRANSFER_ABI);
 // 2. Define the number of confirmations to wait for
 const REQUIRED_CONFIRMATIONS = 3;
 
-/**
- * This is the core verification function for the NEW schema.
- * It fetches the tx, waits for confirmations, and updates the Booking record.
- * 
- * Flow:
- * 1. User submits txHash → booking.status = PENDING, booking.txHash = txHash
- * 2. This function waits for confirmations
- * 3. On success → booking.status = CONFIRMED, send confirmation email
- * 4. On failure → booking.status = FAILED
- */
 export async function verifyPayment(bookingId: string, txHash: string, chainId: number) {
   
   console.log(`[VFY] Starting verification for booking ${bookingId}, tx ${txHash}`);
 
-  // Declare booking outside try-catch so it's accessible in catch block
-  let booking: Awaited<ReturnType<typeof db.booking.findUnique>> | null = null;
+  // Declare booking with proper type that includes relations
+  let booking: {
+    id: string;
+    bookingId: string;
+    userId: string;
+    status: BookingStatus;
+    paymentToken: PaymentToken | null;
+    paymentAmount: number | null;
+    user: {
+      email: string | null;
+      displayName: string | null;
+    };
+    stay: {
+      title: string;
+      location: string;
+      startDate: Date;
+      endDate: Date;
+      priceUSDC: number;
+      priceUSDT: number;
+    };
+  } | null = null;
 
   try {
     // --- Step 1: Get Booking Details ---
@@ -80,7 +89,6 @@ export async function verifyPayment(bookingId: string, txHash: string, chainId: 
     }
 
     // --- Step 3: Calculate Expected Amount ---
-    // The expected amount in base units (e.g., for 300 USDC with 6 decimals = "300000000")
     const expectedAmount = ethers.parseUnits(
       booking.paymentAmount.toString(),
       tokenInfo.decimals
@@ -94,7 +102,6 @@ export async function verifyPayment(bookingId: string, txHash: string, chainId: 
       throw new Error('Transaction not found (yet).');
     }
     
-    // This is the magic! Ethers will wait for N blocks.
     const receipt = await tx.wait(REQUIRED_CONFIRMATIONS);
 
     if (!receipt) {
@@ -113,33 +120,42 @@ export async function verifyPayment(bookingId: string, txHash: string, chainId: 
     let actualFromAddress = '';
     
     for (const log of receipt.logs) {
-      // Check 1: Is this a log from our token?
       if (log.address.toLowerCase() !== tokenInfo.address.toLowerCase()) {
-        continue; // Not our token, skip
+        continue;
       }
 
       try {
         const parsedLog = transferInterface.parseLog(log);
 
         if (parsedLog && parsedLog.name === 'Transfer') {
-          // Check 2: Did it go to our treasury?
           const to = parsedLog.args.to;
           if (to.toLowerCase() !== treasuryAddress?.toLowerCase()) {
-            continue; // Not to us, skip
+            continue;
           }
 
-          // Check 3: Was it the exact amount?
           const value = parsedLog.args.value.toString();
           if (value !== expectedAmount) {
             throw new Error(`Amount mismatch. Expected ${expectedAmount}, got ${value}`);
           }
 
-          // Extract sender address
           actualFromAddress = parsedLog.args.from;
 
-          // --- !! SUCCESS !! ---
           console.log(`[VFY-SUCCESS] Valid payment found for booking ${bookingId}!`);
           paymentFound = true;
+
+          // Store user data before transaction
+          const userEmail = booking.user.email;
+          const userDisplayName = booking.user.displayName;
+          const stayData = {
+            title: booking.stay.title,
+            location: booking.stay.location,
+            startDate: booking.stay.startDate,
+            endDate: booking.stay.endDate,
+          };
+          const paymentData = {
+            amount: booking.paymentAmount,
+            token: booking.paymentToken,
+          };
 
           // We will update the database in a transaction
           await db.$transaction([
@@ -170,8 +186,8 @@ export async function verifyPayment(bookingId: string, txHash: string, chainId: 
                   txHash,
                   chainId,
                   blockNumber: Number(receipt.blockNumber),
-                  token: booking.paymentToken,
-                  amount: booking.paymentAmount,
+                  token: paymentData.token,
+                  amount: paymentData.amount,
                   from: actualFromAddress,
                   to,
                 },
@@ -179,33 +195,32 @@ export async function verifyPayment(bookingId: string, txHash: string, chainId: 
             }),
           ]);
 
-          // 3. Send confirmation email
-          if (booking.user.email) {
+          // 3. Send confirmation email (outside transaction)
+          if (userEmail) {
             try {
               await sendConfirmationEmail({
-                recipientEmail: booking.user.email,
-                recipientName: booking.user.displayName || 'Guest',
-                bookingId: booking.bookingId,
-                stayTitle: booking.stay.title,
-                stayLocation: booking.stay.location,
-                startDate: booking.stay.startDate,
-                endDate: booking.stay.endDate,
-                paidAmount: booking.paymentAmount,
-                paidToken: booking.paymentToken,
+                recipientEmail: userEmail,
+                recipientName: userDisplayName || 'Guest',
+                bookingId: bookingId,
+                stayTitle: stayData.title,
+                stayLocation: stayData.location,
+                startDate: stayData.startDate,
+                endDate: stayData.endDate,
+                paidAmount: paymentData.amount,
+                paidToken: paymentData.token,
                 txHash,
                 chainId,
               });
-              console.log(`[VFY] Confirmation email sent to ${booking.user.email}`);
+              console.log(`[VFY] Confirmation email sent to ${userEmail}`);
             } catch (emailError) {
               console.error('[VFY] Failed to send confirmation email:', emailError);
               // Don't fail the entire verification if email fails
             }
           }
 
-          break; // Stop looping
+          break;
         }
       } catch (e) {
-        // This log wasn't a 'Transfer' event, ignore it
         continue;
       }
     }
@@ -215,15 +230,12 @@ export async function verifyPayment(bookingId: string, txHash: string, chainId: 
     }
 
   } catch (error: unknown) {
-    // --- !! FAILURE !! ---
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[VFY-ERR] Verification failed for ${bookingId}:`, errorMessage);
     
-    // Only update if we have a booking record
     if (booking) {
       try {
         await db.$transaction([
-          // Update booking to FAILED
           db.booking.update({
             where: { bookingId },
             data: {
@@ -232,7 +244,6 @@ export async function verifyPayment(bookingId: string, txHash: string, chainId: 
               chainId: chainId,
             },
           }),
-          // Log the failure
           db.activityLog.create({
             data: {
               userId: booking.userId,
@@ -255,25 +266,19 @@ export async function verifyPayment(bookingId: string, txHash: string, chainId: 
       console.error(`[VFY-ERR] Cannot update booking status - booking not found`);
     }
 
-    // Re-throw the error so caller knows verification failed
     throw error;
   }
 }
 
-/**
- * Helper function to check if a booking's payment session has expired
- * This can be called by a cron job to clean up expired bookings
- */
 export async function checkExpiredBookings() {
   try {
     const now = new Date();
     
-    // Find all PENDING bookings that have expired
     const expiredBookings = await db.booking.findMany({
       where: {
         status: BookingStatus.PENDING,
         expiresAt: {
-          lt: now, // Less than current time
+          lt: now,
         },
       },
       include: {
@@ -288,7 +293,6 @@ export async function checkExpiredBookings() {
 
     console.log(`[CRON] Found ${expiredBookings.length} expired bookings`);
 
-    // Update them to EXPIRED
     for (const booking of expiredBookings) {
       await db.$transaction([
         db.booking.update({
@@ -313,8 +317,6 @@ export async function checkExpiredBookings() {
       ]);
 
       console.log(`[CRON] Marked booking ${booking.bookingId} as EXPIRED`);
-
-      // TODO: Send expiration notification email
     }
 
     return expiredBookings.length;
@@ -324,10 +326,6 @@ export async function checkExpiredBookings() {
   }
 }
 
-/**
- * Helper function to retry failed verifications
- * Can be used manually or by a background job
- */
 export async function retryFailedVerification(bookingId: string) {
   try {
     const booking = await db.booking.findUnique({
@@ -353,7 +351,6 @@ export async function retryFailedVerification(bookingId: string) {
       throw new Error(`Booking ${bookingId} is missing transaction details`);
     }
 
-    // Reset to PENDING and retry verification
     await db.booking.update({
       where: { bookingId },
       data: {

@@ -17,10 +17,11 @@ interface BookingStatusData {
 interface StayApplyButtonProps {
   stayId: string;
   stayTitle: string;
+  slotsAvailable: number;
   className?: string;
 }
 
-export default function StayApplyButton({ stayId, stayTitle, className = "" }: StayApplyButtonProps) {
+export default function StayApplyButton({ stayId, stayTitle, slotsAvailable, className = "" }: StayApplyButtonProps) {
   const { data: session, status: sessionStatus } = useSession();
   
   const [bookingStatus, setBookingStatus] = useState<BookingStatusData | null>(null);
@@ -83,6 +84,9 @@ export default function StayApplyButton({ stayId, stayTitle, className = "" }: S
     }
   }, [bookingStatus]);
 
+  // Check if slots are available
+  const noSlotsAvailable = slotsAvailable === 0;
+
   // Loading state
   if (isLoading && sessionStatus === "authenticated") {
     return (
@@ -102,6 +106,11 @@ export default function StayApplyButton({ stayId, stayTitle, className = "" }: S
   if (sessionStatus === "unauthenticated") {
     return (
       <div className={className}>
+        {noSlotsAvailable && (
+          <div className="text-center mb-3">
+            <p className="text-white/80 text-sm font-semibold">⚠️ No slots available</p>
+          </div>
+        )}
         <Link
           href="/auth/signin"
           className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl hover:shadow-2xl"
@@ -240,13 +249,22 @@ export default function StayApplyButton({ stayId, stayTitle, className = "" }: S
               {status === "CANCELLED" ? "Booking Cancelled" : "Payment Refunded"}
             </p>
           </div>
-          <Link
-            href={`/stay/${stayId}/apply`}
-            className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl"
-          >
-            <span>Apply Again</span>
-            <ArrowRight size={24} />
-          </Link>
+          {noSlotsAvailable ? (
+            <button
+              disabled
+              className="w-full bg-gray-500 text-white text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 opacity-50 cursor-not-allowed"
+            >
+              <span>Sold Out</span>
+            </button>
+          ) : (
+            <Link
+              href={`/stay/${stayId}/apply`}
+              className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl"
+            >
+              <span>Apply Again</span>
+              <ArrowRight size={24} />
+            </Link>
+          )}
         </div>
       );
     }
@@ -259,13 +277,22 @@ export default function StayApplyButton({ stayId, stayTitle, className = "" }: S
             <div className="text-5xl mb-2">⚠️</div>
             <p className="text-white text-lg font-semibold">Payment Failed</p>
           </div>
-          <Link
-            href={`/stay/${stayId}/apply`}
-            className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl"
-          >
-            <span>Try Again</span>
-            <ArrowRight size={24} />
-          </Link>
+          {noSlotsAvailable ? (
+            <button
+              disabled
+              className="w-full bg-gray-500 text-white text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 opacity-50 cursor-not-allowed"
+            >
+              <span>Sold Out</span>
+            </button>
+          ) : (
+            <Link
+              href={`/stay/${stayId}/apply`}
+              className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl"
+            >
+              <span>Try Again</span>
+              <ArrowRight size={24} />
+            </Link>
+          )}
         </div>
       );
     }
@@ -288,9 +315,35 @@ export default function StayApplyButton({ stayId, stayTitle, className = "" }: S
     );
   }
 
-  // User authenticated, has wallet, but no booking - show apply button
+  // User authenticated, has wallet, but no booking - check slots availability
+  if (noSlotsAvailable) {
+    return (
+      <div className={className}>
+        <div className="text-center mb-4">
+          <div className="text-5xl mb-2">😔</div>
+          <p className="text-white text-lg font-semibold">Sold Out</p>
+          <p className="text-white/70 text-sm mt-1">All slots are filled</p>
+        </div>
+        <button
+          disabled
+          className="w-full bg-gray-500 text-white text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 opacity-50 cursor-not-allowed"
+        >
+          <span>No Slots Available</span>
+        </button>
+      </div>
+    );
+  }
+
+  // Show apply button
   return (
     <div className={className}>
+      {slotsAvailable <= 3 && (
+        <div className="text-center mb-3">
+          <p className="text-yellow-300 text-sm font-semibold animate-pulse">
+            ⚡ Only {slotsAvailable} {slotsAvailable === 1 ? 'slot' : 'slots'} left!
+          </p>
+        </div>
+      )}
       <Link
         href={`/stay/${stayId}/apply`}
         className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl hover:shadow-2xl"

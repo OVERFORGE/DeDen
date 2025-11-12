@@ -32,7 +32,7 @@ type Booking = {
 
 export default function UserDashboard() {
   const { data: session, status: sessionStatus } = useSession();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { connectAsync } = useConnect();
   const { signMessageAsync } = useSignMessage();
   const { disconnect } = useDisconnect();
@@ -119,14 +119,21 @@ export default function UserDashboard() {
     try {
       // 1. Connect wallet if not connected
       let currentAddress = address;
-      let currentChainId = null;
+      let currentChainId = chainId;
 
       if (!currentAddress) {
-        const { address: connectedAddress, chainId } = await connectAsync({
-          connector: injected(),
-        });
-        currentAddress = connectedAddress;
-        currentChainId = chainId;
+        await connectAsync({ connector: injected() });
+        
+        // Wait for account state to update
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while ((!address || !chainId) && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          currentAddress = address;
+          currentChainId = chainId;
+          attempts++;
+        }
       }
 
       if (!currentAddress) {
@@ -176,7 +183,11 @@ export default function UserDashboard() {
       setTimeout(() => window.location.reload(), 1500);
     } catch (err: any) {
       console.error("Wallet linking error:", err);
-      setError(err.message || "Failed to link wallet");
+      if (err.message.includes("User rejected") || err.message.includes("User denied")) {
+        setError("Wallet linking cancelled");
+      } else {
+        setError(err.message || "Failed to link wallet");
+      }
     } finally {
       setIsLinkingWallet(false);
     }
