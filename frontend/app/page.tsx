@@ -72,21 +72,21 @@ export default function HomePage() {
         <div className="max-w-screen-xl mx-auto px-6 grid md:grid-cols-[1fr_auto] gap-0 items-center relative">
           {/* Left Column */}
           <div className="flex flex-col z-10 max-w-2xl">
-            <h1 
-              className="text-5xl md:text-6xl lg:text-7xl font-bold text-[#102E4A] leading-[0.95] tracking-tight"
-              style={{ 
+            <h1
+              className="text-5xl md:text-6xl lg:text-8xl font-bold text-[#102E4A] leading-[0.95] tracking-tight"
+              style={{
                 fontFamily: "'New Rocker', cursive",
-                letterSpacing: '-0.07em'
+                letterSpacing: "-0.07em",
               }}
             >
               Where Web3 lives and builders connect
             </h1>
-            <p 
+            <p
               className="text-lg md:text-xl text-[#102E4A] mt-8 leading-relaxed font-bold"
-              style={{ 
+              style={{
                 fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
                 fontWeight: 700,
-                letterSpacing: '-0.02em'
+                letterSpacing: "-0.02em",
               }}
             >
               Decentralized Den is a luxury villa experience curated for the
@@ -105,7 +105,9 @@ export default function HomePage() {
                 <p className="font-display text-5xl font-bold text-[#172a46]">
                   500+
                 </p>
-                <p className="text-sm text-gray-600 mt-1.5">Community Members</p>
+                <p className="text-sm text-gray-600 mt-1.5">
+                  Community Members
+                </p>
               </div>
               <div>
                 <p className="font-display text-5xl font-bold text-[#172a46]">
@@ -264,9 +266,7 @@ export default function HomePage() {
                 </p>
                 <div className="flex items-center space-x-4 mt-8">
                   <div className="w-12 h-12 rounded-full bg-[#f5f5f3] flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm text-[#172a46] font-bold">
-                      AB
-                    </span>
+                    <span className="text-sm text-[#172a46] font-bold">AB</span>
                   </div>
                   <div>
                     <p className="text-sm font-semibold">{item.name}</p>
@@ -331,12 +331,18 @@ export default function HomePage() {
               <h4 className="font-bold text-lg mb-5 text-white">Explore</h4>
               <ul className="space-y-3 text-sm text-gray-300">
                 <li>
-                  <Link href="/about" className="hover:text-white transition-colors">
+                  <Link
+                    href="/about"
+                    className="hover:text-white transition-colors"
+                  >
                     About DeDen
                   </Link>
                 </li>
                 <li>
-                  <Link href="/villas" className="hover:text-white transition-colors">
+                  <Link
+                    href="/villas"
+                    className="hover:text-white transition-colors"
+                  >
                     Upcoming Stays
                   </Link>
                 </li>
@@ -357,7 +363,10 @@ export default function HomePage() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/contact" className="hover:text-white transition-colors">
+                  <Link
+                    href="/contact"
+                    className="hover:text-white transition-colors"
+                  >
                     Contact Us
                   </Link>
                 </li>

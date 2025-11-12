@@ -31,18 +31,18 @@ export function Navbar() {
     <nav className="bg-transparent text-white w-full z-50 sticky top-0">
       <div className="max-w-screen-xl mx-auto px-6 py-6">
         {/* Desktop Navigation */}
-        <div className="hidden md:flex justify-between items-center bg-[#172a46] border-2 border-[#2a4562] rounded-full py-4 px-10 shadow-xl">
+        <div className="hidden md:flex justify-between items-center bg-[#172a46] border-2 border-[#2a4562] rounded-[20px] py-4 px-10 shadow-xl">
           {/* Left side links */}
           <div className="flex items-center gap-10">
             <Link
               href="/experiences"
-              className="text-sm font-semibold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
+              className="text-md font-bold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
             >
               Experiences
             </Link>
             <Link
               href="/villas"
-              className="text-sm font-semibold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
+              className="text-sm font-bold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
             >
               Upcoming Villas
             </Link>
@@ -55,7 +55,7 @@ export function Navbar() {
               alt="DEDEN Logo"
               width={207}
               height={116}
-              className="h-[58px] w-auto"
+              className="h-[96px] w-auto"
               priority
             />
           </Link>
@@ -64,20 +64,20 @@ export function Navbar() {
           <div className="flex items-center gap-8">
             <Link
               href="/about"
-              className="text-sm font-semibold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
+              className="text-md font-bold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
             >
               About
             </Link>
             <Link
               href="/contact"
-              className="text-sm font-semibold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
+              className="text-sm font-bold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
             >
               Contact
             </Link>
 
             {/* Auth Section */}
             {status === "loading" ? (
-              <button className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full shadow-lg">
+              <button className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-[14px] shadow-lg">
                 ...
               </button>
             ) : status === "authenticated" && session.user ? (
@@ -85,7 +85,7 @@ export function Navbar() {
                 {/* User Profile */}
                 <button
                   onClick={handleDashboard}
-                  className="flex items-center gap-2 bg-[#2a4562] hover:bg-[#3a5572] text-white px-4 py-2 rounded-full transition-all"
+                  className="flex items-center gap-2 bg-[#2a4562] hover:bg-[#3a5572] text-white px-4 py-2 rounded-[14px] transition-all"
                 >
                   {session.user.image ? (
                     <Image
@@ -115,7 +115,7 @@ export function Navbar() {
             ) : (
               <button
                 onClick={handleSignIn}
-                className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full transition-all hover:scale-105 hover:bg-white shadow-lg"
+                className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-[14px] transition-all hover:scale-105 hover:bg-white shadow-lg"
               >
                 SIGN IN
               </button>
