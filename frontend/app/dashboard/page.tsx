@@ -7,6 +7,7 @@ import { SiweMessage } from "siwe";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ConnectKitButton } from "connectkit";
 import Link from "next/link";
+import { AlertTriangle } from "lucide-react"; // Added for the new warning
 
 type Booking = {
   bookingId: string;
@@ -36,11 +37,11 @@ export default function UserDashboard() {
   const { connectAsync } = useConnect();
   const { signMessageAsync } = useSignMessage();
   const { disconnect } = useDisconnect();
-  
+
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  // const [debugInfo, setDebugInfo] = useState<any>(null); // Removed Debug Info
   const [isLinkingWallet, setIsLinkingWallet] = useState(false);
   const [isLinkingGoogle, setIsLinkingGoogle] = useState(false);
   const [linkMessage, setLinkMessage] = useState<string | null>(null);
@@ -51,6 +52,19 @@ export default function UserDashboard() {
   const linkedWallet = session?.user ? (session.user as any).walletAddress : null;
   const isWalletLinked = Boolean(linkedWallet);
   const isGoogleLinked = Boolean(userEmail);
+
+  // Helper function to truncate wallet addresses
+  const truncateAddress = (addr: string | null) => {
+    if (!addr) return "";
+    return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+  };
+
+  // Detects if a wallet is connected, but it's not the one linked to the session
+  const isWalletMismatched =
+    linkedWallet &&
+    isConnected &&
+    address &&
+    linkedWallet.toLowerCase() !== address.toLowerCase();
 
   useEffect(() => {
     if (sessionStatus === "loading") {
@@ -71,7 +85,7 @@ export default function UserDashboard() {
 
         // Use wallet address from session if available, otherwise use connected wallet
         const walletToUse = linkedWallet || address;
-        
+
         if (!walletToUse) {
           setBookings([]);
           setLoading(false);
@@ -89,12 +103,14 @@ export default function UserDashboard() {
         }
 
         setBookings(data);
+        /* Removed Debug Info
         setDebugInfo({
           wallet: walletToUse,
           email: userEmail,
           bookingsCount: data.length,
           timestamp: new Date().toISOString(),
         });
+        */
       } catch (err: any) {
         console.error("[Dashboard] Error:", err);
         setError(err.message);
@@ -123,13 +139,13 @@ export default function UserDashboard() {
 
       if (!currentAddress) {
         await connectAsync({ connector: injected() });
-        
+
         // Wait for account state to update
         let attempts = 0;
         const maxAttempts = 10;
-        
+
         while ((!address || !chainId) && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
           currentAddress = address;
           currentChainId = chainId;
           attempts++;
@@ -178,12 +194,15 @@ export default function UserDashboard() {
       }
 
       setLinkMessage("✅ Wallet linked successfully!");
-      
+
       // Refresh session to get updated user data
       setTimeout(() => window.location.reload(), 1500);
     } catch (err: any) {
       console.error("Wallet linking error:", err);
-      if (err.message.includes("User rejected") || err.message.includes("User denied")) {
+      if (
+        err.message.includes("User rejected") ||
+        err.message.includes("User denied")
+      ) {
         setError("Wallet linking cancelled");
       } else {
         setError(err.message || "Failed to link wallet");
@@ -206,7 +225,7 @@ export default function UserDashboard() {
     try {
       // Store current session info to merge later
       const currentUserId = session.user.id;
-      
+
       // Redirect to Google OAuth with a special state parameter
       await signIn("google", {
         callbackUrl: `/dashboard?linkGoogle=true&userId=${currentUserId}`,
@@ -240,7 +259,12 @@ export default function UserDashboard() {
   };
 
   const handleUnlinkGoogle = async () => {
-    if (!confirm("Are you sure you want to unlink your Google account? You'll need your wallet to sign in.")) return;
+    if (
+      !confirm(
+        "Are you sure you want to unlink your Google account? You'll need your wallet to sign in."
+      )
+    )
+      return;
 
     try {
       const res = await fetch("/api/user/unlink-google", {
@@ -270,7 +294,8 @@ export default function UserDashboard() {
           icon: "⏳",
           label: "Under Review",
           classes: "bg-yellow-100 text-yellow-800",
-          message: "Your application is being reviewed. We'll notify you within 24-48 hours.",
+          message:
+            "Your application is being reviewed. We'll notify you within 24-48 hours.",
         };
       case "PENDING":
         if (isExpired) {
@@ -278,21 +303,24 @@ export default function UserDashboard() {
             icon: "⌛",
             label: "Payment Expired",
             classes: "bg-red-100 text-red-800",
-            message: "Your payment session expired. Please contact support.",
+            message:
+              "Your payment session expired. Please contact support.",
           };
         }
         return {
           icon: "💳",
           label: "Payment Required",
           classes: "bg-blue-100 text-blue-800",
-          message: "Your application was approved! Complete payment to confirm your spot.",
+          message:
+            "Your application was approved! Complete payment to confirm your spot.",
         };
       case "CONFIRMED":
         return {
           icon: "✅",
           label: "Confirmed",
           classes: "bg-green-100 text-green-800",
-          message: "All set! Your spot is confirmed. Check your email for details.",
+          message:
+            "All set! Your spot is confirmed. Check your email for details.",
         };
       case "CANCELLED":
         return {
@@ -373,13 +401,15 @@ export default function UserDashboard() {
             <h3 className="text-lg font-semibold mb-3 text-gray-900 flex items-center gap-2">
               <span className="text-2xl">🔐</span> Google Account
             </h3>
-            
+
             {isGoogleLinked ? (
               <div className="space-y-3">
                 <div className="flex items-start gap-2">
                   <span className="text-green-600 font-semibold mt-1">✅</span>
                   <div className="flex-1">
-                    <div className="text-sm text-gray-600 mb-1">Linked Email:</div>
+                    <div className="text-sm text-gray-600 mb-1">
+                      Linked Email:
+                    </div>
                     <div className="bg-white px-3 py-2 rounded text-sm font-medium break-all">
                       {userEmail}
                     </div>
@@ -395,7 +425,8 @@ export default function UserDashboard() {
             ) : (
               <div className="space-y-3">
                 <p className="text-gray-700 text-sm mb-3">
-                  Link your Google account for easy sign-in and email notifications.
+                  Link your Google account for easy sign-in and email
+                  notifications.
                 </p>
                 <button
                   onClick={handleLinkGoogle}
@@ -423,13 +454,15 @@ export default function UserDashboard() {
             <h3 className="text-lg font-semibold mb-3 text-gray-900 flex items-center gap-2">
               <span className="text-2xl">💼</span> Wallet
             </h3>
-            
+
             {isWalletLinked ? (
               <div className="space-y-3">
                 <div className="flex items-start gap-2">
                   <span className="text-green-600 font-semibold mt-1">✅</span>
                   <div className="flex-1">
-                    <div className="text-sm text-gray-600 mb-1">Linked Wallet:</div>
+                    <div className="text-sm text-gray-600 mb-1">
+                      Linked Wallet:
+                    </div>
                     <code className="bg-white px-3 py-2 rounded text-sm font-mono block break-all">
                       {linkedWallet}
                     </code>
@@ -466,6 +499,45 @@ export default function UserDashboard() {
           </div>
         </div>
 
+        {/* ===== ✅ NEW UPGRADED WARNING BLOCK START ===== */}
+        {isWalletMismatched && (
+          <div className="mb-6 p-6 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border-2 border-red-200">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <AlertTriangle className="text-red-600" size={24} />
+              Wallet Mismatch
+            </h3>
+            <p className="mt-3 text-gray-700 text-sm">
+              The wallet currently connected in your browser does not match the
+              wallet linked to this account.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <div className="flex-1">
+                <div className="text-sm text-gray-600 mb-1">
+                  Linked to Account:
+                </div>
+                <code className="bg-white px-3 py-2 rounded text-sm font-mono block break-all text-green-700 font-medium">
+                  {truncateAddress(linkedWallet)}
+                </code>
+              </div>
+              <div className="flex-1">
+                <div className="text-sm text-gray-600 mb-1">
+                  Currently Connected:
+                </div>
+                <code className="bg-white px-3 py-2 rounded text-sm font-mono block break-all text-red-700 font-medium">
+                  {truncateAddress(address)}
+                </code>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm font-semibold text-gray-900">
+              Please **switch the active wallet** in your browser (e.g.,
+              MetaMask) to your linked address to proceed.
+            </p>
+          </div>
+        )}
+        {/* ===== ✅ NEW UPGRADED WARNING BLOCK END ===== */}
+
         {/* Status Messages */}
         {linkMessage && (
           <div className="mb-4 p-4 bg-green-50 border-2 border-green-200 text-green-800 rounded-lg">
@@ -478,22 +550,12 @@ export default function UserDashboard() {
           </div>
         )}
 
-        {/* Debug Info */}
-        {debugInfo && (
-          <details className="mt-3 p-3 bg-gray-50 rounded-lg">
-            <summary className="cursor-pointer text-sm text-gray-600 font-medium">
-              Show Debug Info
-            </summary>
-            <pre className="mt-2 p-3 bg-gray-900 text-green-400 rounded-md text-xs overflow-auto">
-              {JSON.stringify(debugInfo, null, 2)}
-            </pre>
-          </details>
-        )}
+        {/* Debug Info Removed */}
       </div>
 
       {/* Bookings Section */}
       <h2 className="text-2xl font-bold mb-5 text-gray-900">My Applications</h2>
-      
+
       {loading ? (
         <div className="text-center p-16 text-lg text-gray-600">
           <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-5"></div>
@@ -529,13 +591,16 @@ export default function UserDashboard() {
         <div className="flex flex-col gap-5">
           {bookings.map((booking) => {
             const statusInfo = getStatusInfo(booking.status, booking.expiresAt);
-            const isExpired = booking.expiresAt && new Date(booking.expiresAt) < new Date();
+            const isExpired =
+              booking.expiresAt && new Date(booking.expiresAt) < new Date();
             return (
               <div
                 key={booking.bookingId}
                 className="bg-white p-6 md:p-8 rounded-xl shadow-lg relative transition-all hover:shadow-xl"
               >
-                <div className={`inline-block py-2 px-4 rounded-full text-sm font-semibold mb-5 ${statusInfo.classes}`}>
+                <div
+                  className={`inline-block py-2 px-4 rounded-full text-sm font-semibold mb-5 ${statusInfo.classes}`}
+                >
                   {statusInfo.icon} {statusInfo.label}
                 </div>
 
@@ -546,7 +611,9 @@ export default function UserDashboard() {
                   📍 {booking.stay.location}
                 </p>
                 <p className="text-base text-gray-500 mb-5">
-                  🗓️ {new Date(booking.stay.startDate).toLocaleDateString()} - {new Date(booking.stay.endDate).toLocaleDateString()}
+                  🗓️{" "}
+                  {new Date(booking.stay.startDate).toLocaleDateString()} -{" "}
+                  {new Date(booking.stay.endDate).toLocaleDateString()}
                 </p>
 
                 <div className="p-4 bg-gray-50 rounded-lg mb-5 text-base text-gray-700">
@@ -556,7 +623,9 @@ export default function UserDashboard() {
                 <div className="border-t border-gray-200 pt-5 mb-5">
                   <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
                     <span className="text-gray-500">Application ID:</span>
-                    <code className="text-gray-900 font-semibold font-mono">{booking.bookingId}</code>
+                    <code className="text-gray-900 font-semibold font-mono">
+                      {booking.bookingId}
+                    </code>
                   </div>
                   <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
                     <span className="text-gray-500">Applied on:</span>
