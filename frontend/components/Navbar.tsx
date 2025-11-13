@@ -28,8 +28,8 @@ export function Navbar() {
   };
 
   return (
-    <nav className="bg-transparent text-white w-full z-50 sticky top-0">
-      <div className="max-w-screen-xl mx-auto px-6 py-6">
+    <nav className="bg-transparent text-white w-full z-50 sticky top-0 ">
+      <div className="font-inter max-w-screen-xl mx-auto px-6 py-6  relative ">
         {/* Desktop Navigation */}
         <div className="hidden md:flex justify-between items-center bg-[#172a46] border-2 border-[#2a4562] rounded-[20px] py-4 px-10 shadow-xl">
           {/* Left side links */}
@@ -124,76 +124,96 @@ export function Navbar() {
         </div>
 
         {/* Mobile Navigation */}
-        <div className="md:hidden flex justify-between items-center">
+        <div className="md:hidden flex justify-between items-center bg-[#E7E4DF] px-2 rounded-md">
           <Link href="/">
             <Image
-              src="/images/logo-no-bg.png"
+              src="/images/deden-logo-dark.png"
               alt="DEDEN Logo"
               width={100}
               height={35}
-              className="h-8 w-auto"
+              className="h-20 w-auto  rounded-md"
               priority
             />
           </Link>
 
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-2 rounded-lg hover:bg-[#2a4562] transition-colors"
+            className="p-2 rounded-lg bg-[#172a46] transition-colors z-10"
           >
-            {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+            {isMenuOpen ? (
+              <Image
+                src="/images/deden-claw.png"
+                alt="DEDEN Logo"
+                width={100}
+                height={35}
+                className="h-6 w-auto p-0"
+                priority
+              />
+            ) : (
+              <Image
+                src="/images/deden-claw.png"
+                alt="DEDEN Logo"
+                width={100}
+                height={35}
+                className="h-6 w-auto p-0"
+                priority
+              />
+            )}
           </button>
         </div>
       </div>
 
       {/* Mobile Menu Dropdown */}
-      {isMenuOpen && (
-        <div className="md:hidden bg-[#1a3352] border-t-2 border-[#2a4562] px-6 py-6 space-y-4 shadow-2xl">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setIsMenuOpen(false)}
-              className="block text-center text-base font-semibold text-gray-300 hover:text-white py-3 rounded-lg hover:bg-[#2a4562] transition-colors uppercase tracking-wide"
-            >
-              {link.label}
-            </Link>
-          ))}
-          <div className="pt-4 flex justify-center">
-            {status === "authenticated" && session.user ? (
-              <div className="flex flex-col gap-3 w-full">
-                <button
-                  onClick={() => {
-                    handleDashboard();
-                    setIsMenuOpen(false);
-                  }}
-                  className="bg-[#2a4562] hover:bg-[#3a5572] text-white py-3 px-6 rounded-full transition-all w-full"
-                >
-                  Dashboard
-                </button>
-                <button
-                  onClick={() => {
-                    signOut({ callbackUrl: "/" });
-                    setIsMenuOpen(false);
-                  }}
-                  className="bg-red-500 hover:bg-red-600 text-white py-3 px-6 rounded-full transition-all w-full"
-                >
-                  Sign Out
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  handleSignIn();
-                  setIsMenuOpen(false);
-                }}
-                className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full transition-all hover:scale-105 hover:bg-white shadow-lg w-full"
+      <div className="">
+        {isMenuOpen && (
+          <div className="font-inter z-0 absolute md:hidden rounded-xl bg-[#172a46] border-t-2 border-[#172a46] px-10 py-6 space-y-4 shadow-2xl right-0 mr-8 -mt-22 pt-10">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setIsMenuOpen(false)}
+                className="block text-center text-base font-semibold text-gray-300 hover:text-white py-2 rounded-lg hover:bg-[#2a4562] transition-colors uppercase tracking-wide"
               >
-                SIGN IN
-              </button>
-            )}
+                {link.label}
+              </Link>
+            ))}
+            <div className="pt-4 flex justify-center">
+              {status === "authenticated" && session.user ? (
+                <div className="flex flex-col gap-3 w-full">
+                  <button
+                    onClick={() => {
+                      handleDashboard();
+                      setIsMenuOpen(false);
+                    }}
+                    className="bg-[#2a4562] hover:bg-[#3a5572] text-white py-3 px-6 rounded-full transition-all w-full"
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    onClick={() => {
+                      signOut({ callbackUrl: "/" });
+                      setIsMenuOpen(false);
+                    }}
+                    className="bg-red-500 hover:bg-red-600 text-white py-3 px-6 rounded-full transition-all w-full"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    handleSignIn();
+                    setIsMenuOpen(false);
+                  }}
+                  className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full transition-all hover:scale-105 hover:bg-white shadow-lg w-full"
+                >
+                  SIGN IN
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </nav>
   );
 }
