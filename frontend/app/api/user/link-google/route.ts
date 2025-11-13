@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
     const userId = session.user.id;
 
-    // 2. Parse the request body - Google account info from OAuth callback
+    // 2. Parse the request body - Google account info
     const { googleAccountId, email, name, image } = await req.json();
 
     if (!googleAccountId || !email) {
@@ -38,15 +38,36 @@ export async function POST(req: Request) {
     if (existingAccount) {
       return NextResponse.json(
         { error: "This Google account is already linked to another user." },
-        { status: 409 }
+        { status: 409 } // 409 Conflict
       );
     }
 
-    // 4. Link the Google account to the current user
+    // --- ⬇️ START: THE FIX ⬇️ ---
+
+    // 4. Check if the email from Google is already used by ANOTHER user
+    const existingEmailUser = await prisma.user.findFirst({
+      where: {
+        email: email,
+        id: {
+          not: userId, // Check for users other than the current one
+        },
+      },
+    });
+
+    if (existingEmailUser) {
+      return NextResponse.json(
+        { error: "This email address is already in use by another account." },
+        { status: 409 } // 409 Conflict
+      );
+    }
+
+    // --- ⬆️ END: THE FIX ⬆️ ---
+
+    // 5. Link the Google account to the current user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
-        email: email,
+        email: email, // This is now safe
         displayName: name || undefined,
         image: image || undefined,
         accounts: {
@@ -61,7 +82,7 @@ export async function POST(req: Request) {
               provider: "google",
               providerAccountId: googleAccountId,
               type: "oauth",
-              access_token: "", // You'd get this from the OAuth flow
+              access_token: "", // Note: You should pass the real tokens here
               token_type: "bearer",
               scope: "openid profile email",
             },
@@ -81,6 +102,16 @@ export async function POST(req: Request) {
     return NextResponse.json(updatedUser, { status: 200 });
   } catch (e: any) {
     console.error("Link Google API error:", e);
+
+    // Provide a specific error for unique constraint violation
+    if (e.code === "P2002") {
+      // Prisma's unique constraint failed code
+      return NextResponse.json(
+        { error: "An account with this email or provider is already linked." },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       { error: e.message || "Internal server error" },
       { status: 500 }
