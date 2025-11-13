@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/database";
 import { BookingStatus, PaymentToken } from "@prisma/client";
 import { sendApprovalEmail } from "@/lib/email";
-
+import { Prisma } from "@prisma/client";
 /**
  * Approve a waitlisted booking and move it to PENDING with payment details
  * POST /api/admin/bookings/[bookingId]/approve
@@ -22,13 +22,18 @@ export async function POST(
     } = body;
 
     // 1. Find the booking
-    const booking = await db.booking.findUnique({
+    const booking = (await db.booking.findUnique({
       where: { bookingId },
       include: {
         stay: true,
         user: true,
       },
-    });
+    })) as Prisma.BookingGetPayload<{
+      include: {
+        stay: true;
+        user: true;
+      };
+    }>;
 
     if (!booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
