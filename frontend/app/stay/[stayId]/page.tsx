@@ -17,7 +17,7 @@ export default async function StayDetailsPage({
     notFound();
   }
 
-  // Convert to plain object for client
+  // Convert to plain object for client - including rooms
   const stayData = {
     id: stay.id,
     stayId: stay.stayId,
@@ -36,7 +36,7 @@ export default async function StayDetailsPage({
     images: stay.images || [],
     amenities: stay.amenities || [],
     highlights: stay.highlights || [],
-    rooms: stay.rooms || [],
+    rooms: stay.rooms || [], // ✅ Rooms are already included
   };
 
   return <StayDetailsClient stay={stayData} />;

@@ -3,7 +3,7 @@ import { db } from '@/lib/database';
 import { BookingStatus, UserRole } from '@prisma/client';
 
 /**
- * Apply for a stay (join waitlist)
+ * Apply for a stay (join waitlist) - WITH ROOM PRICING
  * POST /api/stays/[stayId]/apply
  */
 export async function POST(
@@ -25,6 +25,10 @@ export async function POST(
       firstName,
       lastName,
       role,
+      gender,
+      age,
+      mobileNumber,
+      selectedRoomId,
       socialTwitter,
       socialTelegram,
       socialLinkedin,
@@ -39,10 +43,17 @@ export async function POST(
       );
     }
 
-    if (!walletAddress || !email || !displayName) {
+    if (!walletAddress || !email || !displayName || !gender || !age || !mobileNumber) {
       console.error('[API] Missing required fields');
       return NextResponse.json(
-        { error: 'Missing required fields: walletAddress, email, displayName' },
+        { error: 'Missing required fields: walletAddress, email, displayName, gender, age, mobileNumber' },
+        { status: 400 }
+      );
+    }
+
+    if (age < 18) {
+      return NextResponse.json(
+        { error: 'You must be at least 18 years old to apply' },
         { status: 400 }
       );
     }
@@ -68,40 +79,55 @@ export async function POST(
       );
     }
 
-    // 3. --- Find or Create User (wallet-based identity) ---
+    // 🆕 3. --- FIND SELECTED ROOM & GET PRICE ---
+    let roomPrice: number | null = null;
+    let roomName: string | null = null;
+
+    if (selectedRoomId) {
+      // Rooms are stored as JSON array in Stay
+      const rooms = (stay.rooms as any[]) || [];
+      const selectedRoom = rooms.find((r: any) => r.id === selectedRoomId);
+      
+      if (selectedRoom) {
+        roomPrice = selectedRoom.price;
+        roomName = selectedRoom.name;
+        console.log('[API] User selected room:', roomName, 'at $', roomPrice);
+      } else {
+        console.warn('[API] Room ID not found in stay. Using stay base price.');
+      }
+    }
+
+    // 4. --- Find or Create User ---
     let user = await db.user.findUnique({
       where: { walletAddress: walletAddress },
     });
 
     if (user) {
-      // ✅ FIX: Only update fields that won't cause unique constraint violations
-      // Don't update email if it would conflict with another user
       const updateData: any = {
         displayName: displayName,
         firstName: firstName,
         lastName: lastName,
         role: role,
+        gender: gender,
+        age: age,
+        mobileNumber: mobileNumber,
         socialTwitter: socialTwitter,
         socialTelegram: socialTelegram,
         socialLinkedin: socialLinkedin,
       };
 
-      // Only update email if it's different AND doesn't conflict
       if (user.email !== email) {
-        // Check if this email is already used by another user
         const emailConflict = await db.user.findFirst({
           where: {
             email: email,
-            id: { not: user.id }, // Exclude current user
+            id: { not: user.id },
           },
         });
 
         if (!emailConflict) {
-          // Safe to update email
           updateData.email = email;
         } else {
           console.log('[API] Email already in use by another user, skipping email update');
-          // Don't update email, but continue with the application
         }
       }
 
@@ -112,7 +138,6 @@ export async function POST(
       
       console.log('[API] User updated:', user.displayName);
     } else {
-      // New user - check if email is already taken
       const existingEmailUser = await db.user.findUnique({
         where: { email: email },
       });
@@ -126,7 +151,6 @@ export async function POST(
         );
       }
 
-      // Create new user
       user = await db.user.create({
         data: {
           walletAddress: walletAddress,
@@ -135,6 +159,9 @@ export async function POST(
           firstName: firstName,
           lastName: lastName,
           role: role,
+          gender: gender,
+          age: age,
+          mobileNumber: mobileNumber,
           socialTwitter: socialTwitter,
           socialTelegram: socialTelegram,
           socialLinkedin: socialLinkedin,
@@ -145,7 +172,7 @@ export async function POST(
       console.log('[API] User created:', user.displayName);
     }
 
-    // 4. --- Check for Duplicate Application ---
+    // 5. --- Check for Duplicate Application ---
     const existingBooking = await db.booking.findFirst({
       where: {
         userId: user.id,
@@ -165,7 +192,7 @@ export async function POST(
       );
     }
 
-    // 5. --- Create the WAITLISTED Booking ---
+    // 🆕 6. --- Create WAITLISTED Booking WITH ROOM DATA ---
     const randomId = `${stayId}-${Date.now()}`;
 
     const newBooking = await db.booking.create({
@@ -176,13 +203,21 @@ export async function POST(
         stayId: stay.id,
         guestName: displayName,
         guestEmail: email,
+        guestGender: gender,
+        guestAge: age,
+        guestMobile: mobileNumber,
+        preferredRoomId: selectedRoomId || null,
+        selectedRoomId: selectedRoomId || null,
+        selectedRoomPrice: roomPrice, // 🆕 STORE ROOM PRICE
+        selectedRoomName: roomName,   // 🆕 STORE ROOM NAME
+        guestCount: 1,
         optInGuestList: false,
       },
     });
 
     console.log('[API] Booking created:', newBooking.bookingId);
 
-    // 6. --- Log Activity ---
+    // 7. --- Log Activity ---
     await db.activityLog.create({
       data: {
         userId: user.id,
@@ -194,11 +229,17 @@ export async function POST(
           stayId: stay.stayId,
           email: email,
           walletAddress: walletAddress,
+          gender: gender,
+          age: age,
+          mobileNumber: mobileNumber,
+          selectedRoomId: selectedRoomId,
+          selectedRoomName: roomName,
+          selectedRoomPrice: roomPrice,
         },
       },
     });
 
-    // 7. --- Return Success ---
+    // 8. --- Return Success ---
     return NextResponse.json(
       {
         success: true,
@@ -207,6 +248,8 @@ export async function POST(
           bookingId: newBooking.bookingId,
           status: newBooking.status,
           stayTitle: stay.title,
+          selectedRoomName: roomName,
+          selectedRoomPrice: roomPrice,
         },
       },
       { status: 201 }
@@ -221,7 +264,6 @@ export async function POST(
       );
     }
 
-    // Handle unique constraint errors
     if ((error as any).code === 'P2002') {
       const meta = (error as any).meta;
       if (meta?.target?.includes('email')) {

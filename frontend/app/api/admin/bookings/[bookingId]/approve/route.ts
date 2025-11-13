@@ -57,8 +57,7 @@ export async function POST(
     }
 
     // 4. Determine payment amount
-    const finalAmount = paymentAmount || booking.stay.priceUSDC;
-
+const finalAmount = paymentAmount || booking.selectedRoomPrice || booking.stay.priceUSDC;
     if (!finalAmount || finalAmount <= 0) {
       return NextResponse.json(
         { error: 'Invalid payment amount. Stay price not configured.' },

@@ -111,7 +111,9 @@ model User {
   role            String?
   bio             String?
   avatar          String?
-  
+    gender          String?
+  age             Int?
+  mobileNumber    String?
   // Social Links
   socialTwitter   String?
   socialTelegram  String?
@@ -251,13 +253,17 @@ model Booking {
   userId          String        @db.ObjectId
   stay            Stay          @relation(fields: [stayId], references: [id])
   stayId          String        @db.ObjectId
-  
+    guestGender     String?
+  guestAge        Int?
+  guestMobile     String?
+  preferredRoomId String? 
   // Booking Details
   status          BookingStatus @default(PENDING)
   roomType        RoomType?
   selectedRoomId  String?
   guestCount      Int           @default(1)
-  
+    selectedRoomPrice Float?  // NEW: Store room price at booking time
+  selectedRoomName  String?
   // Guest Info Snapshot
   guestName       String?
   guestEmail      String?

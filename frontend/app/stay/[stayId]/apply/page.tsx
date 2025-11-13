@@ -9,14 +9,28 @@ import { ConnectKitButton } from "connectkit";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowRight, Check, Mail, User, Briefcase, Twitter, Linkedin, Wallet, AlertCircle, LogIn } from "lucide-react";
+import { 
+  ArrowRight, Check, Mail, User, Briefcase, Twitter, Linkedin, 
+  Wallet, AlertCircle, LogIn, Phone, Users as UsersIcon 
+} from "lucide-react";
 
-// Define the form validation schema with Zod
+// ✅ FIXED SCHEMA - Removed required_error from enum
 const applySchema = z.object({
   displayName: z.string().min(3, "Name is required"),
   email: z.string().email("Invalid email address"),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
+  
+  // NEW REQUIRED FIELDS - Fixed enum validation
+  gender: z.enum(["Male", "Female", "Other", "Prefer not to say"], {
+    message: "Please select your gender"
+  }),
+  age: z.number().min(18, "You must be at least 18 years old").max(120, "Invalid age"),
+  mobileNumber: z.string().min(10, "Valid mobile number is required"),
+  
+  // ROOM SELECTION (optional)
+  selectedRoomId: z.string().optional(),
+  
   role: z.string().optional(),
   socialTwitter: z.string().optional(),
   socialLinkedin: z.string().optional(),
@@ -54,15 +68,48 @@ export default function ApplyPage() {
   
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>("");
+  const [stayRooms, setStayRooms] = useState<any[]>([]);
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
     reset,
+    watch,
+    setValue,
   } = useForm<ApplyFormInputs>({
     resolver: zodResolver(applySchema),
   });
+
+  // Fetch stay data to get rooms
+  useEffect(() => {
+    const fetchStayData = async () => {
+      try {
+        const response = await fetch(`/api/stays/${stayId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setStayRooms(data.rooms || []);
+        }
+      } catch (error) {
+        console.error("Error fetching stay data:", error);
+      }
+    };
+
+    if (stayId && stayId !== "undefined") {
+      fetchStayData();
+    }
+  }, [stayId]);
+
+  // Watch for room selection changes
+  useEffect(() => {
+    const subscription = watch((value, { name }) => {
+      if (name === 'selectedRoomId') {
+        setSelectedRoomId(value.selectedRoomId || '');
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch]);
 
   // Pre-fill form with session data
   useEffect(() => {
@@ -70,10 +117,12 @@ export default function ApplyPage() {
       reset({
         displayName: session.user.name || "",
         email: session.user.email || "",
-        // These might be in your extended session type
         firstName: (session.user as any).firstName || "",
         lastName: (session.user as any).lastName || "",
         role: (session.user as any).role || "",
+        gender: (session.user as any).gender || undefined,
+        age: (session.user as any).age || undefined,
+        mobileNumber: (session.user as any).mobileNumber || "",
         socialTwitter: (session.user as any).socialTwitter || "",
         socialLinkedin: (session.user as any).socialLinkedin || "",
         socialTelegram: (session.user as any).socialTelegram || "",
@@ -82,13 +131,13 @@ export default function ApplyPage() {
   }, [session, reset]);
 
   const onSubmit: SubmitHandler<ApplyFormInputs> = async (data) => {
-    // Check authentication - user must be logged in
+    // Check authentication
     if (sessionStatus !== "authenticated") {
       setApiError("Please sign in to apply for this stay.");
       return;
     }
 
-    // Check if wallet is connected
+    // Check wallet connection
     if (!isConnected || !address) {
       setApiError("Please connect your wallet to complete your application. This is required for payment processing.");
       return;
@@ -119,7 +168,6 @@ export default function ApplyPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        // Handle specific error cases
         if (response.status === 409) {
           throw new Error("You have already applied for this stay. Check your dashboard for status.");
         }
@@ -302,7 +350,7 @@ export default function ApplyPage() {
               )}
             </div>
 
-            <div className="p-8 md:p-12 space-y-8">
+            <form onSubmit={handleSubmit(onSubmit)} className="p-8 md:p-12 space-y-8">
               {/* Display Name */}
               <div>
                 <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
@@ -345,6 +393,120 @@ export default function ApplyPage() {
                   We'll send your application status and updates here
                 </p>
               </div>
+
+              {/* ✅ NEW: Gender Selection */}
+              <div>
+                <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
+                  Gender <span className="text-red-500">*</span>
+                </label>
+                <select
+                  {...register("gender")}
+                  className="w-full px-5 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors bg-white"
+                >
+                  <option value="">Select gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+                {errors.gender && (
+                  <p className="text-red-500 text-sm mt-2 ml-1 flex items-center gap-1">
+                    <AlertCircle size={14} />
+                    {errors.gender.message}
+                  </p>
+                )}
+              </div>
+
+              {/* ✅ NEW: Age and Mobile Number Row */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
+                    Age <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    {...register("age", { valueAsNumber: true })}
+                    type="number"
+                    min="18"
+                    max="120"
+                    placeholder="e.g., 25"
+                    className="w-full px-5 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors"
+                  />
+                  {errors.age && (
+                    <p className="text-red-500 text-sm mt-2 ml-1 flex items-center gap-1">
+                      <AlertCircle size={14} />
+                      {errors.age.message}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
+                    <Phone size={20} />
+                    Mobile Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    {...register("mobileNumber")}
+                    type="tel"
+                    placeholder="+91 98765 43210"
+                    className="w-full px-5 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors"
+                  />
+                  {errors.mobileNumber && (
+                    <p className="text-red-500 text-sm mt-2 ml-1 flex items-center gap-1">
+                      <AlertCircle size={14} />
+                      {errors.mobileNumber.message}
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-500 mt-2 ml-1">
+                    Include country code (e.g., +91 for India)
+                  </p>
+                </div>
+              </div>
+
+              {/* ✅ NEW: Room Selection */}
+              {stayRooms && stayRooms.length > 0 && (
+                <div>
+                  <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
+                    <UsersIcon size={20} />
+                    Preferred Room (Optional)
+                  </label>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {stayRooms.map((room: any) => (
+                      <label
+                        key={room.id}
+                        className={`relative border-2 rounded-2xl p-5 cursor-pointer transition-all ${
+                          selectedRoomId === room.id
+                            ? 'border-[#172a46] bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          {...register("selectedRoomId")}
+                          value={room.id}
+                          className="sr-only"
+                        />
+                        <div className="flex items-start justify-between mb-2">
+                          <h4 className="font-bold text-[#172a46] text-lg">{room.name}</h4>
+                          <span className="text-lg font-bold text-[#172a46]">${room.price}</span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">{room.description}</p>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <UsersIcon size={16} />
+                          <span>Capacity: {room.capacity}</span>
+                        </div>
+                        {selectedRoomId === room.id && (
+                          <div className="absolute top-3 right-3 w-6 h-6 bg-[#172a46] rounded-full flex items-center justify-center">
+                            <Check size={16} className="text-white" />
+                          </div>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2 ml-1">
+                    If not selected, you'll be assigned a room based on availability
+                  </p>
+                </div>
+              )}
 
               {/* Name Fields (Optional) */}
               <div className="grid md:grid-cols-2 gap-6">
@@ -442,7 +604,7 @@ export default function ApplyPage() {
 
               {/* Submit Button */}
               <button
-                onClick={handleSubmit(onSubmit)}
+                type="submit"
                 disabled={isSubmitting || !isConnected}
                 className={`w-full text-lg font-semibold py-5 rounded-full inline-flex items-center justify-center gap-3 transition-all shadow-xl ${
                   isSubmitting || !isConnected
@@ -471,7 +633,7 @@ export default function ApplyPage() {
               <p className="text-center text-sm text-gray-500">
                 By submitting, you agree to our Terms of Service and Privacy Policy
               </p>
-            </div>
+            </form>
           </div>
         )}
       </section>
