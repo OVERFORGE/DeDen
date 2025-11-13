@@ -262,7 +262,7 @@ model Booking {
   roomType        RoomType?
   selectedRoomId  String?
   guestCount      Int           @default(1)
-    selectedRoomPrice Float?  // NEW: Store room price at booking time
+  selectedRoomPrice Float?  // NEW: Store room price at booking time
   selectedRoomName  String?
   // Guest Info Snapshot
   guestName       String?
