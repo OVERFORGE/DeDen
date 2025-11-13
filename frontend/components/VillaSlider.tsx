@@ -54,7 +54,7 @@ export function VillaSlider() {
 
   return (
     <div
-      className="relative w-full h-96 md:h-[450px] rounded-3xl overflow-hidden shadow-inner bg-gray-200"
+      className="relative w-full h-54 sm:h-96 md:h-[450px] rounded-3xl overflow-hidden shadow-inner bg-gray-200"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={handleTouchStart}

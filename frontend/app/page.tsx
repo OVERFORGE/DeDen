@@ -75,9 +75,9 @@ export default function HomePage() {
       <section className="bg-transparent text-black   relative overflow-hidden z-10">
         <div className="max-w-screen-xl mx-auto px-6 grid md:flex gap-0 items-center relative">
           {/* Left Column */}
-          <div className="flex flex-col z-10 md:w-[60%] mt-20">
+          <div className="flex flex-col z-10 w-full md:w-[60%]  md:mt-20">
             <h1
-              className="text-5xl md:text-8xl lg:text-8xl font-medium text-[#102E4A] leading-[0.95] tracking-tight"
+              className=" text-center md:text-start text-4xl md:text-8xl lg:text-8xl font-medium text-[#102E4A] leading-[0.95] tracking-tight"
               style={{
                 fontFamily: "'New Rocker', cursive",
                 letterSpacing: "-0.07em",
@@ -86,7 +86,7 @@ export default function HomePage() {
               Where Web3 lives
             </h1>
             <h1
-              className="text-5xl md:text-7xl lg:text-7xl font-medium text-[#102E4A] leading-[0.95] tracking-tight "
+              className="text-center md:text-start text-3xl md:text-7xl lg:text-7xl font-medium text-[#102E4A] leading-[0.95] tracking-tight "
               style={{
                 fontFamily: "'New Rocker', cursive",
                 letterSpacing: "-0.07em",
@@ -94,24 +94,39 @@ export default function HomePage() {
             >
               and builders connect
             </h1>
-            <p className="font-berlin text-lg md:text-2xl text-[#102E4A] mt-4  font-bold md:w-[90%]">
+            <div className="md:hidden mt-4 flex items-center w-full justify-center">
+              <div className="relative w-[70%] max-w-[400px] h-[220px]">
+                <Image
+                  src="/images/villa-bg-remove.png"
+                  alt="Luxury villa isometric view"
+                  fill
+                  className="object-contain scale-110"
+                  priority
+                  sizes="500px"
+                />
+              </div>
+            </div>
+            <p className="w-full text-center md:text-start   font-berlin text-md md:text-2xl text-[#102E4A] mt-4  font-bold md:w-[90%]">
               Decentralized Den is a luxury villa experience curated for the
-              biggest Web3 events. Network. Unwind. Buidl IRL.
+              biggest Web3 events.
             </p>
-            <p className="font-berlin text-lg md:text-2xl text-[#102E4A]  font-bold md:w-[90%]">
+            <p className="w-full text-center md:text-start  font-berlin  text-md md:text-2xl text-[#102E4A]  font-bold md:w-[90%]">
               Network. Unwind. Buidl IRL.
             </p>
-            <Link
-              href="/villas"
-              className="bg-[#172a46] text-white text-2xl font-semibold py-2 pl-10 pr-2 rounded-full flex items-center justify-between space-x-3 mt-10 w-fit transition-all hover:scale-105 hover:shadow-2xl gap-4"
-            >
-              <span>Book your stay</span>
-              <div className="bg-white px-3 py-3 rounded-full text-[#172a46]">
-                <ArrowRight size={20} />
-              </div>
-            </Link>
+            <div className="w-full items-center flex justify-center md:justify-start">
+              <Link
+                href="/villas"
+                className=" bg-[#172a46] text-white text-md md:text-2xl font-semibold py-2 pl-6 md:pl-10 pr-2 rounded-full flex items-center justify-between space-x-3 mt-8 md:mt-10 w-fit transition-all hover:scale-105 hover:shadow-2xl gap-2 md:gap-4"
+              >
+                <span>Book your stay</span>
+                <div className="bg-white px-2 py-2 md:px-3 md:py-3 rounded-full text-[#172a46]">
+                  <ArrowRight className="w-3 h-3 md:w-5 md:h-5 " />
+                </div>
+              </Link>
+            </div>
+
             {/* Stats */}
-            <div className="flex flex-wrap   mt-16 ">
+            <div className="hidden md:visible flex flex-wrap mt-8  md:mt-16 ">
               <div className="flex flex-col items-center border-r pr-4 border-b-2 pb-4">
                 <p className="font-display text-6xl font-bold text-[#172a46]">
                   500+
@@ -132,7 +147,7 @@ export default function HomePage() {
               </div>
             </div>
             {/* Rating */}
-            <div className="flex items-center space-x-3 mt-4">
+            <div className="hidden md:visible flex items-center space-x-3 mt-4">
               <div className="flex text-[#172a46]">
                 <Star size={20} fill="currentColor" stroke="none" />
                 <Star size={20} fill="currentColor" stroke="none" />
@@ -160,18 +175,6 @@ export default function HomePage() {
             </div>
           </div>
           {/* Mobile Villa Image */}
-          <div className="md:hidden mt-12 flex justify-center">
-            <div className="relative w-[500px] h-[450px]">
-              <Image
-                src="/images/villas-bg-remove.png"
-                alt="Luxury villa isometric view"
-                fill
-                className="object-contain"
-                priority
-                sizes="500px"
-              />
-            </div>
-          </div>
         </div>
         {/* Bottom Wave */}
         <div className="relative w-screen h-[80vh] md:h-[90vh] -mt-60">
@@ -189,10 +192,10 @@ export default function HomePage() {
       {/* About Us Section */}
       <section className="bg-[#172a46] text-white py-28 relative -mt-80 z-0 pt-60">
         <div className="max-w-5xl mx-auto text-center px-6 z-10 relative">
-          <h2 className="font-display text-5xl md:text-6xl font-bold mb-10">
+          <h2 className="font-display text-3xl md:text-6xl font-bold mb-10">
             About Us
           </h2>
-          <p className="font-inter text-base md:text-lg text-gray-300   mx-auto -tracking-wider">
+          <p className="text-left font-inter text-base text-md md:text-lg text-gray-300   mx-auto -tracking-wider">
             DeDen is a decentralized villa experience built for the modern
             builder, where luxury meets community. Designed around the biggest
             Web3 events, DeDen transforms exclusive villas into living spaces
@@ -208,7 +211,7 @@ export default function HomePage() {
               className="w-full"
             />
           </div>
-          <p className="font-inter text-base md:text-lg text-gray-300   mx-auto mt-14 -tracking-wider">
+          <p className="text-left font-inter text-base text-md md:text-lg text-gray-300   mx-auto mt-14 -tracking-wider">
             Each Den is more than a stay, it's an ecosystem where collaboration
             happens over breakfast, ideas flow at midnight, and every
             conversation builds the next wave of innovation. From curated stays
@@ -219,11 +222,11 @@ export default function HomePage() {
       </section>
 
       {/* Upcoming Den Section */}
-      <section className="bg-[#172a46] py-24">
+      <section className="bg-[#172a46] py-24 ">
         <div className="max-w-screen-xl mx-auto px-6">
-          <div className="bg-[#f5f5f3] text-black rounded-[32px] p-12 md:p-16 grid md:grid-cols-2 gap-14 items-center shadow-2xl">
+          <div className=" bg-[#f5f5f3] text-black rounded-4xl p-8 md:p-16 grid md:grid-cols-2 gap-14 items-center shadow-2xl">
             {/* Left Column */}
-            <div className="flex flex-col">
+            <div className="flex flex-col order-2 md:order-1">
               <h3 className="font-display text-xl md:text-2xl lg:text-3xl font-bold text-[#172a46] leading-tight">
                 The Next Den Awaits — Bangalore | Nov 29 – Dec 10
               </h3>
@@ -248,38 +251,56 @@ export default function HomePage() {
                 <ArrowRight size={20} />
               </Link>
             </div>
+            <div className="order-1 md:order-2">
+              <VillaSlider />
+            </div>
             {/* Right Column - Villa Image */}
-            <VillaSlider />
           </div>
         </div>
       </section>
 
       {/* Testimonials Section */}
       <section className="bg-[#f5f5f3] text-black pt-10 pb-24 relative">
-        {/* Top Wave (Inverted) */}
-        <div className="absolute -top-20 md:-top-32 left-0 right-0">
-          <WaveDivider colorClassName="bg-[#f5f5f3]" inverted />
-        </div>
         <div className="max-w-screen-xl mx-auto px-6 relative z-10">
-          <h2 className="font-display text-5xl md:text-6xl font-bold text-[#172a46] text-center mb-20">
+          <h2 className=" text-[#172a46] text-center font-display text-3xl md:text-6xl font-bold mb-10">
             Testimonials
           </h2>
-          <div className="grid md:grid-cols-9 gap-6">
+
+          {/* MOBILE/TABLET SLIDER */}
+          <div className="md:hidden flex gap-6 overflow-x-auto snap-x snap-mandatory pb-4">
             {testimonials.map((item) => (
               <div
                 key={item.id}
-                className={`bg-[#172a46] text-white p-8 md:p-10 rounded-3xl flex flex-col shadow-xl hover:shadow-2xl transition-shadow ${item.colSpan} md:h-[350px]`}
+                className="bg-[#172a46] min-w-[80%] snap-center text-white p-8 rounded-3xl flex flex-col shadow-xl"
               >
-                <p className="font-inter text-sm md:text-lg text-gray-300  grow -tracking-wider">
+                <p className="font-inter text-sm text-gray-300 grow -tracking-wider">
                   "{item.quote}"
                 </p>
                 <div className="flex items-center space-x-4 mt-8">
-                  <div className="w-12 h-12 rounded-full bg-[#f5f5f3] flex items-center justify-center flex-shrink-0">
+                  <div className="w-12 h-12 rounded-full bg-[#f5f5f3] flex items-center justify-center">
                     <span className="text-sm text-[#172a46] font-bold">AB</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold">{item.name}</p>
+                  <p className="text-sm font-semibold">{item.name}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* DESKTOP GRID ) */}
+          <div className="hidden md:grid md:grid-cols-9 gap-6">
+            {testimonials.map((item) => (
+              <div
+                key={item.id}
+                className={`bg-[#172a46] text-white p-10 rounded-3xl flex flex-col shadow-xl ${item.colSpan} md:h-[350px]`}
+              >
+                <p className="font-inter text-lg text-gray-300 grow -tracking-wider">
+                  "{item.quote}"
+                </p>
+                <div className="flex items-center space-x-4 mt-8">
+                  <div className="w-12 h-12 rounded-full bg-[#f5f5f3] flex items-center justify-center">
+                    <span className="text-sm text-[#172a46] font-bold">AB</span>
                   </div>
+                  <p className="text-sm font-semibold">{item.name}</p>
                 </div>
               </div>
             ))}
@@ -294,8 +315,25 @@ export default function HomePage() {
             Gallery
           </h2>
 
-          {/* Responsive 6-column grid */}
-          <div className="grid grid-cols-6 gap-5">
+          {/* 📱 MOBILE/TABLET SLIDER */}
+          <div className="md:hidden flex gap-5 overflow-x-auto snap-x snap-mandatory pb-4">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="relative h-56 min-w-[80%] rounded-3xl overflow-hidden snap-center shadow-lg hover:shadow-2xl transition-transform hover:scale-[1.02]"
+              >
+                <Image
+                  src={`/images/dedenbangalore${i}.jpeg`}
+                  alt={`DeDen Bangalore Villa ${i}`}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* 🖥 DESKTOP GRID */}
+          <div className="hidden md:grid grid-cols-6 gap-5">
             {/* Image 1 */}
             <div className="relative h-56 md:h-96 col-span-2 rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-transform hover:scale-[1.02]">
               <Image
@@ -303,8 +341,6 @@ export default function HomePage() {
                 alt="DeDen Bangalore Villa 1"
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 100vw, 33vw"
-                priority
               />
             </div>
 
@@ -315,7 +351,6 @@ export default function HomePage() {
                 alt="DeDen Bangalore Villa 2"
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 100vw, 33vw"
               />
             </div>
 
@@ -326,7 +361,6 @@ export default function HomePage() {
                 alt="DeDen Bangalore Villa 3"
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 100vw, 33vw"
               />
             </div>
 
@@ -337,7 +371,6 @@ export default function HomePage() {
                 alt="DeDen Bangalore Villa 4"
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 100vw, 50vw"
               />
             </div>
 
@@ -348,7 +381,6 @@ export default function HomePage() {
                 alt="DeDen Bangalore Villa 5"
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 100vw, 50vw"
               />
             </div>
           </div>
@@ -358,9 +390,7 @@ export default function HomePage() {
       {/* Footer Section */}
       <footer className="bg-[#172a46] text-white pt-10 pb-12 relative">
         {/* Top Wave (Inverted) */}
-        <div className="absolute -top-20 md:-top-32 left-0 right-0">
-          <WaveDivider colorClassName="bg-[#172a46]" inverted />
-        </div>
+
         <div className="max-w-screen-xl mx-auto px-6 z-10 relative">
           {/* Footer content */}
           <div className="grid md:grid-cols-4 gap-12 mb-16">
