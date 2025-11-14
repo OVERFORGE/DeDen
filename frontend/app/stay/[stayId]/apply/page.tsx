@@ -9,9 +9,19 @@ import { ConnectKitButton } from "connectkit";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { 
-  ArrowRight, Check, Mail, User, Briefcase, Twitter, Linkedin, 
-  Wallet, AlertCircle, LogIn, Phone, Users as UsersIcon 
+import {
+  ArrowRight,
+  Check,
+  Mail,
+  User,
+  Briefcase,
+  Twitter,
+  Linkedin,
+  Wallet,
+  AlertCircle,
+  LogIn,
+  Phone,
+  Users as UsersIcon,
 } from "lucide-react";
 
 // ✅ FIXED SCHEMA - Removed required_error from enum
@@ -20,17 +30,20 @@ const applySchema = z.object({
   email: z.string().email("Invalid email address"),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
-  
+
   // NEW REQUIRED FIELDS - Fixed enum validation
   gender: z.enum(["Male", "Female", "Other", "Prefer not to say"], {
-    message: "Please select your gender"
+    message: "Please select your gender",
   }),
-  age: z.number().min(18, "You must be at least 18 years old").max(120, "Invalid age"),
+  age: z
+    .number()
+    .min(18, "You must be at least 18 years old")
+    .max(120, "Invalid age"),
   mobileNumber: z.string().min(10, "Valid mobile number is required"),
-  
+
   // ROOM SELECTION (optional)
   selectedRoomId: z.string().optional(),
-  
+
   role: z.string().optional(),
   socialTwitter: z.string().optional(),
   socialLinkedin: z.string().optional(),
@@ -40,9 +53,9 @@ const applySchema = z.object({
 type ApplyFormInputs = z.infer<typeof applySchema>;
 
 // Wave Divider Component
-const WaveDivider: React.FC<{ colorClassName: string; inverted?: boolean }> = ({ 
-  colorClassName, 
-  inverted = false 
+const WaveDivider: React.FC<{ colorClassName: string; inverted?: boolean }> = ({
+  colorClassName,
+  inverted = false,
 }) => (
   <div
     className={`w-full h-20 ${colorClassName}`}
@@ -62,10 +75,10 @@ export default function ApplyPage() {
 
   // NextAuth session
   const { data: session, status: sessionStatus } = useSession();
-  
+
   // Wallet connection
   const { address, isConnected } = useAccount();
-  
+
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
@@ -104,8 +117,8 @@ export default function ApplyPage() {
   // Watch for room selection changes
   useEffect(() => {
     const subscription = watch((value, { name }) => {
-      if (name === 'selectedRoomId') {
-        setSelectedRoomId(value.selectedRoomId || '');
+      if (name === "selectedRoomId") {
+        setSelectedRoomId(value.selectedRoomId || "");
       }
     });
     return () => subscription.unsubscribe();
@@ -139,7 +152,9 @@ export default function ApplyPage() {
 
     // Check wallet connection
     if (!isConnected || !address) {
-      setApiError("Please connect your wallet to complete your application. This is required for payment processing.");
+      setApiError(
+        "Please connect your wallet to complete your application. This is required for payment processing."
+      );
       return;
     }
 
@@ -169,7 +184,9 @@ export default function ApplyPage() {
 
       if (!response.ok) {
         if (response.status === 409) {
-          throw new Error("You have already applied for this stay. Check your dashboard for status.");
+          throw new Error(
+            "You have already applied for this stay. Check your dashboard for status."
+          );
         }
         throw new Error(result.error || "Failed to submit application");
       }
@@ -196,29 +213,26 @@ export default function ApplyPage() {
   // Success State
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-[#f5f5f3]">
+      <div className="min-h-screen bg-[#E7E4DF]">
         <section className="bg-[#172a46] pt-20 pb-32 relative">
           <div className="max-w-4xl mx-auto px-6 text-center">
             <div className="bg-white rounded-3xl p-12 md:p-16 shadow-2xl">
               <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Check className="text-green-600" size={48} strokeWidth={3} />
               </div>
-              <h1 
-                className="text-4xl md:text-5xl font-bold text-[#172a46] mb-4"
-                style={{ 
-                  fontFamily: "'New Rocker', cursive",
-                  letterSpacing: '-0.05em'
-                }}
-              >
+              <h1 className="text-4xl md:text-5xl font-bold text-[#172a46] mb-4">
                 Application Submitted!
               </h1>
               <p className="text-xl text-gray-600 mb-3">
-                Your application for <strong className="text-[#172a46]">{stayId}</strong> is now <strong>under review</strong>.
+                Your application for{" "}
+                <strong className="text-[#172a46]">{stayId}</strong> is now{" "}
+                <strong>under review</strong>.
               </p>
               <p className="text-gray-500 mb-8">
-                We'll notify you via email and update your dashboard once it's approved. This typically takes 24-48 hours.
+                We'll notify you via email and update your dashboard once it's
+                approved. This typically takes 24-48 hours.
               </p>
-              
+
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link
                   href="/dashboard"
@@ -236,20 +250,16 @@ export default function ApplyPage() {
               </div>
             </div>
           </div>
-          
-          <div className="absolute bottom-0 left-0 right-0">
-            <WaveDivider colorClassName="bg-[#f5f5f3]" />
-          </div>
         </section>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f3]">
+    <div className="min-h-screen bg-[#E7E4DF]">
       {/* Hero Section */}
       <section className="bg-[#172a46] pt-0 pb-32 relative">
-        <div className="max-w-4xl mx-auto px-6 pt-12">
+        <div className=" mx-auto px-6 pt-12 md:px-38 ">
           {/* Breadcrumb */}
           <div className="text-gray-300 text-sm mb-8">
             <span className="hover:text-white cursor-pointer">Home</span>
@@ -262,28 +272,19 @@ export default function ApplyPage() {
           </div>
 
           <div className="text-center text-white mb-12">
-            <h1 
-              className="text-4xl md:text-5xl font-bold mb-4"
-              style={{ 
-                fontFamily: "'New Rocker', cursive",
-                letterSpacing: '-0.05em'
-              }}
-            >
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
               Apply for {stayId}
             </h1>
             <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-              Complete your application below. You need to be signed in and have a wallet connected for payment processing.
+              Complete your application below. You need to be signed in and have
+              a wallet connected for payment processing.
             </p>
           </div>
-        </div>
-
-        <div className="absolute bottom-0 left-0 right-0">
-          <WaveDivider colorClassName="bg-[#f5f5f3]" />
         </div>
       </section>
 
       {/* Form Section */}
-      <section className="max-w-3xl mx-auto px-6 -mt-20 relative z-10 pb-20">
+      <section className="bg-[#172a46] md:px-80 mx-auto px-6 -mt-20 relative z-10 pb-20">
         {/* Not Authenticated */}
         {sessionStatus === "unauthenticated" && (
           <div className="bg-white rounded-3xl p-12 shadow-2xl text-center">
@@ -294,7 +295,8 @@ export default function ApplyPage() {
               Sign In Required
             </h2>
             <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              Please sign in with your wallet or Gmail to begin the application process.
+              Please sign in with your wallet or Gmail to begin the application
+              process.
             </p>
             <Link
               href="/auth/signin"
@@ -325,7 +327,7 @@ export default function ApplyPage() {
                   Signed in as: {session.user?.email}
                 </span>
               </div>
-              
+
               {/* Wallet Connection Status */}
               {isConnected && address ? (
                 <div className="flex items-center justify-center gap-3 flex-wrap text-sm">
@@ -337,11 +339,17 @@ export default function ApplyPage() {
               ) : (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-3">
                   <div className="flex items-start gap-3">
-                    <AlertCircle className="text-yellow-600 flex-shrink-0 mt-0.5" size={20} />
+                    <AlertCircle
+                      className="text-yellow-600 flex-shrink-0 mt-0.5"
+                      size={20}
+                    />
                     <div>
-                      <p className="font-semibold text-yellow-800 mb-2">Wallet Not Connected</p>
+                      <p className="font-semibold text-yellow-800 mb-2">
+                        Wallet Not Connected
+                      </p>
                       <p className="text-yellow-700 text-sm mb-3">
-                        Connect your wallet to complete the application. This is required for payment processing.
+                        Connect your wallet to complete the application. This is
+                        required for payment processing.
                       </p>
                       <ConnectKitButton />
                     </div>
@@ -350,7 +358,10 @@ export default function ApplyPage() {
               )}
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="p-8 md:p-12 space-y-8">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="p-8 md:p-12 space-y-8"
+            >
               {/* Display Name */}
               <div>
                 <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
@@ -475,8 +486,8 @@ export default function ApplyPage() {
                         key={room.id}
                         className={`relative border-2 rounded-2xl p-5 cursor-pointer transition-all ${
                           selectedRoomId === room.id
-                            ? 'border-[#172a46] bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
+                            ? "border-[#172a46] bg-blue-50"
+                            : "border-gray-200 hover:border-gray-300"
                         }`}
                       >
                         <input
@@ -486,10 +497,16 @@ export default function ApplyPage() {
                           className="sr-only"
                         />
                         <div className="flex items-start justify-between mb-2">
-                          <h4 className="font-bold text-[#172a46] text-lg">{room.name}</h4>
-                          <span className="text-lg font-bold text-[#172a46]">${room.price}</span>
+                          <h4 className="font-bold text-[#172a46] text-lg">
+                            {room.name}
+                          </h4>
+                          <span className="text-lg font-bold text-[#172a46]">
+                            ${room.price}
+                          </span>
                         </div>
-                        <p className="text-sm text-gray-600 mb-2">{room.description}</p>
+                        <p className="text-sm text-gray-600 mb-2">
+                          {room.description}
+                        </p>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <UsersIcon size={16} />
                           <span>Capacity: {room.capacity}</span>
@@ -503,7 +520,8 @@ export default function ApplyPage() {
                     ))}
                   </div>
                   <p className="text-sm text-gray-500 mt-2 ml-1">
-                    If not selected, you'll be assigned a room based on availability
+                    If not selected, you'll be assigned a room based on
+                    availability
                   </p>
                 </div>
               )}
@@ -555,8 +573,7 @@ export default function ApplyPage() {
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
                   <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
-                    <Twitter size={20} />
-                    X / Twitter
+                    <Twitter size={20} />X / Twitter
                   </label>
                   <input
                     {...register("socialTwitter")}
@@ -582,11 +599,18 @@ export default function ApplyPage() {
 
               {/* Info Box */}
               <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6">
-                <h4 className="font-bold text-[#172a46] mb-2">📋 What Happens Next?</h4>
+                <h4 className="font-bold text-[#172a46] mb-2">
+                  📋 What Happens Next?
+                </h4>
                 <ul className="space-y-2 text-gray-700">
                   <li>✓ We review your application within 24-48 hours</li>
-                  <li>✓ You'll receive an email notification with the decision</li>
-                  <li>✓ If approved, you'll be able to complete payment via your dashboard</li>
+                  <li>
+                    ✓ You'll receive an email notification with the decision
+                  </li>
+                  <li>
+                    ✓ If approved, you'll be able to complete payment via your
+                    dashboard
+                  </li>
                   <li>✓ Once paid, you're confirmed for the stay!</li>
                 </ul>
               </div>
@@ -594,7 +618,10 @@ export default function ApplyPage() {
               {/* Error Message */}
               {apiError && (
                 <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex items-start gap-3">
-                  <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+                  <AlertCircle
+                    className="text-red-600 flex-shrink-0 mt-0.5"
+                    size={20}
+                  />
                   <div>
                     <p className="font-bold text-red-800">Error</p>
                     <p className="text-red-700">{apiError}</p>
@@ -608,8 +635,8 @@ export default function ApplyPage() {
                 disabled={isSubmitting || !isConnected}
                 className={`w-full text-lg font-semibold py-5 rounded-full inline-flex items-center justify-center gap-3 transition-all shadow-xl ${
                   isSubmitting || !isConnected
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                    : 'bg-[#172a46] text-white hover:scale-105'
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-[#172a46] text-white hover:scale-105"
                 }`}
               >
                 {isSubmitting ? (
@@ -631,7 +658,8 @@ export default function ApplyPage() {
               </button>
 
               <p className="text-center text-sm text-gray-500">
-                By submitting, you agree to our Terms of Service and Privacy Policy
+                By submitting, you agree to our Terms of Service and Privacy
+                Policy
               </p>
             </form>
           </div>

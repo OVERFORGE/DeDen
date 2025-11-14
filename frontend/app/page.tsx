@@ -24,16 +24,16 @@ const testimonials = [
   {
     id: 1,
     quote:
-      "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged.",
+      "DeDen was the perfect mix of comfort and community. I met founders and creators I’d only seen online, and the conversations we had felt natural, inspiring, and genuinely impactful. It’s rare to find a space where you can unwind and still spark new ideas so effortlessly.",
     quoteBold:
       "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, ",
-    name: "Name ABCD, ABCDE @ABCDE",
+    name: "Aditya Maurya,  @NoteAditya",
     colSpan: "md:col-span-5",
   },
   {
     id: 2,
     quote:
-      "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and",
+      "Staying at DeDen felt like joining a family of builders. From morning coffees to late-night brainstorms, every moment brought real connection and collaboration. I left with new friends, fresh ideas, and a renewed sense of energy for what I’m building.",
     quoteBold:
       "Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
     name: "Name ABCD, ABCDE @ABCDE",
@@ -42,7 +42,7 @@ const testimonials = [
   {
     id: 3,
     quote:
-      "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and",
+      "DeDen turned the event week into something unforgettable. The villa vibe, the late-night chats, the spontaneous collabs — everything just clicked. It’s the first time an event stay actually helped me grow as a builder.",
     quoteBold:
       "Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
     name: "Name ABCD, ABCDE @ABCDE",
@@ -51,7 +51,7 @@ const testimonials = [
   {
     id: 4,
     quote:
-      "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and",
+      "DeDen brought together some of the most genuine people I’ve met in Web3. The space made it easy to connect, share ideas, and feel inspired. It was the first event stay where I felt both productive and truly at home",
     quoteBold:
       "Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
     name: "Name ABCD, ABCDE @ABCDE",
@@ -60,7 +60,7 @@ const testimonials = [
   {
     id: 5,
     quote:
-      "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and",
+      "DeDen was the perfect place to connect and create. Great people, great energy, and conversations that actually mattered.",
     quoteBold:
       "Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
     name: "Name ABCD, ABCDE @ABCDE",

@@ -151,7 +151,7 @@ function SignInForm() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#E7E4DF] p-4 relative overflow-hidden w-full h-full">
       {/* Sign-In Card */}
-      <div className="flex flex-col md:flex-row  w-full bg-[#172a46] rounded-2xl shadow-2xl p-8 z-10 md:w-5/12 md:-mt-60 md:justify-between md:items-center">
+      <div className="flex flex-col md:flex-row  w-full bg-[#172a46] rounded-2xl shadow-2xl p-8 z-10 md:w-6/12 2xl:w-5/12 md:-mt-60 md:justify-between md:items-center">
         {/* Logo */}
         <div>
           <h1 className="font-berlin text-5xl md:text-7xl font-bold text-center text-white mb-6">
