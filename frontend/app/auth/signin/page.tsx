@@ -219,7 +219,7 @@ function SignInForm() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#E7E4DF] p-4 relative overflow-hidden w-full h-full">
       {/* Sign-In Card */}
-      <div className="flex flex-col md:flex-row  w-full bg-[#172a46] rounded-2xl shadow-2xl p-8 z-10 md:w-5/12 md:-mt-60 md:justify-between md:items-center">
+      <div className="flex flex-col md:flex-row  w-full bg-[#172a46] rounded-2xl shadow-2xl p-8 z-10 md:w-8/12 md:-mt-60 md:justify-between md:items-center">
         {/* Logo */}
         <div>
           <h1 className="font-berlin text-5xl md:text-7xl font-bold text-center text-white mb-6">
@@ -245,15 +245,15 @@ function SignInForm() {
               curated for the biggest Web3 events.
             </InfoListItem>
             <InfoListItem>
-              <strong className="text-white">Network.</strong>{" "}
-              <strong className="text-white">Unwind.</strong>{" "}
-              <strong className="text-white">Buidl IRL.</strong>
+              <strong className="font-inter text-white">Network.</strong>{" "}
+              <strong className="font-inter text-white">Unwind.</strong>{" "}
+              <strong className="font-inter text-white">Buidl IRL.</strong>
             </InfoListItem>
           </ul>
         </div>
 
         {/* --- MODIFIED: RIGHT COLUMN (Form & Actions) --- */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 bg-[#0f1e33] rounded-b-2xl md:rounded-r-2xl md:rounded-l-none flex flex-col justify-center">
+        <div className="w-full md:w-1/2 p-8 md:p-12 bg-[#0f1e33] rounded-b-2xl md:rounded-2xl  flex flex-col justify-center">
           {/* --- REMOVED: Title, Subtitle, and Error (moved to left) --- */}
 
           {/* --- Tab Switcher --- */}
