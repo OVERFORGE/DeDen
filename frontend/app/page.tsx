@@ -224,7 +224,7 @@ export default function HomePage() {
       {/* Upcoming Den Section */}
       <section className="bg-[#172a46] py-24 ">
         <div className="max-w-screen-xl mx-auto px-6">
-          <div className=" bg-[#f5f5f3] text-black rounded-4xl p-8 md:p-16 grid md:grid-cols-2 gap-14 items-center shadow-2xl">
+          <div className=" bg-[#E7E4DF] text-black rounded-4xl p-8 md:p-16 grid md:grid-cols-2 gap-14 items-center shadow-2xl">
             {/* Left Column */}
             <div className="flex flex-col order-2 md:order-1">
               <h3 className="font-display text-xl md:text-2xl lg:text-3xl font-bold text-[#172a46] leading-tight">
@@ -260,7 +260,7 @@ export default function HomePage() {
       </section>
 
       {/* Testimonials Section */}
-      <section className="bg-[#f5f5f3] text-black pt-10 pb-24 relative">
+      <section className="bg-[#E7E4DF] text-black pt-10 pb-24 relative">
         <div className="max-w-screen-xl mx-auto px-6 relative z-10">
           <h2 className=" text-[#172a46] text-center font-display text-3xl md:text-6xl font-bold mb-10">
             Testimonials
@@ -309,7 +309,7 @@ export default function HomePage() {
       </section>
 
       {/* Gallery Section */}
-      <section className="bg-[#f5f5f3] text-black pb-24">
+      <section className="bg-[#E7E4DF] text-black pb-24">
         <div className="max-w-screen-xl mx-auto px-6">
           <h2 className="font-display text-5xl md:text-6xl font-bold text-[#172a46] text-center mb-20">
             Gallery
@@ -388,107 +388,6 @@ export default function HomePage() {
       </section>
 
       {/* Footer Section */}
-      <footer className="bg-[#172a46] text-white pt-10 pb-12 relative">
-        {/* Top Wave (Inverted) */}
-
-        <div className="max-w-screen-xl mx-auto px-6 z-10 relative">
-          {/* Footer content */}
-          <div className="grid md:grid-cols-4 gap-12 mb-16">
-            <div className="col-span-2 md:col-span-1">
-              <div className="mb-6">
-                <Image
-                  src="/images/logo-no-bg.png"
-                  alt="DEDEN Logo"
-                  width={140}
-                  height={50}
-                  className="h-12 w-auto"
-                />
-              </div>
-              <p className="text-sm text-gray-400 mb-3">Get in touch</p>
-              <p className="text-sm text-gray-200 mb-1">+91 55556 55556</p>
-              <p className="text-sm text-gray-200">deden@gmail.com</p>
-            </div>
-            <div className="col-span-2 md:col-span-1">
-              <h4 className="font-bold text-lg mb-5 text-white">Explore</h4>
-              <ul className="space-y-3 text-sm text-gray-300">
-                <li>
-                  <Link
-                    href="/about"
-                    className="hover:text-white transition-colors"
-                  >
-                    About DeDen
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/villas"
-                    className="hover:text-white transition-colors"
-                  >
-                    Upcoming Stays
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/collaborate"
-                    className="hover:text-white transition-colors"
-                  >
-                    Collaborate with Us
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/experience"
-                    className="hover:text-white transition-colors"
-                  >
-                    The Experience
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/contact"
-                    className="hover:text-white transition-colors"
-                  >
-                    Contact Us
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Sub-footer navigation bar */}
-          <div className="bg-[#f5f5f3] text-black rounded-full py-5 px-10 md:px-14 max-w-2xl mx-auto flex justify-between items-center mb-14 shadow-lg">
-            <Link
-              href="/"
-              className="font-bold text-[#172a46] hover:opacity-70 transition-opacity text-base"
-            >
-              Home
-            </Link>
-            <Link
-              href="/villas"
-              className="font-semibold text-gray-700 hover:text-[#172a46] transition-colors text-base"
-            >
-              Villas
-            </Link>
-            <Link
-              href="/experiences"
-              className="font-semibold text-gray-700 hover:text-[#172a46] transition-colors text-base"
-            >
-              Experiences
-            </Link>
-            <Link
-              href="/careers"
-              className="font-semibold text-gray-700 hover:text-[#172a46] transition-colors text-base"
-            >
-              Careers
-            </Link>
-          </div>
-
-          {/* Copyright */}
-          <p className="text-center text-gray-400 text-sm">
-            2025 DecentralizedDen. All rights reserved.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

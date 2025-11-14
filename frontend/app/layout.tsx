@@ -5,6 +5,7 @@ import "./globals.css";
 
 import { Providers } from "@/app/providers";
 import { Navbar } from "@/components/Navbar";
+import Footer from "@/components/Footer";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -49,11 +50,12 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${delaGothic.variable} ${berlin.variable} font-berlin bg-[#E7E4DF]`}
+        className={`${inter.variable} ${delaGothic.variable} ${berlin.variable} font-berlin bg-[#E7E4DF] relative`}
       >
         <Providers>
           <Navbar />
           <main>{children}</main>
+          <Footer />
         </Providers>
       </body>
     </html>
