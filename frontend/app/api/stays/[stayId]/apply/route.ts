@@ -1,4 +1,5 @@
 // File: app/api/stays/[stayId]/apply/route.ts
+// ✅ UPDATED: Now accepts custom numberOfNights from user selection
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
@@ -7,7 +8,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"; 
 
 /**
- * Apply for a stay (join waitlist) - WITH ROOM PRICING
+ * Apply for a stay (join waitlist) - WITH USER-SELECTED NIGHTS
  * POST /api/stays/[stayId]/apply
  */
 export async function POST(
@@ -15,7 +16,7 @@ export async function POST(
 	context: { params: Promise<{ stayId: string }> }
 ) {
 	try {
-		// 1. --- Get Authenticated Session ---
+		// 1. Get Authenticated Session
 		const session = await getServerSession(authOptions);
 		if (!session || !session.user || !session.user.id) {
 			return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -37,12 +38,13 @@ export async function POST(
 			age,
 			mobileNumber,
 			selectedRoomId,
+			numberOfNights, // ✅ NEW: User-selected nights
 			socialTwitter,
 			socialTelegram,
 			socialLinkedin,
 		} = body;
 
-		// 2. --- Validation ---
+		// 2. Validation
 		if (!stayId || stayId === 'undefined') {
 			return NextResponse.json(
 				{ error: 'A valid stayId is required in the URL' },
@@ -64,7 +66,15 @@ export async function POST(
 			);
 		}
 
-		// 3. --- Find the Stay ---
+		// ✅ NEW: Validate numberOfNights
+		if (!numberOfNights || numberOfNights < 1) {
+			return NextResponse.json(
+				{ error: 'Please select at least 1 night' },
+				{ status: 400 }
+			);
+		}
+
+		// 3. Find the Stay
 		const stay = await db.stay.findUnique({
 			where: { stayId: stayId },
 		});
@@ -83,11 +93,27 @@ export async function POST(
 			);
 		}
 
+		// ✅ NEW: Validate that selected nights don't exceed stay duration
+		const stayDuration = stay.duration || Math.ceil(
+			(new Date(stay.endDate).getTime() - new Date(stay.startDate).getTime()) / (1000 * 60 * 60 * 24)
+		);
+
+		if (numberOfNights > stayDuration) {
+			return NextResponse.json(
+				{ error: `Cannot book more than ${stayDuration} nights for this stay` },
+				{ status: 400 }
+			);
+		}
+
+		console.log(`[Apply] User selected ${numberOfNights} nights (Stay has ${stayDuration} nights total)`);
+
 		// ============================================
-		// 4. --- FIND SELECTED ROOM & GET BOTH PRICES ---
+		// ✅ UPDATED: Find selected room & calculate price based on USER-SELECTED nights
 		// ============================================
-		let roomPriceUSDC: number | null = null;
-		let roomPriceUSDT: number | null = null;
+		let pricePerNightUSDC: number | null = null;
+		let pricePerNightUSDT: number | null = null;
+		let totalPriceUSDC: number | null = null;
+		let totalPriceUSDT: number | null = null;
 		let roomName: string | null = null;
 
 		if (selectedRoomId) {
@@ -95,14 +121,36 @@ export async function POST(
 			const selectedRoom = rooms.find((r: any) => r.id === selectedRoomId);
 			
 			if (selectedRoom) {
-				// ✅ Use the dual price fields, falling back to stay price if not set on room
-				roomPriceUSDC = selectedRoom.priceUSDC || stay.priceUSDC;
-				roomPriceUSDT = selectedRoom.priceUSDT || stay.priceUSDT;
+				// Room prices are PER NIGHT
+			pricePerNightUSDC = selectedRoom.priceUSDC ?? stay.priceUSDC;
+                        pricePerNightUSDT = selectedRoom.priceUSDT ?? stay.priceUSDT;
+				
+			if (typeof pricePerNightUSDC !== 'number' || typeof pricePerNightUSDT !== 'number') {
+                            console.error(`[Apply] Invalid price for room ${selectedRoomId}.`);
+                            return NextResponse.json({ error: "Could not determine price for selected room" }, { status: 500 });
+                        }
+                        
+                        // ✅ Calculate TOTAL using USER-SELECTED nights (NOW SAFE)
+                        totalPriceUSDC = pricePerNightUSDC * numberOfNights;
+                        totalPriceUSDT = pricePerNightUSDT * numberOfNights;
 				roomName = selectedRoom.name;
+
+				console.log(`[Apply] Room: ${roomName}`);
+				console.log(`[Apply] Price per night: $${pricePerNightUSDC} USDC / $${pricePerNightUSDT} USDT`);
+				console.log(`[Apply] Total for ${numberOfNights} nights: $${totalPriceUSDC} USDC / $${totalPriceUSDT} USDT`);
 			}
+		} else {
+			// No room selected - use default stay prices
+			pricePerNightUSDC = stay.priceUSDC;
+			pricePerNightUSDT = stay.priceUSDT;
+			totalPriceUSDC = pricePerNightUSDC * numberOfNights;
+			totalPriceUSDT = pricePerNightUSDT * numberOfNights;
+
+			console.log(`[Apply] No room preference - using default prices`);
+			console.log(`[Apply] Total for ${numberOfNights} nights: $${totalPriceUSDC} USDC / $${totalPriceUSDT} USDT`);
 		}
 
-		// 5. --- Get & Update Authenticated User ---
+		// 5. Get & Update Authenticated User
 		const emailConflict = await db.user.findFirst({
 			where: {
 				email: email,
@@ -117,7 +165,6 @@ export async function POST(
 			);
 		}
 
-		// Update the user's profile with the form data
 		const user = await db.user.update({
 			where: { id: userId },
 			data: {
@@ -137,10 +184,10 @@ export async function POST(
 		});
 		
 		
-		// 6. --- Check for ANY Existing Booking (CRITICAL FIX) ---
+		// 6. Check for existing booking
 		const existingBooking = await db.booking.findFirst({
 			where: {
-				userId: user.id, // Use the trusted userId from the session/update
+				userId: user.id,
 				stayId: stay.id,
 			},
 			select: {
@@ -151,8 +198,6 @@ export async function POST(
 		});
 
 		if (existingBooking) {
-			
-			// Define all non-active, terminal statuses
 			const isTerminalStatus = 
 				existingBooking.status === BookingStatus.FAILED ||
 				existingBooking.status === BookingStatus.EXPIRED ||
@@ -160,26 +205,27 @@ export async function POST(
 				existingBooking.status === BookingStatus.REFUNDED;
 
 			if (isTerminalStatus) {
-				// ✅ FIX: Update the old booking to WAITLISTED instead of failing the constraint
+				// Update old booking
 				const updatedBooking = await db.booking.update({
 					where: { id: existingBooking.id },
 					data: {
 						status: BookingStatus.WAITLISTED,
-						// Update new details from the application form
 						preferredRoomId: selectedRoomId || null,
 						selectedRoomId: selectedRoomId || null,
-						// ✅ Store both prices
-						selectedRoomPriceUSDC: roomPriceUSDC,  
-						selectedRoomPriceUSDT: roomPriceUSDT,  
-						// ❌ Remove old single price field
-						// selectedRoomPrice: roomPrice, // DELETE or ensure schema is updated
+						// ✅ UPDATED: Store user-selected nights
+						numberOfNights: numberOfNights,
+						pricePerNightUSDC: pricePerNightUSDC,
+						pricePerNightUSDT: pricePerNightUSDT,
+						// ✅ UPDATED: Store calculated totals
+						selectedRoomPriceUSDC: totalPriceUSDC,  
+						selectedRoomPriceUSDT: totalPriceUSDT,  
 						selectedRoomName: roomName,
 						guestName: user.displayName,
 						guestEmail: user.email,
 						guestGender: gender,
 						guestAge: age,
 						guestMobile: mobileNumber,
-						// Clear all payment fields for a fresh payment flow
+						// Clear payment fields
 						paymentToken: null,
 						paymentAmount: null,
 						txHash: null,
@@ -189,7 +235,6 @@ export async function POST(
 					}
 				});
 				
-				// Return success response based on the updated booking
 				return NextResponse.json(
 					{
 						success: true,
@@ -199,17 +244,17 @@ export async function POST(
 							status: updatedBooking.status,
 							stayTitle: stay.title,
 							selectedRoomName: roomName,
-							// Return one or both prices for the confirmation message
-							selectedRoomPrice: roomPriceUSDC, // For display in old format if needed
-							selectedRoomPriceUSDC: roomPriceUSDC,
-							selectedRoomPriceUSDT: roomPriceUSDT,
+							numberOfNights: numberOfNights,
+							pricePerNightUSDC: pricePerNightUSDC,
+							pricePerNightUSDT: pricePerNightUSDT,
+							totalPriceUSDC: totalPriceUSDC,
+							totalPriceUSDT: totalPriceUSDT,
 						},
 					},
 					{ status: 201 }
 				);
 
 			} else {
-				// If the status is PENDING, CONFIRMED, or WAITLISTED, block the application
 				return NextResponse.json(
 					{
 						error: `You have an active application for this stay. Status: ${existingBooking.status}. Check your dashboard for details.`,
@@ -222,7 +267,7 @@ export async function POST(
 		}
 
 
-		// 7. --- Create WAITLISTED Booking (If NO previous booking was found) ---
+		// 7. Create NEW Booking
 		const randomId = `${stayId}-${Date.now()}`;
 
 		const newBooking = await db.booking.create({
@@ -238,11 +283,13 @@ export async function POST(
 				guestMobile: mobileNumber,
 				preferredRoomId: selectedRoomId || null,
 				selectedRoomId: selectedRoomId || null,
-				// ✅ Store both prices
-				selectedRoomPriceUSDC: roomPriceUSDC, 
-				selectedRoomPriceUSDT: roomPriceUSDT, 
-				// ❌ Remove old single price field
-				// selectedRoomPrice: roomPrice, // DELETE or ensure schema is updated
+				// ✅ UPDATED: Store user-selected nights
+				numberOfNights: numberOfNights,
+				pricePerNightUSDC: pricePerNightUSDC,
+				pricePerNightUSDT: pricePerNightUSDT,
+				// ✅ UPDATED: Store calculated totals
+				selectedRoomPriceUSDC: totalPriceUSDC, 
+				selectedRoomPriceUSDT: totalPriceUSDT, 
 				selectedRoomName: roomName,
 				guestCount: 1,
 				optInGuestList: false,
@@ -252,7 +299,7 @@ export async function POST(
 			},
 		});
 
-		// 8. --- Log Activity ---
+		// 8. Log Activity
 		await db.activityLog.create({
 			data: {
 				userId: user.id,
@@ -269,15 +316,16 @@ export async function POST(
 					mobileNumber: mobileNumber,
 					selectedRoomId: selectedRoomId,
 					selectedRoomName: roomName,
-					// ✅ Log both prices
-					selectedRoomPriceUSDC: roomPriceUSDC,
-					selectedRoomPriceUSDT: roomPriceUSDT,
-					// selectedRoomPrice: roomPrice, // DELETE or ensure schema is updated
+					numberOfNights: numberOfNights, // ✅ Log selected nights
+					pricePerNightUSDC: pricePerNightUSDC,
+					pricePerNightUSDT: pricePerNightUSDT,
+					totalPriceUSDC: totalPriceUSDC,
+					totalPriceUSDT: totalPriceUSDT,
 				},
 			},
 		});
 
-		// 9. --- Return Success ---
+		// 9. Return Success
 		return NextResponse.json(
 			{
 				success: true,
@@ -287,15 +335,17 @@ export async function POST(
 					status: newBooking.status,
 					stayTitle: stay.title,
 					selectedRoomName: roomName,
-					// Return one or both prices for the confirmation message
-					selectedRoomPrice: roomPriceUSDC, // Use USDC as the main price for old consumers
-					selectedRoomPriceUSDC: roomPriceUSDC,
-					selectedRoomPriceUSDT: roomPriceUSDT,
+					numberOfNights: numberOfNights,
+					pricePerNightUSDC: pricePerNightUSDC,
+					pricePerNightUSDT: pricePerNightUSDT,
+					totalPriceUSDC: totalPriceUSDC,
+					totalPriceUSDT: totalPriceUSDT,
 				},
 			},
 			{ status: 201 }
 		);
 	} catch (error) {
+		console.error('[Apply API Error]:', error);
 		
 		if ((error as any).name === 'PrismaClientValidationError') {
 			return NextResponse.json(

@@ -70,8 +70,7 @@ export async function PATCH(request: NextRequest) { // Use NextRequest
         });
 
         // Send Email
-        const paymentUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/booking/${bookingId}`;
-        try {
+const paymentUrl = `/booking/${bookingId}`;        try {
           await sendApprovalEmail({
             recipientEmail: booking.user.email!,
             recipientName: booking.user.displayName || 'Guest',

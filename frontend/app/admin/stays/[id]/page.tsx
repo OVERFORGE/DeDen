@@ -1,21 +1,21 @@
 // File: app/admin/stays/[id]/page.tsx
+// ✅ UPDATED: Now shows nights/duration prominently and prices are labeled "per night"
+
 "use client";
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { Plus, X, Trash2, Edit, Check, DollarSign, Users } from 'lucide-react';
+import { Plus, X, Trash2, Edit, Check, DollarSign, Users, Calendar } from 'lucide-react';
 
-// ============================================
-// 1. UPDATED ROOM TYPE DEFINITION (Dual Price)
-// ============================================
+// Room type with PER NIGHT pricing
 type Room = {
     id?: string;
     name: string;
     description: string;
     capacity: number;
-    priceUSDC: number; 
-    priceUSDT: number; 
+    priceUSDC: number; // PER NIGHT
+    priceUSDT: number; // PER NIGHT
     images: string[];
     amenities: string[];
 };
@@ -29,8 +29,9 @@ type Stay = {
     description: string;
     startDate: string;
     endDate: string;
-    priceUSDC: number;
-    priceUSDT: number;
+    duration: number; // Number of nights
+    priceUSDC: number; // PER NIGHT
+    priceUSDT: number; // PER NIGHT
     slotsTotal: number;
     slotsAvailable: number;
     isPublished: boolean;
@@ -52,7 +53,6 @@ export default function EditStayPage() {
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<'basic' | 'images' | 'rooms' | 'amenities'>('basic');
     
-    // Image & Room management state
     const [newImage, setNewImage] = useState('');
     const [newAmenity, setNewAmenity] = useState('');
     const [newHighlight, setNewHighlight] = useState('');
@@ -117,7 +117,6 @@ export default function EditStayPage() {
         }
     };
 
-    // Image, Amenity, Highlight Management
     const addImage = () => {
         if (!newImage.trim() || !stay) return;
         setStay({ ...stay, images: [...stay.images, newImage.trim()] });
@@ -151,14 +150,13 @@ export default function EditStayPage() {
         setStay({ ...stay, highlights: updated });
     };
 
-    // Room Management
     const addRoom = () => {
         setEditingRoom({
             name: '',
             description: '',
             capacity: 2,
-            priceUSDC: stay?.priceUSDC || 300, 
-            priceUSDT: stay?.priceUSDT || 300, 
+            priceUSDC: stay?.priceUSDC || 100, // Default per-night price
+            priceUSDT: stay?.priceUSDT || 100, 
             images: [],
             amenities: [],
         });
@@ -198,6 +196,21 @@ export default function EditStayPage() {
                     ← Back to Stays
                 </button>
             </div>
+
+            {/* ✅ NEW: Nights Info Banner */}
+            {stay.duration && (
+                <div className="bg-blue-100 border-2 border-blue-300 rounded-xl p-4 mb-8 flex items-center gap-4">
+                    <Calendar className="text-blue-700" size={32} />
+                    <div>
+                        <h3 className="text-xl font-bold text-blue-900">
+                            {stay.duration} Night{stay.duration !== 1 ? 's' : ''}
+                        </h3>
+                        <p className="text-sm text-blue-700">
+                            All prices below are <strong>per night</strong>. Total booking cost = price × {stay.duration} nights.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Tabs */}
             <div className="flex gap-2 mb-8 border-b-2 border-gray-200">
@@ -258,14 +271,19 @@ export default function EditStayPage() {
                             </div>
                         </div>
 
+                        {/* ✅ UPDATED: Clearly labeled PER NIGHT */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Price USDC (Stay Default)</label>
-                                <input type="number" {...register('priceUSDC')} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" />
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Default Price USDC <span className="text-blue-600 font-semibold">(per night)</span>
+                                </label>
+                                <input type="number" step="0.01" {...register('priceUSDC')} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Price USDT (Stay Default)</label>
-                                <input type="number" {...register('priceUSDT')} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" />
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Default Price USDT <span className="text-blue-600 font-semibold">(per night)</span>
+                                </label>
+                                <input type="number" step="0.01" {...register('priceUSDT')} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" />
                             </div>
                         </div>
 
@@ -325,7 +343,9 @@ export default function EditStayPage() {
                 {activeTab === 'rooms' && (
                     <div className="bg-white p-6 rounded-xl shadow-lg mb-6 space-y-5">
                         <div className="flex justify-between items-center border-b pb-3 mb-4">
-                            <h3 className="text-2xl font-bold text-gray-800">Room Types</h3>
+                            <h3 className="text-2xl font-bold text-gray-800">
+                                Room Types <span className="text-sm text-blue-600 font-normal">(Prices are per night)</span>
+                            </h3>
                             <button type="button" onClick={addRoom} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 flex items-center gap-2">
                                 <Plus size={20} />
                                 Add Room Type
@@ -344,15 +364,20 @@ export default function EditStayPage() {
                                                     <Users size={16} />
                                                     Capacity: {room.capacity}
                                                 </span>
-                                                <span className="flex items-center gap-1 text-gray-700">
+                                                <span className="flex items-center gap-1 text-green-700 font-semibold">
                                                     <DollarSign size={16} />
-                                                    USDC: ${room.priceUSDC}
+                                                    ${room.priceUSDC}/night USDC
                                                 </span>
-                                                <span className="flex items-center gap-1 text-gray-700">
+                                                <span className="flex items-center gap-1 text-purple-700 font-semibold">
                                                     <DollarSign size={16} />
-                                                    USDT: ${room.priceUSDT}
+                                                    ${room.priceUSDT}/night USDT
                                                 </span>
                                             </div>
+                                            {stay.duration && (
+                                                <p className="text-xs text-gray-500 mt-2">
+                                                    Total for {stay.duration} nights: <strong>${(room.priceUSDC * stay.duration).toFixed(2)} USDC</strong> / <strong>${(room.priceUSDT * stay.duration).toFixed(2)} USDT</strong>
+                                                </p>
+                                            )}
                                         </div>
                                         <div className="flex gap-2">
                                             <button
@@ -382,7 +407,6 @@ export default function EditStayPage() {
                     <div className="bg-white p-6 rounded-xl shadow-lg mb-6 space-y-5">
                         <h3 className="text-2xl font-bold text-gray-800 border-b pb-3 mb-4">Amenities & Highlights</h3>
                         
-                        {/* Amenities */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Stay Amenities</label>
                             <div className="flex gap-3 mb-4">
@@ -409,7 +433,6 @@ export default function EditStayPage() {
                             </div>
                         </div>
 
-                        {/* Highlights */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Highlights</label>
                             <div className="flex gap-3 mb-4">
@@ -438,7 +461,6 @@ export default function EditStayPage() {
                     </div>
                 )}
 
-                {/* Save Button */}
                 <div className="mt-8 flex justify-end">
                     <button type="submit" disabled={saving} className={`px-8 py-3 text-xl font-semibold rounded-lg transition duration-200 shadow-xl 
                         ${saving 
@@ -451,27 +473,29 @@ export default function EditStayPage() {
                 </div>
             </form>
 
-            {/* Room Editor Modal */}
             {editingRoom && (
                 <RoomEditorModal
                     room={editingRoom}
                     onSave={saveRoom}
                     onCancel={() => setEditingRoom(null)}
+                    stayDuration={stay.duration}
                 />
             )}
         </div>
     );
 }
 
-// Room Editor Modal Component
+// Room Editor Modal with nights calculation
 function RoomEditorModal({
     room,
     onSave,
     onCancel,
+    stayDuration,
 }: {
     room: Room;
     onSave: (room: Room) => void;
     onCancel: () => void;
+    stayDuration?: number;
 }) {
     const [editedRoom, setEditedRoom] = useState<Room>({
         ...room,
@@ -534,7 +558,6 @@ function RoomEditorModal({
             <div className="bg-white p-6 rounded-xl shadow-2xl max-w-2xl w-full my-8 space-y-6">
                 <h3 className="text-2xl font-bold border-b pb-3">Edit Room: {editedRoom.name || 'New Room'}</h3>
                 
-                {/* Room Name */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Room Name</label>
                     <input
@@ -545,7 +568,6 @@ function RoomEditorModal({
                     />
                 </div>
 
-                {/* Description */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                     <textarea
@@ -557,7 +579,6 @@ function RoomEditorModal({
                     />
                 </div>
 
-                {/* Capacity and Dual Prices */}
                 <div className="grid grid-cols-3 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
@@ -570,7 +591,9 @@ function RoomEditorModal({
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Price USDC</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Price USDC <span className="text-blue-600 font-semibold">/night</span>
+                        </label>
                         <input
                             type="number"
                             value={editedRoom.priceUSDC}
@@ -580,7 +603,9 @@ function RoomEditorModal({
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Price USDT</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Price USDT <span className="text-blue-600 font-semibold">/night</span>
+                        </label>
                         <input
                             type="number"
                             value={editedRoom.priceUSDT}
@@ -590,6 +615,15 @@ function RoomEditorModal({
                         />
                     </div>
                 </div>
+
+                {/* ✅ NEW: Show total calculation */}
+                {stayDuration && (
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
+                        <p className="text-sm text-blue-900">
+                            <strong>Total for {stayDuration} nights:</strong> ${(editedRoom.priceUSDC * stayDuration).toFixed(2)} USDC / ${(editedRoom.priceUSDT * stayDuration).toFixed(2)} USDT
+                        </p>
+                    </div>
+                )}
 
                 {/* Room Images */}
                 <div>
@@ -653,7 +687,6 @@ function RoomEditorModal({
                     </div>
                 </div>
 
-                {/* Actions */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                     <button onClick={onCancel} type="button" className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-150">
                         Cancel

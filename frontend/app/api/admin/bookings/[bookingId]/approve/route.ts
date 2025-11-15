@@ -94,8 +94,7 @@ export async function POST(
     });
 
     // 7. Send Email
-    const paymentUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/booking/${bookingId}`;
-    let emailSent = false;
+const paymentUrl = `/booking/${bookingId}`;    let emailSent = false;
     let emailError = null;
 
     try {

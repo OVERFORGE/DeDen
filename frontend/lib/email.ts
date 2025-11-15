@@ -12,25 +12,29 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const fromEmail = "bookings@deden.space";
 const supportEmail = "bookings@deden.space";
 
-// ✅ FIX: Get base URL with fallback and validation
+// ✅ FIXED: Get base URL with proper environment handling
 function getBaseUrl(): string {
-  // 1) Prioritize NEXT_PUBLIC_APP_URL
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  // Production: Use NEXT_PUBLIC_APP_URL or Vercel URL
+  if (process.env.NODE_ENV === 'production') {
+    const url = 
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'https://deden.space'; // Final production fallback
+    
+    const cleanUrl = url.replace(/\/$/, '');
+    console.log('[EmailLib] Using PRODUCTION base URL:', cleanUrl);
+    return cleanUrl;
   }
-
-  // 2) Next use NEXTAUTH_URL
-  if (process.env.NEXTAUTH_URL) {
-    return process.env.NEXTAUTH_URL.replace(/\/$/, "");
-  }
-
-  // 3) Use VERCEL_URL when deployed on Vercel
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-
-  // 4) Last fallback
-  return "https://deden.space";
+  
+  // Development: Use localhost or NEXTAUTH_URL
+  const url = 
+    process.env.NEXTAUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    'http://localhost:3000'; // Development fallback
+  
+  const cleanUrl = url.replace(/\/$/, '');
+  console.log('[EmailLib] Using DEVELOPMENT base URL:', cleanUrl);
+  return cleanUrl;
 }
 
 const baseUrl = getBaseUrl();
@@ -84,7 +88,7 @@ interface ApprovalEmailProps {
   paymentAmount: number;
   paymentToken: string;
   chainId?: number;
-  paymentUrl: string; // This should be the RELATIVE path, we'll make it absolute
+  paymentUrl: string;
   expiresAt: Date;
 }
 
@@ -111,29 +115,23 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
     ? getChainDisplayName(chainId)
     : "your preferred network";
 
-  // ✅ FIX: Construct full payment URL correctly
-  // Remove leading slash if present, then add it back
-  let fullPaymentUrl: string;
-
-  // Ensure paymentUrl exists
+  // ✅ FIXED: Proper URL construction with validation
   if (!paymentUrl) {
     throw new Error("paymentUrl is missing when sending approval email");
   }
 
   // If already absolute → do NOT prefix baseURL
+  let fullPaymentUrl: string;
   if (paymentUrl.startsWith("http")) {
     fullPaymentUrl = paymentUrl;
   } else {
-    const cleanPath = paymentUrl.startsWith("/")
-      ? paymentUrl
-      : `/${paymentUrl}`;
+    const cleanPath = paymentUrl.startsWith("/") ? paymentUrl : `/${paymentUrl}`;
     fullPaymentUrl = `${baseUrl}${cleanPath}`;
   }
 
-  console.log("🔗 Final Payment URL:", fullPaymentUrl);
+  console.log("🔗 [EmailLib] Approval Email - Final Payment URL:", fullPaymentUrl);
 
   const htmlBody = `
-
 <!DOCTYPE html>
 <html>
   <head>
@@ -356,7 +354,6 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
     </div>
   </body>
 </html>
-
   `;
 
   try {
@@ -376,7 +373,7 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
       {
         bookingId,
         chainId,
-        paymentUrl: fullPaymentUrl, // Log the full URL for debugging
+        paymentUrl: fullPaymentUrl,
         apiResponse: response,
         resendId: response.data?.id,
       }
@@ -440,8 +437,10 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
     year: "numeric",
   })}`;
 
-  // ✅ FIX: Use baseUrl for dashboard link
+  // ✅ FIXED: Use baseUrl for dashboard link
   const dashboardUrl = `${baseUrl}/dashboard`;
+  
+  console.log('[EmailLib] Confirmation Email - Dashboard URL:', dashboardUrl);
 
   const htmlBody = `
 <!DOCTYPE html>

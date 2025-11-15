@@ -7,18 +7,31 @@ import { SiweMessage } from "siwe";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ConnectKitButton } from "connectkit";
 import Link from "next/link";
-import { AlertTriangle } from "lucide-react"; // Added for the new warning
+import { AlertTriangle, Calendar, DollarSign } from "lucide-react"; // Added Calendar and DollarSign
 
+// ✅ UPDATED: Added nights-based pricing fields
 type Booking = {
   bookingId: string;
   status: string;
   guestName: string;
   guestEmail: string;
+  
+  // ✅ NEW: Nights-based pricing
+  numberOfNights: number | null;
+  pricePerNightUSDC: number | null;
+  pricePerNightUSDT: number | null;
+  selectedRoomPriceUSDC: number | null;  // Total price USDC
+  selectedRoomPriceUSDT: number | null;  // Total price USDT
+  selectedRoomName: string | null;
+  
+  // Legacy fields
   paymentAmount: number | null;
   paymentToken: string | null;
+  
   expiresAt: string | null;
   createdAt: string;
   confirmedAt: string | null;
+  
   stay: {
     id: string;
     stayId: string;
@@ -26,6 +39,7 @@ type Booking = {
     location: string;
     startDate: string;
     endDate: string;
+    duration: number;  // ✅ NEW: Number of nights
     priceUSDC: number;
     priceUSDT: number;
   };
@@ -42,7 +56,6 @@ export default function UserDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLinkingWallet, setIsLinkingWallet] = useState(false);
-  // const [isLinkingGoogle, setIsLinkingGoogle] = useState(false); // Removed
   const [linkMessage, setLinkMessage] = useState<string | null>(null);
 
   // Safe access to session data with null checks
@@ -52,7 +65,6 @@ export default function UserDashboard() {
     ? (session.user as any).walletAddress
     : null;
   const isWalletLinked = Boolean(linkedWallet);
-  // const isGoogleLinked = Boolean(userEmail); // Removed - always true
 
   // Helper function to truncate wallet addresses
   const truncateAddress = (addr: string | null) => {
@@ -205,13 +217,7 @@ export default function UserDashboard() {
     }
   };
 
-  // --- REMOVED handleLinkGoogle function ---
-
-  // --- REMOVED useEffect for Google linking ---
-
   const handleUnlinkWallet = async () => {
-    // We no longer need to check if Google is linked,
-    // because with the new flow, it ALWAYS is.
     if (
       !confirm(
         "Are you sure you want to unlink your wallet? You will still be able to log in with your Google account."
@@ -236,8 +242,6 @@ export default function UserDashboard() {
       setError(err.message);
     }
   };
-
-  // --- REMOVED handleUnlinkGoogle function ---
 
   const getStatusInfo = (status: string, expiresAt: string | null) => {
     const now = new Date();
@@ -351,7 +355,7 @@ export default function UserDashboard() {
 
         {/* Account Connections */}
         <div className="grid md:grid-cols-2 gap-4 mb-6">
-          {/* --- MODIFIED: Google Connection Card (Static) --- */}
+          {/* Google Connection Card */}
           <div className="bg-gradient-to-br from-red-50 to-orange-50 p-6 rounded-xl border-2 border-red-200">
             <h3 className="text-lg font-semibold mb-3 text-gray-900 flex items-center gap-2">
               <span className="text-2xl">🔐</span> Google Account
@@ -373,9 +377,8 @@ export default function UserDashboard() {
               </p>
             </div>
           </div>
-          {/* --- END MODIFICATION --- */}
 
-          {/* Wallet Connection Card (Unchanged) */}
+          {/* Wallet Connection Card */}
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border-2 border-blue-200">
             <h3 className="text-lg font-semibold mb-3 text-gray-900 flex items-center gap-2">
               <span className="text-2xl">💼</span> Wallet
@@ -425,7 +428,7 @@ export default function UserDashboard() {
           </div>
         </div>
 
-        {/* Wallet Mismatch Warning (Unchanged) */}
+        {/* Wallet Mismatch Warning */}
         {isWalletMismatched && (
           <div className="mb-6 p-6 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border-2 border-red-200">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -457,13 +460,13 @@ export default function UserDashboard() {
             </div>
 
             <p className="mt-4 text-sm font-semibold text-gray-900">
-              Please **switch the active wallet** in your browser (e.g.,
+              Please switch the active wallet in your browser (e.g.,
               MetaMask) to your linked address to proceed.
             </p>
           </div>
         )}
 
-        {/* Status Messages (Unchanged) */}
+        {/* Status Messages */}
         {linkMessage && (
           <div className="mb-4 p-4 bg-green-50 border-2 border-green-200 text-green-800 rounded-lg">
             {linkMessage}
@@ -476,7 +479,7 @@ export default function UserDashboard() {
         )}
       </div>
 
-      {/* Bookings Section (Unchanged) */}
+      {/* Bookings Section */}
       <h2 className="text-2xl font-bold mb-5 text-gray-900">My Applications</h2>
 
       {loading ? (
@@ -516,6 +519,20 @@ export default function UserDashboard() {
             const statusInfo = getStatusInfo(booking.status, booking.expiresAt);
             const isExpired =
               booking.expiresAt && new Date(booking.expiresAt) < new Date();
+            
+            // ✅ Calculate nights from stay duration or booking
+            const nights = booking.numberOfNights || booking.stay.duration || 0;
+            
+            // ✅ Get per-night and total prices
+            const perNightUSDC = booking.pricePerNightUSDC;
+            const perNightUSDT = booking.pricePerNightUSDT;
+            const totalUSDC = booking.selectedRoomPriceUSDC || booking.paymentAmount;
+            const totalUSDT = booking.selectedRoomPriceUSDT;
+            
+            // Determine which token was used for payment
+            const paymentToken = booking.paymentToken || 
+              (totalUSDC && totalUSDT ? 'USDC' : totalUSDC ? 'USDC' : 'USDT');
+            
             return (
               <div
                 key={booking.bookingId}
@@ -530,6 +547,14 @@ export default function UserDashboard() {
                 <h3 className="text-2xl md:text-3xl font-bold mb-2 text-gray-900">
                   {booking.stay.title}
                 </h3>
+                
+                {/* ✅ NEW: Show room name if selected */}
+                {booking.selectedRoomName && (
+                  <p className="text-md text-blue-600 font-semibold mb-2">
+                    🛏️ {booking.selectedRoomName}
+                  </p>
+                )}
+                
                 <p className="text-lg text-gray-600 mb-1">
                   📍 {booking.stay.location}
                 </p>
@@ -555,11 +580,47 @@ export default function UserDashboard() {
                       {new Date(booking.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                  {booking.paymentAmount && (
+                  
+                  {/* ✅ NEW: Show nights */}
+                  {nights > 0 && (
                     <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
-                      <span className="text-gray-500">Amount:</span>
+                      <span className="text-gray-500 flex items-center gap-1">
+                        <Calendar size={16} />
+                        Duration:
+                      </span>
                       <span className="text-gray-900 font-semibold">
-                        ${booking.paymentAmount} {booking.paymentToken}
+                        {nights} night{nights !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* ✅ UPDATED: Show per-night price if available */}
+                  {perNightUSDC && perNightUSDT && nights > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                      <div className="flex justify-between items-center mb-2 text-sm">
+                        <span className="text-gray-600 flex items-center gap-1">
+                          <DollarSign size={16} />
+                          Price per night:
+                        </span>
+                        <span className="text-gray-900 font-semibold">
+                          ${perNightUSDC} USDC / ${perNightUSDT} USDT
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Calculation:</span>
+                        <span className="text-gray-700 font-mono text-xs">
+                          ${perNightUSDC} × {nights} nights = ${totalUSDC || (perNightUSDC * nights).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* ✅ UPDATED: Show total amount */}
+                  {(totalUSDC || totalUSDT || booking.paymentAmount) && (
+                    <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
+                      <span className="text-gray-500 font-semibold">Total Amount:</span>
+                      <span className="text-gray-900 font-bold text-lg">
+                        ${booking.paymentAmount || totalUSDC} {paymentToken}
                       </span>
                     </div>
                   )}

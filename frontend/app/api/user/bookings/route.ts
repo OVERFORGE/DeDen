@@ -1,14 +1,10 @@
 // File: app/api/user/bookings/route.ts
-// Fixed version for MongoDB with proper ObjectId handling
+// ✅ UPDATED: Now returns nights-based pricing fields
 
 import { db } from '@/lib/database';
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-
 
 export async function GET(request: Request) {
-  
-  
   try {
     const { searchParams } = new URL(request.url);
     const walletAddress = searchParams.get('wallet');
@@ -24,12 +20,11 @@ export async function GET(request: Request) {
     }
 
     // Find user by wallet address (case-insensitive)
-    // MongoDB stores addresses with mixed case, so we search case-insensitively
     const user = await db.user.findFirst({
       where: { 
         walletAddress: {
           equals: walletAddress,
-          mode: 'insensitive', // This makes it case-insensitive
+          mode: 'insensitive',
         }
       },
     });
@@ -44,7 +39,7 @@ export async function GET(request: Request) {
     console.log('[API] Display Name:', user.displayName);
     console.log('[API] Email:', user.email);
 
-    // Try direct Prisma query first
+    // Fetch bookings with nights-based pricing fields
     let bookings = await db.booking.findMany({
       where: {
         userId: user.id,
@@ -58,6 +53,7 @@ export async function GET(request: Request) {
             location: true,
             startDate: true,
             endDate: true,
+            duration: true,        // ✅ NEW: Include duration (nights)
             priceUSDC: true,
             priceUSDT: true,
           },
@@ -84,6 +80,7 @@ export async function GET(request: Request) {
               location: true,
               startDate: true,
               endDate: true,
+              duration: true,
               priceUSDC: true,
               priceUSDT: true,
             },
@@ -99,7 +96,7 @@ export async function GET(request: Request) {
         const bookingUserIdString = booking.userId.toString();
         const matches = bookingUserIdString === userIdString;
         
-        if (allBookings.length <= 10) { // Only log if there aren't too many
+        if (allBookings.length <= 10) {
           console.log('[API] Comparing:', {
             bookingId: booking.bookingId,
             bookingUserId: bookingUserIdString,
@@ -114,7 +111,7 @@ export async function GET(request: Request) {
       console.log('[API] Manual filter found:', bookings.length, 'bookings');
     }
 
-    // Transform dates to ISO strings for JSON serialization
+    // ✅ Transform dates AND include nights-based pricing fields
     const serializedBookings = bookings.map(booking => ({
       bookingId: booking.bookingId,
       status: booking.status,
@@ -123,13 +120,25 @@ export async function GET(request: Request) {
       guestCount: booking.guestCount,
       selectedRoomId: booking.selectedRoomId,
       roomType: booking.roomType,
+      
+      // ✅ NEW: Nights-based pricing fields
+      numberOfNights: booking.numberOfNights,
+      pricePerNightUSDC: booking.pricePerNightUSDC,
+      pricePerNightUSDT: booking.pricePerNightUSDT,
+      selectedRoomPriceUSDC: booking.selectedRoomPriceUSDC,  // Total USDC
+      selectedRoomPriceUSDT: booking.selectedRoomPriceUSDT,  // Total USDT
+      selectedRoomName: booking.selectedRoomName,
+      
+      // Legacy payment fields (for backward compatibility)
       paymentAmount: booking.paymentAmount,
       paymentToken: booking.paymentToken,
       txHash: booking.txHash,
+      
       expiresAt: booking.expiresAt?.toISOString() || null,
       confirmedAt: booking.confirmedAt?.toISOString() || null,
       createdAt: booking.createdAt.toISOString(),
       updatedAt: booking.updatedAt.toISOString(),
+      
       stay: {
         id: booking.stay.id,
         stayId: booking.stay.stayId,
@@ -137,6 +146,7 @@ export async function GET(request: Request) {
         location: booking.stay.location,
         startDate: booking.stay.startDate.toISOString(),
         endDate: booking.stay.endDate.toISOString(),
+        duration: booking.stay.duration,  // ✅ NEW: Include nights
         priceUSDC: booking.stay.priceUSDC,
         priceUSDT: booking.stay.priceUSDT,
       },

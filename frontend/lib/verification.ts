@@ -1,11 +1,12 @@
-// File: lib/verification.ts (FINAL VERSION - Room Prices Only)
-// This verification logic ONLY uses room prices for payment validation
+// File: lib/verification.ts (COMPLETE WITH EMAIL)
+// Enhanced verification with Base network support and email confirmation
 
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
 import { getPublicClient } from './web3-client';
 import { chainConfig, treasuryAddress } from './config';
-import { parseAbiItem } from 'viem';
+import { parseUnits } from 'viem';
+import { sendConfirmationEmail } from './email'; // ✅ Import email function
 
 /**
  * Check if a transaction hash has already been used
@@ -23,27 +24,32 @@ export async function checkTransactionUsed(txHash: string): Promise<boolean> {
 
 /**
  * Verify a payment transaction on the blockchain with retries
- * CRITICAL: Only uses room prices - NO fallback to stay prices
+ * ✅ FIXED: Proper Base network support, amount calculation, AND email sending
  */
 export async function verifyPayment(
   bookingId: string,
   txHash: string,
   chainId: number,
-  maxRetries: number = 10,  // ~30s total with 3s intervals
+  maxRetries: number = 10,
   retryDelayMs: number = 3000
 ): Promise<void> {
   let retryCount = 0;
 
   while (retryCount < maxRetries) {
     try {
-      console.log(`[Verification] Starting verification for booking ${bookingId} (attempt ${retryCount + 1}/${maxRetries})`);
+      console.log(`\n========================================`);
+      console.log(`[Verification] Attempt ${retryCount + 1}/${maxRetries}`);
+      console.log(`[Verification] Chain: ${chainId} (${chainConfig[chainId]?.name || 'Unknown'})`);
+      console.log(`[Verification] Booking: ${bookingId}`);
+      console.log(`[Verification] TxHash: ${txHash}`);
+      console.log(`========================================\n`);
       
-      // 1. Get the booking details including room prices
+      // 1. Get the booking details including room prices AND stay info for email
       const booking = await db.booking.findUnique({
         where: { bookingId },
         include: { 
           user: true,
-          // We don't need stay prices anymore
+          stay: true, // ✅ Include stay for email
         },
       });
 
@@ -52,22 +58,22 @@ export async function verifyPayment(
       }
 
       if (booking.status === BookingStatus.CONFIRMED) {
-        console.log('[Verification] Booking already confirmed, skipping');
+        console.log('[Verification] ✅ Booking already confirmed, skipping');
         return;
       }
 
       // 2. Check payment details are locked
       if (!booking.paymentToken || !booking.paymentAmount) {
-        console.error('[Verification] Payment details not locked');
+        console.error('[Verification] ❌ Payment details not locked');
         await updateBookingStatus(bookingId, BookingStatus.FAILED, {
           error: 'Payment details not locked',
         });
         return;
       }
 
-      // 3. CRITICAL: Verify room prices exist
+      // 3. Verify room prices exist
       if (!booking.selectedRoomPriceUSDC || !booking.selectedRoomPriceUSDT) {
-        console.error('[Verification] Room prices not set on booking');
+        console.error('[Verification] ❌ Room prices not set on booking');
         await updateBookingStatus(bookingId, BookingStatus.FAILED, {
           error: 'Room prices not configured. Please contact support.',
         });
@@ -90,7 +96,7 @@ export async function verifyPayment(
       
       // Verify the locked amount matches the expected room price
       if (Math.abs(booking.paymentAmount - expectedAmount) > 0.01) {
-        console.error(`[Verification] Amount mismatch! Expected: ${expectedAmount}, Locked: ${booking.paymentAmount}`);
+        console.error(`[Verification] ❌ Amount mismatch! Expected: ${expectedAmount}, Locked: ${booking.paymentAmount}`);
         await updateBookingStatus(bookingId, BookingStatus.FAILED, {
           error: 'Payment amount mismatch',
           expected: expectedAmount,
@@ -106,19 +112,19 @@ export async function verifyPayment(
       }
 
       // 6. Get transaction receipt
-      console.log('[Verification] Fetching transaction receipt...');
+      console.log('[Verification] 🔍 Fetching transaction receipt...');
       const receipt = await publicClient.getTransactionReceipt({
         hash: txHash as `0x${string}`,
       });
 
       if (!receipt) {
-        console.log(`[Verification] Transaction not found yet (attempt ${retryCount + 1}), retrying in ${retryDelayMs}ms...`);
+        console.log(`[Verification] ⏳ Transaction not found yet, retrying in ${retryDelayMs}ms...`);
         retryCount++;
         if (retryCount < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, retryDelayMs));
-          continue;  // Retry
+          continue;
         } else {
-          console.error(`[Verification] Max retries exceeded for tx ${txHash}`);
+          console.error(`[Verification] ❌ Max retries exceeded for tx ${txHash}`);
           await updateBookingStatus(bookingId, BookingStatus.FAILED, {
             error: 'Transaction timeout - not mined after retries',
           });
@@ -126,25 +132,20 @@ export async function verifyPayment(
         }
       }
 
-      // DEBUG: Log raw receipt details to diagnose log filtering issues
-      console.log('[Verification] DEBUG - Receipt status:', receipt.status);
-      console.log('[Verification] DEBUG - Raw logs count:', receipt.logs.length);
-      console.log('[Verification] DEBUG - Raw logs:', receipt.logs.map((log, index) => ({
-        index,
-        address: log.address,
-        topics: log.topics,
-        data: log.data,
-      })));
+      // 7. Check transaction status
+      console.log(`[Verification] Receipt status: ${receipt.status}`);
+      console.log(`[Verification] Block number: ${receipt.blockNumber}`);
+      console.log(`[Verification] Total logs: ${receipt.logs.length}`);
 
       if (!receipt.status || receipt.status !== 'success') {
-        console.error('[Verification] Transaction failed on-chain');
+        console.error('[Verification] ❌ Transaction failed on-chain');
         await updateBookingStatus(bookingId, BookingStatus.FAILED, {
           error: 'Transaction failed on blockchain',
         });
         return;
       }
 
-      // 7. Get chain and token configuration
+      // 8. Get chain and token configuration
       const chain = chainConfig[chainId];
       if (!chain) {
         throw new Error(`Chain ${chainId} not configured`);
@@ -155,56 +156,102 @@ export async function verifyPayment(
         throw new Error(`Token ${booking.paymentToken} not configured for chain ${chainId}`);
       }
 
-      console.log(`[Verification] DEBUG - Token address (lowercase): ${tokenInfo.address.toLowerCase()}`);
+      console.log(`[Verification] Token: ${booking.paymentToken}`);
+      console.log(`[Verification] Token address: ${tokenInfo.address}`);
+      console.log(`[Verification] Token decimals: ${tokenInfo.decimals}`);
+      console.log(`[Verification] Treasury address: ${treasuryAddress}`);
 
-      // 8. Parse transfer logs - HARDCODED TOPIC FIX
-      // The parseAbiItem was returning undefined for .topic; use known ERC20 Transfer topic hash
-      const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' as const;
-
-      console.log(`[Verification] DEBUG - Expected Transfer topic: ${TRANSFER_TOPIC}`);
-
-      const logs = receipt.logs.filter(
-        (log) =>
-          log.address.toLowerCase() === tokenInfo.address.toLowerCase() &&
-          log.topics[0] === TRANSFER_TOPIC
+      // ✅ FIX: Use parseUnits for consistent amount calculation
+      const expectedBaseUnits = parseUnits(
+        expectedAmount.toString(),
+        tokenInfo.decimals
       );
 
-      console.log(`[Verification] Found ${logs.length} potential Transfer logs from ${tokenInfo.address}`);
+      console.log(`[Verification] Expected base units: ${expectedBaseUnits.toString()}`);
 
-      if (logs.length === 0) {
-        // For debugging: Log all logs that match address but not topic
-        const addressMatchLogs = receipt.logs.filter(log => log.address.toLowerCase() === tokenInfo.address.toLowerCase());
-        console.log(`[Verification] DEBUG - Logs matching token address but not topic:`, addressMatchLogs.map((log, index) => ({
-          index,
-          topics: log.topics,
-          data: log.data,
-        })));
+      // 9. Parse transfer logs - ERC20 Transfer event signature
+      const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' as const;
+
+      console.log('\n[Verification] 🔍 Analyzing all logs...');
+      receipt.logs.forEach((log, index) => {
+        console.log(`\nLog ${index}:`);
+        console.log(`  Address: ${log.address}`);
+        console.log(`  Address (lowercase): ${log.address.toLowerCase()}`);
+        console.log(`  Expected token address (lowercase): ${tokenInfo.address.toLowerCase()}`);
+        console.log(`  Address matches: ${log.address.toLowerCase() === tokenInfo.address.toLowerCase()}`);
+        console.log(`  Topics:`, log.topics);
+        console.log(`  Topic[0]: ${log.topics[0]}`);
+        console.log(`  Expected topic: ${TRANSFER_TOPIC}`);
+        console.log(`  Topic matches: ${log.topics[0] === TRANSFER_TOPIC}`);
+        console.log(`  Data: ${log.data}`);
         
-        console.error('[Verification] No transfer events found');
+        // Decode topics if it's a transfer event
+        if (log.topics[0] === TRANSFER_TOPIC && log.topics.length >= 3) {
+          const from = `0x${log.topics[1]?.slice(26)}`;
+          const to = `0x${log.topics[2]?.slice(26)}`;
+          const amount = BigInt(log.data);
+          console.log(`  Decoded: from=${from}, to=${to}, amount=${amount.toString()}`);
+        }
+      });
+
+      // ✅ More robust log filtering
+      const tokenAddressLower = tokenInfo.address.toLowerCase();
+      const treasuryAddressLower = treasuryAddress.toLowerCase();
+
+      console.log(`\n[Verification] 🎯 Filtering for Transfer events...`);
+      console.log(`[Verification] Looking for token address: ${tokenAddressLower}`);
+      console.log(`[Verification] Looking for Transfer topic: ${TRANSFER_TOPIC}`);
+
+      const transferLogs = receipt.logs.filter((log) => {
+        const addressMatch = log.address.toLowerCase() === tokenAddressLower;
+        const topicMatch = log.topics[0] === TRANSFER_TOPIC;
+        const isMatch = addressMatch && topicMatch;
+        
+        if (addressMatch || topicMatch) {
+          console.log(`[Verification] Potential match: address=${addressMatch}, topic=${topicMatch}, both=${isMatch}`);
+        }
+        
+        return isMatch;
+      });
+
+      console.log(`\n[Verification] Found ${transferLogs.length} Transfer event(s) from ${booking.paymentToken} token`);
+
+      if (transferLogs.length === 0) {
+        console.error('\n[Verification] ❌ No Transfer events found');
         await updateBookingStatus(bookingId, BookingStatus.FAILED, {
           error: 'No transfer events in transaction',
+          chainId,
+          tokenAddress: tokenInfo.address,
+          txHash,
         });
         return;
       }
 
-      // 9. Verify transfer details
+      // 10. Verify transfer details
       let validTransferFound = false;
       
-      for (const log of logs) {
+      for (let i = 0; i < transferLogs.length; i++) {
+        const log = transferLogs[i];
+        console.log(`\n[Verification] 🔍 Checking Transfer event ${i + 1}/${transferLogs.length}...`);
+        
         const toAddress = `0x${log.topics[2]?.slice(26)}`;
+        const toAddressLower = toAddress.toLowerCase();
         
-        console.log(`[Verification] Checking log: to=${toAddress}, treasury=${treasuryAddress}`);
+        console.log(`[Verification] Transfer to: ${toAddress}`);
+        console.log(`[Verification] Expected treasury: ${treasuryAddress}`);
+        console.log(`[Verification] Addresses match: ${toAddressLower === treasuryAddressLower}`);
         
-        if (toAddress.toLowerCase() === treasuryAddress.toLowerCase()) {
-          // Found transfer to treasury
-          validTransferFound = true;
+        if (toAddressLower === treasuryAddressLower) {
+          console.log('[Verification] ✅ Found transfer to treasury!');
           
-          // OPTIONAL ENHANCEMENT: Decode and verify the transferred amount from log.data
-          // This adds extra security: ensure the on-chain amount matches expected
+          // Decode and verify amount
           const transferredValue = BigInt(log.data);
-          const expectedBaseUnits = BigInt(Math.floor(expectedAmount * 10 ** tokenInfo.decimals));
+          console.log(`[Verification] Transferred amount (base units): ${transferredValue.toString()}`);
+          console.log(`[Verification] Expected amount (base units): ${expectedBaseUnits.toString()}`);
+          console.log(`[Verification] Amounts match: ${transferredValue === expectedBaseUnits}`);
+          
           if (transferredValue !== expectedBaseUnits) {
-            console.error(`[Verification] Transferred amount mismatch! On-chain: ${transferredValue} units, Expected: ${expectedBaseUnits} units`);
+            console.error(`[Verification] ❌ Amount mismatch!`);
             await updateBookingStatus(bookingId, BookingStatus.FAILED, {
               error: 'Payment amount mismatch on blockchain',
               onChain: Number(transferredValue) / 10 ** tokenInfo.decimals,
@@ -212,23 +259,28 @@ export async function verifyPayment(
             });
             return;
           }
-          console.log(`[Verification] ✅ Transferred amount verified: ${expectedAmount} ${booking.paymentToken}`);
+          
+          console.log(`[Verification] ✅ Amount verified: ${expectedAmount} ${booking.paymentToken}`);
+          validTransferFound = true;
           
           // Get transaction details for gas calculation
+          console.log('[Verification] 📊 Fetching transaction details for gas calculation...');
           const tx = await publicClient.getTransaction({
             hash: txHash as `0x${string}`,
           });
           
-          // Calculate gas fee in USD (rough estimate)
-          // TODO: Use dynamic native token price (ETH/BNB) instead of hardcoded ETH price
+          // Calculate gas fee
           const gasUsed = receipt.gasUsed.toString();
           const gasPrice = tx.gasPrice || BigInt(0);
           const gasFeeWei = BigInt(gasUsed) * gasPrice;
           const gasFeeNative = Number(gasFeeWei) / 1e18;
-          const nativePriceUsd = 600; // Rough BNB price; fetch dynamically in production (e.g., via API)
+          const nativePriceUsd = chainId === 56 ? 600 : 3000;
           const gasFeeUSD = gasFeeNative * nativePriceUsd;
           
+          console.log(`[Verification] Gas fee: ${gasFeeNative.toFixed(6)} ${chain.nativeCurrency.symbol} (~$${gasFeeUSD.toFixed(4)})`);
+          
           // Update booking to CONFIRMED
+          console.log('[Verification] 💾 Updating booking status to CONFIRMED...');
           await db.booking.update({
             where: { bookingId },
             data: {
@@ -239,7 +291,7 @@ export async function verifyPayment(
               receiverAddress: treasuryAddress,
               gasUsed: gasUsed,
               gasFeeUSD: gasFeeUSD,
-              totalPaid: booking.paymentAmount, // Use the locked amount
+              totalPaid: booking.paymentAmount,
             },
           });
 
@@ -257,41 +309,87 @@ export async function verifyPayment(
                 amount: booking.paymentAmount,
                 token: booking.paymentToken,
                 blockNumber: Number(receipt.blockNumber),
+                gasUsed,
+                gasFeeUSD,
               },
             },
           });
           
-          // Send confirmation email
-          if (booking.user?.email) {
+          // ✅ CRITICAL FIX: Send confirmation email
+          if (booking.user?.email && booking.stay) {
             try {
-              // You can implement sendConfirmationEmail
-              console.log(`[Verification] Would send confirmation email to ${booking.user.email}`);
+              console.log(`[Verification] 📧 Sending confirmation email to ${booking.user.email}...`);
+              
+              await sendConfirmationEmail({
+                recipientEmail: booking.user.email,
+                recipientName: booking.user.name || booking.guestName || 'Guest',
+                bookingId: booking.bookingId,
+                stayTitle: booking.stay.title,
+                stayLocation: booking.stay.location,
+                startDate: booking.stay.startDate,
+                endDate: booking.stay.endDate,
+                paidAmount: booking.paymentAmount,
+                paidToken: booking.paymentToken,
+                txHash: txHash,
+                chainId: chainId,
+              });
+              
+              console.log(`[Verification] ✅ Confirmation email sent successfully!`);
             } catch (emailError) {
-              console.error('[Verification] Failed to send confirmation email:', emailError);
+              console.error('[Verification] ⚠️ Failed to send confirmation email:', emailError);
+              // Don't fail the verification if email fails - payment is still confirmed
+              // Log the error for debugging
+              await db.activityLog.create({
+                data: {
+                  bookingId: booking.id,
+                  userId: booking.userId,
+                  action: 'email_failed',
+                  entity: 'booking',
+                  entityId: booking.id,
+                  details: {
+                    error: (emailError as Error).message,
+                    type: 'confirmation_email',
+                  },
+                },
+              });
+            }
+          } else {
+            console.warn('[Verification] ⚠️ Cannot send email - missing user email or stay info');
+            if (!booking.user?.email) {
+              console.warn('[Verification]   - User email is missing');
+            }
+            if (!booking.stay) {
+              console.warn('[Verification]   - Stay info is missing');
             }
           }
           
-          console.log(`[Verification] ✅ Payment confirmed for booking ${bookingId}`);
-          return;  // Success - exit the loop and function
+          console.log(`\n[Verification] ✅✅✅ Payment confirmed for booking ${bookingId} ✅✅✅\n`);
+          return; // Success - exit
+        } else {
+          console.log(`[Verification] ⏭️ Transfer not to treasury, skipping...`);
         }
       }
 
       if (!validTransferFound) {
-        console.error('[Verification] No valid transfer to treasury found');
+        console.error('\n[Verification] ❌ No valid transfer to treasury found');
         await updateBookingStatus(bookingId, BookingStatus.FAILED, {
           error: 'Transfer not sent to correct treasury address',
+          expectedTreasury: treasuryAddress,
         });
         return;
       }
 
     } catch (error) {
-      console.error(`[Verification] Error on attempt ${retryCount + 1}:`, error);
+      console.error(`\n[Verification] ❌ Error on attempt ${retryCount + 1}:`, error);
       retryCount++;
       if (retryCount >= maxRetries) {
+        console.error(`[Verification] ❌ All ${maxRetries} attempts failed`);
         await updateBookingStatus(bookingId, BookingStatus.FAILED, {
           error: (error as Error).message,
+          attempts: retryCount,
         });
       } else {
+        console.log(`[Verification] ⏳ Retrying in ${retryDelayMs}ms...`);
         await new Promise(resolve => setTimeout(resolve, retryDelayMs));
       }
     }

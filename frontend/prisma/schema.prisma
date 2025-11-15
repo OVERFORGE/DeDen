@@ -1,5 +1,6 @@
 // Decentralized Den - Production-Ready Prisma Schema
-// Optimized for MongoDB with NextAuth integration
+// ✅ UPDATED: Nights-based pricing + Fixed walletAddress unique constraint
+// Version: 2.0 - MongoDB Optimized
 
 generator client {
   provider = "prisma-client-js"
@@ -87,9 +88,7 @@ enum UserRole {
 
 // ============================================================================
 // USER MODEL - Authentication, profile, and privacy
-// ============================================================================
-// ============================================================================
-// USER MODEL - Authentication, profile, and privacy
+// ✅ FIXED: walletAddress is now NOT unique (allows multiple nulls)
 // ============================================================================
 
 model User {
@@ -101,8 +100,8 @@ model User {
   emailVerified   DateTime? // NextAuth uses DateTime? for this
   image           String?   // NextAuth profile image
   
-  // Web3 Authentication
-  walletAddress   String?   @unique  // @unique already creates an index
+  // ✅ FIXED: Web3 Authentication - NOT unique to allow multiple users without wallets
+  walletAddress   String?   // ← REMOVED @unique to fix duplicate null error
   
   // Profile Information
   displayName     String?
@@ -111,9 +110,10 @@ model User {
   role            String?
   bio             String?
   avatar          String?
-    gender          String?
+  gender          String?
   age             Int?
   mobileNumber    String?
+  
   // Social Links
   socialTwitter   String?
   socialTelegram  String?
@@ -151,11 +151,12 @@ model User {
   
   @@index([userRole])
   @@index([createdAt])
-  // REMOVED: @@index([walletAddress]) - not needed since @unique already creates an index
+  @@index([walletAddress]) // Index for performance (not uniqueness)
 }
 
 // ============================================================================
 // STAY MODEL - The core product/event
+// ✅ UPDATED: duration is now mandatory, prices are PER NIGHT
 // ============================================================================
 
 model Stay {
@@ -170,17 +171,19 @@ model Stay {
   location        String
   venue           String?
   
-  // Dates & Capacity
+  // ✅ UPDATED: Dates & Duration (NIGHTS)
   startDate       DateTime
   endDate         DateTime
-  duration        Int?
+  duration        Int       // ✅ MANDATORY: Number of nights (auto-calculated from dates)
+  
+  // Capacity
   slotsTotal      Int
   slotsAvailable  Int
   guestCapacity   Int?
   
-  // Pricing
-  priceUSDC       Float
-  priceUSDT       Float
+  // ✅ UPDATED: Pricing PER NIGHT (used as default for rooms)
+  priceUSDC       Float     // Price per night in USDC
+  priceUSDT       Float     // Price per night in USDT
   currency        String    @default("USD")
   depositAmount   Float?
   
@@ -190,13 +193,12 @@ model Stay {
   images          String[]  @default([])
   videoUrl        String?
   
-  // Rooms Configuration
+  // ✅ Rooms Configuration (prices are PER NIGHT)
+  // Structure: { id, name, description, capacity, priceUSDC, priceUSDT, images, amenities }
   rooms           Json[]    @default([])
   
   // Amenities & Features
   amenities       String[]  @default([])
-  
-  // Content
   programHighlights Json?
   highlights        String[] @default([])
   rules             String[] @default([])
@@ -238,10 +240,12 @@ model Stay {
   @@index([startDate])
   @@index([isPublished, isFeatured])
   @@index([tags])
+  @@index([duration])
 }
 
 // ============================================================================
 // BOOKING MODEL - Core transaction/reservation
+// ✅ UPDATED: Now includes nights-based pricing fields
 // ============================================================================
 
 model Booking {
@@ -253,18 +257,29 @@ model Booking {
   userId          String        @db.ObjectId
   stay            Stay          @relation(fields: [stayId], references: [id])
   stayId          String        @db.ObjectId
-    guestGender     String?
+  
+  // Guest Info
+  guestGender     String?
   guestAge        Int?
   guestMobile     String?
   preferredRoomId String? 
+  
   // Booking Details
   status          BookingStatus @default(PENDING)
   roomType        RoomType?
   selectedRoomId  String?
   guestCount      Int           @default(1)
- selectedRoomPriceUSDC Float?
-  selectedRoomPriceUSDT Float?  // NEW: Store room price at booking time
-  selectedRoomName  String?
+  
+  // ✅ NEW: Nights-Based Pricing Fields
+  numberOfNights      Int?          // Number of nights for this booking
+  pricePerNightUSDC   Float?        // Room price PER NIGHT in USDC
+  pricePerNightUSDT   Float?        // Room price PER NIGHT in USDT
+  
+  // ✅ UPDATED: Total Prices (calculated: pricePerNight × numberOfNights)
+  selectedRoomPriceUSDC Float?      // TOTAL price (per night × nights) in USDC
+  selectedRoomPriceUSDT Float?      // TOTAL price (per night × nights) in USDT
+  selectedRoomName      String?
+  
   // Guest Info Snapshot
   guestName       String?
   guestEmail      String?
@@ -272,7 +287,7 @@ model Booking {
   
   // Payment Information
   paymentToken    PaymentToken?
-  paymentAmount   Float?
+  paymentAmount   Float?            // Total amount to pay (matches selectedRoomPrice)
   amountBaseUnits String?
   chain           String?
   chainId         Int?
@@ -335,6 +350,7 @@ model Booking {
   @@index([createdAt])
   @@index([txHash])
   @@index([sessionToken])
+  @@index([numberOfNights])
 }
 
 // ============================================================================
@@ -562,7 +578,6 @@ model SystemConfig {
   
   updatedAt       DateTime  @updatedAt
 }
-
 
 // ============================================================================
 // PAYMENT SESSION MODEL
