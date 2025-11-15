@@ -249,7 +249,7 @@ export default function StayApplyButton({
           {canPay && bookingId ? (
             <Link
               href={`/booking/${bookingId}`}
-              className="w-full bg-[#10b981] text-white text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl animate-pulse"
+              className="w-full bg-[#E7E4DF] text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-101 transition-all shadow-xl "
             >
               <span>Pay Now</span>
               <ArrowRight size={24} />

@@ -14,20 +14,23 @@ const supportEmail = "bookings@deden.space";
 
 // ✅ FIX: Get base URL with fallback and validation
 function getBaseUrl(): string {
-  // Try multiple sources in order of preference
-  const url =
-    process.env.NEXTAUTH_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "https://deden.space"; // Final fallback
+  // 1) Prioritize NEXT_PUBLIC_APP_URL
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  }
 
-  // Remove trailing slash
-  const cleanUrl = url.replace(/\/$/, "");
+  // 2) Next use NEXTAUTH_URL
+  if (process.env.NEXTAUTH_URL) {
+    return process.env.NEXTAUTH_URL.replace(/\/$/, "");
+  }
 
-  console.log("[EmailLib] Using base URL:", cleanUrl);
+  // 3) Use VERCEL_URL when deployed on Vercel
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
 
-  return cleanUrl;
+  // 4) Last fallback
+  return "https://deden.space";
 }
 
 const baseUrl = getBaseUrl();
@@ -110,15 +113,24 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
 
   // ✅ FIX: Construct full payment URL correctly
   // Remove leading slash if present, then add it back
-  const cleanPath = paymentUrl.startsWith("/") ? paymentUrl : `/${paymentUrl}`;
-  const fullPaymentUrl = `${baseUrl}${cleanPath}`;
+  let fullPaymentUrl: string;
 
-  console.log("[EmailLib] Payment URL:", {
-    original: paymentUrl,
-    clean: cleanPath,
-    full: fullPaymentUrl,
-    baseUrl: baseUrl,
-  });
+  // Ensure paymentUrl exists
+  if (!paymentUrl) {
+    throw new Error("paymentUrl is missing when sending approval email");
+  }
+
+  // If already absolute → do NOT prefix baseURL
+  if (paymentUrl.startsWith("http")) {
+    fullPaymentUrl = paymentUrl;
+  } else {
+    const cleanPath = paymentUrl.startsWith("/")
+      ? paymentUrl
+      : `/${paymentUrl}`;
+    fullPaymentUrl = `${baseUrl}${cleanPath}`;
+  }
+
+  console.log("🔗 Final Payment URL:", fullPaymentUrl);
 
   const htmlBody = `
 
