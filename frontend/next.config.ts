@@ -13,6 +13,11 @@ const nextConfig = {
         hostname: "**.googleusercontent.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "www.prestigesouthernstar.info",
+        pathname: "/**",
+      },
     ],
   },
   // Add any other existing config here

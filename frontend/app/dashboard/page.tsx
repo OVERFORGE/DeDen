@@ -48,7 +48,9 @@ export default function UserDashboard() {
   // Safe access to session data with null checks
   const userEmail = session?.user?.email;
   const userName = session?.user?.name;
-  const linkedWallet = session?.user ? (session.user as any).walletAddress : null;
+  const linkedWallet = session?.user
+    ? (session.user as any).walletAddress
+    : null;
   const isWalletLinked = Boolean(linkedWallet);
   // const isGoogleLinked = Boolean(userEmail); // Removed - always true
 
@@ -210,7 +212,12 @@ export default function UserDashboard() {
   const handleUnlinkWallet = async () => {
     // We no longer need to check if Google is linked,
     // because with the new flow, it ALWAYS is.
-    if (!confirm("Are you sure you want to unlink your wallet? You will still be able to log in with your Google account.")) return;
+    if (
+      !confirm(
+        "Are you sure you want to unlink your wallet? You will still be able to log in with your Google account."
+      )
+    )
+      return;
 
     try {
       const res = await fetch("/api/user/unlink-wallet", {
@@ -242,7 +249,7 @@ export default function UserDashboard() {
         return {
           icon: "⏳",
           label: "Under Review",
-          classes: "bg-yellow-100 text-yellow-800",
+          classes: "bg-[#172a46] text-white",
           message:
             "Your application is being reviewed. We'll notify you within 24-48 hours.",
         };
@@ -251,15 +258,14 @@ export default function UserDashboard() {
           return {
             icon: "⌛",
             label: "Payment Expired",
-            classes: "bg-red-100 text-red-800",
-            message:
-              "Your payment session expired. Please contact support.",
+            classes: "bg-[#172a46] text-white",
+            message: "Your payment session expired. Please contact support.",
           };
         }
         return {
           icon: "💳",
           label: "Payment Required",
-          classes: "bg-blue-100 text-blue-800",
+          classes: "bg-[#172a46] text-white",
           message:
             "Your application was approved! Complete payment to confirm your spot.",
         };
@@ -267,7 +273,7 @@ export default function UserDashboard() {
         return {
           icon: "✅",
           label: "Confirmed",
-          classes: "bg-green-100 text-green-800",
+          classes: "bg-[#172a46] text-white",
           message:
             "All set! Your spot is confirmed. Check your email for details.",
         };
@@ -275,14 +281,14 @@ export default function UserDashboard() {
         return {
           icon: "❌",
           label: "Cancelled",
-          classes: "bg-red-100 text-red-800",
+          classes: "bg-[#172a46] text-white",
           message: "This booking was cancelled.",
         };
       default:
         return {
           icon: "❓",
           label: status,
-          classes: "bg-gray-100 text-gray-800",
+          classes: "bg-[#172a46] text-white",
           message: "",
         };
     }
@@ -368,7 +374,6 @@ export default function UserDashboard() {
             </div>
           </div>
           {/* --- END MODIFICATION --- */}
-
 
           {/* Wallet Connection Card (Unchanged) */}
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border-2 border-blue-200">
@@ -529,8 +534,7 @@ export default function UserDashboard() {
                   📍 {booking.stay.location}
                 </p>
                 <p className="text-base text-gray-500 mb-5">
-                  🗓️{" "}
-                  {new Date(booking.stay.startDate).toLocaleDateString()} -{" "}
+                  🗓️ {new Date(booking.stay.startDate).toLocaleDateString()} -{" "}
                   {new Date(booking.stay.endDate).toLocaleDateString()}
                 </p>
 
@@ -564,16 +568,16 @@ export default function UserDashboard() {
                 {booking.status === "PENDING" && !isExpired && (
                   <Link
                     href={`/booking/${booking.bookingId}`}
-                    className="block w-full py-3 px-5 bg-blue-600 text-white text-center rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors"
+                    className="block w-full py-3 px-5 bg-[#172a46] text-white text-center rounded-lg font-semibold text-lg hover:bg-[#172a46]/80 transition-colors"
                   >
-                    💳 Complete Payment
+                    Complete Payment
                   </Link>
                 )}
 
                 {booking.status === "CONFIRMED" && (
                   <Link
                     href={`/booking/${booking.bookingId}/details`}
-                    className="block w-full py-3 px-5 bg-green-600 text-white text-center rounded-lg font-semibold text-lg hover:bg-green-700 transition-colors"
+                    className="block w-full py-3 px-5 bg-[#172a46] text-white text-center rounded-lg font-semibold text-lg hover:bg-[#172a46]/80 transition-colors"
                   >
                     View Booking Details
                   </Link>

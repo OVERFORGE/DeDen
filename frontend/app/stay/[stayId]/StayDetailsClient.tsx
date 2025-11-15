@@ -265,19 +265,19 @@ export default function StayDetailsClient({ stay }: { stay: StayData }) {
 
       {/* Room Options */}
       {stay.rooms && stay.rooms.length > 0 && (
-        <section className=" mx-auto px-6 py-20 bg-[#E7E4DF] px-6 md:px-30">
+        <section className=" mx-auto px-6 py-20 bg-[#E7E4DF]  md:px-30 ">
           <h2 className="text-4xl md:text-5xl font-bold text-[#172a46] mb-12 text-center">
             Room Options
           </h2>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-3 gap-8">
             {stay.rooms.map((room) => (
               <div
                 key={room.id}
                 className="bg-white rounded-xl overflow-hidden shadow-xl hover:shadow-2xl transition-all hover:scale-[1.02] border-4 border-[#172a46]"
               >
                 {room.images && room.images.length > 0 ? (
-                  <div className="h-64 relative overflow-hidden">
+                  <div className="h-54 relative overflow-hidden">
                     <img
                       src={room.images[0]}
                       alt={room.name}
@@ -288,15 +288,15 @@ export default function StayDetailsClient({ stay }: { stay: StayData }) {
                     </div>
                   </div>
                 ) : (
-                  <div className="h-64 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-6xl">
+                  <div className="h-54 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-6xl">
                     🛏️
                   </div>
                 )}
-                <div className="p-8">
-                  <h4 className="text-2xl font-bold text-[#172a46] mb-3">
+                <div className="p-4">
+                  <h4 className="text-2xl font-bold text-[#172a46] mb-2">
                     {room.name}
                   </h4>
-                  <p className="text-gray-600 mb-4 leading-relaxed">
+                  <p className="font-inter text-gray-600 mb-4 ">
                     {room.description}
                   </p>
                   <div className="flex items-center gap-2 text-[#172a46] mb-4 bg-[#172a46]/5 p-3 rounded-xl">
@@ -334,7 +334,7 @@ export default function StayDetailsClient({ stay }: { stay: StayData }) {
       )}
 
       {/* FAQ Section */}
-      <section className="bg-[#172a46] py-20">
+      <section className="bg-[#172a46] py-20 border-b-2 border-b-gray-400">
         <div className="max-w-4xl mx-auto px-6">
           <h2 className="text-4xl md:text-5xl font-bold text-white mb-12 text-center">
             Frequently Asked Questions
