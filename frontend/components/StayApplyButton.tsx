@@ -152,10 +152,9 @@ export default function StayApplyButton({
   hover:scale-105 transition-all shadow-xl hover:shadow-2xl
 "
         >
-                    <span>Sign In to Apply</span>
-                    <ArrowRight className="w-4 h-4 md:w-6 md:h-6" />       {" "}
+          <span>Sign In to Apply</span>
+          <ArrowRight className="w-4 h-4 md:w-6 md:h-6" />
         </Link>
-             {" "}
       </div>
     );
   } // User has no wallet linked
@@ -164,21 +163,17 @@ export default function StayApplyButton({
   if (sessionStatus === "authenticated" && !sessionWallet) {
     return (
       <div className={className}>
-               {" "}
         <div className="text-center mb-4">
-                    <div className="text-4xl mb-2">💳</div>         {" "}
           <p className="text-white/80 text-sm">Connect your wallet to apply</p> 
-                 {" "}
         </div>
-               {" "}
+
         <Link
           href="/dashboard"
           className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl"
         >
-                    <span>Connect Wallet</span>
-                    <ArrowRight size={24} />       {" "}
+          <span>Connect Wallet</span>
+          <ArrowRight size={24} />
         </Link>
-             {" "}
       </div>
     );
   } // User has a booking - show status-specific UI
@@ -189,21 +184,17 @@ export default function StayApplyButton({
     if (status === "CONFIRMED") {
       return (
         <div className={className}>
-                   {" "}
           <div className="text-center mb-4">
-                        <div className="text-5xl mb-2">✅</div>           {" "}
             <p className="text-white text-lg font-semibold">You're All Set!</p> 
-                   {" "}
           </div>
-                   {" "}
+
           <Link
             href="/dashboard"
             className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl"
           >
-                        <span>View Dashboard</span>
-                        <ArrowRight size={24} />         {" "}
+            <span>View Dashboard</span>
+            <ArrowRight size={24} />
           </Link>
-                 {" "}
         </div>
       );
     } // PENDING PAYMENT
@@ -214,21 +205,18 @@ export default function StayApplyButton({
       if (isExpired) {
         return (
           <div className={className}>
-                       {" "}
             <div className="text-center mb-4">
-                            <div className="text-5xl mb-2">⏰</div>             {" "}
               <p className="text-white text-lg font-semibold">
-                                Payment Expired              {" "}
+                Payment Expired
               </p>
-                         {" "}
             </div>
-                       {" "}
+
             <Link
               href={`/stay/${stayId}/apply`}
               className="w-full bg-white text-[#172a46] text-xl font-bold py-5 px-12 rounded-full inline-flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-xl"
             >
-                            <span>Try Again</span>
-                            <ArrowRight size={24} />
+              <span>Try Again</span>
+              <ArrowRight size={24} />
             </Link>
           </div>
         );
@@ -271,7 +259,6 @@ export default function StayApplyButton({
       return (
         <div className={className}>
           <div className="text-center mb-4">
-            <div className="text-5xl mb-2">⏳</div>
             <p className="text-white text-lg font-semibold">Under Review</p>
 
             <p className="text-white/70 text-sm mt-1">We'll notify you soon!</p>
@@ -292,7 +279,6 @@ export default function StayApplyButton({
       return (
         <div className={className}>
           <div className="text-center mb-4">
-            <div className="text-5xl mb-2">❌</div>
             <p className="text-white text-lg font-semibold">
               {status === "CANCELLED"
                 ? "Booking Cancelled"

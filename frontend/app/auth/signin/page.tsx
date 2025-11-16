@@ -267,7 +267,7 @@ function SignInForm() {
               }}
             />
             <TabButton
-              label="Log In"
+              label="Sign In"
               isActive={activeTab === "login"}
               onClick={() => {
                 setError(null);

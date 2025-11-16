@@ -1,5 +1,4 @@
-// File: app/stay/[stayId]/apply/page.tsx
-// ✅ FIXED: Proper date prefilling and duration calculation
+// app/stay/[stayId]/apply/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -27,7 +26,9 @@ import {
   DollarSign,
   Calendar,
 } from "lucide-react";
+import useFormPersistence from "@/lib/hooks/useFormPersistence"; // adjust path if needed
 
+/* --------------------- validation schema --------------------- */
 const applySchema = z
   .object({
     displayName: z.string().min(3, "Name is required"),
@@ -95,138 +96,64 @@ type StayData = {
   rooms: any[];
 };
 
-// ✅ Helper function to format date for input (handles both string and Date)
+/* --------------------- date helpers --------------------- */
 const formatDateForInput = (date: Date | string | null | undefined): string => {
   try {
-    // Check if date exists
-    if (!date) {
-      return "";
-    }
-
-    // Try to create Date object
-    let d: Date;
-    if (typeof date === "string") {
-      d = new Date(date);
-    } else if (date instanceof Date) {
-      d = date;
-    } else {
-      console.error(
-        "[formatDateForInput] Invalid date type:",
-        typeof date,
-        date
-      );
-      return "";
-    }
-
-    // Check if d was created and is a valid Date
-    if (!d) {
-      console.error("[formatDateForInput] Date object is null/undefined");
-      return "";
-    }
-
-    // Check if it's a valid date
-    if (!(d instanceof Date)) {
-      console.error("[formatDateForInput] Not a Date instance:", d);
-      return "";
-    }
-
-    // Check if date is valid (not Invalid Date)
-    if (isNaN(d.getTime())) {
-      console.error("[formatDateForInput] Invalid date value:", date);
-      return "";
-    }
-
+    if (!date) return "";
+    const d = typeof date === "string" ? new Date(date) : date;
+    if (!(d instanceof Date) || isNaN(d.getTime())) return "";
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
-  } catch (error) {
-    console.error("[formatDateForInput] Error formatting date:", error, date);
+  } catch (err) {
+    console.error("[formatDateForInput] error", err);
     return "";
   }
 };
 
-// ✅ Helper function to format date for display
 const formatDateForDisplay = (
   date: Date | string | null | undefined
 ): string => {
   try {
-    // Check if date exists
-    if (!date) {
-      return "Loading...";
-    }
-
-    // Try to create Date object
-    let d: Date;
-    if (typeof date === "string") {
-      d = new Date(date);
-    } else if (date instanceof Date) {
-      d = date;
-    } else {
-      console.error(
-        "[formatDateForDisplay] Invalid date type:",
-        typeof date,
-        date
-      );
-      return "Invalid Date";
-    }
-
-    // Check if d was created and is a valid Date
-    if (!d || !(d instanceof Date)) {
-      console.error("[formatDateForDisplay] Not a valid Date object");
-      return "Invalid Date";
-    }
-
-    // Check if date is valid (not Invalid Date)
-    if (isNaN(d.getTime())) {
-      console.error("[formatDateForDisplay] Invalid date value:", date);
-      return "Invalid Date";
-    }
-
+    if (!date) return "Loading...";
+    const d = typeof date === "string" ? new Date(date) : date;
+    if (!(d instanceof Date) || isNaN(d.getTime())) return "Invalid Date";
     return d.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
-  } catch (error) {
-    console.error("[formatDateForDisplay] Error formatting date:", error, date);
+  } catch (err) {
+    console.error("[formatDateForDisplay] error", err);
     return "Invalid Date";
   }
 };
 
-// ✅ Helper function to calculate nights between two dates
 const calculateNightsBetween = (
   checkIn: string | Date | null | undefined,
   checkOut: string | Date | null | undefined
 ): number => {
   try {
-    if (!checkIn || !checkOut) {
-      return 0;
-    }
-
+    if (!checkIn || !checkOut) return 0;
     const checkInDate = new Date(checkIn);
     const checkOutDate = new Date(checkOut);
-
     if (
-      !checkInDate ||
-      !checkOutDate ||
       isNaN(checkInDate.getTime()) ||
-      isNaN(checkOutDate.getTime())
+      isNaN(checkOutDate.getTime()) ||
+      checkOutDate <= checkInDate
     ) {
       return 0;
     }
-
-    if (checkOutDate <= checkInDate) return 0;
-
     const diffTime = checkOutDate.getTime() - checkInDate.getTime();
-    const nights = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return nights;
-  } catch (error) {
-    console.error("[calculateNightsBetween] Error:", error);
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  } catch (err) {
+    console.error("[calculateNightsBetween] error", err);
     return 0;
   }
 };
 
+/* --------------------- page component --------------------- */
 export default function ApplyPage() {
   const params = useParams();
   const router = useRouter();
@@ -245,6 +172,7 @@ export default function ApplyPage() {
     window.scrollTo(0, 0);
   }, [isSuccess]);
 
+  // react-hook-form setup
   const {
     register,
     handleSubmit,
@@ -267,79 +195,104 @@ export default function ApplyPage() {
   const checkInDate = watch("checkInDate");
   const checkOutDate = watch("checkOutDate");
 
-  // ✅ Calculate nights whenever dates change
+  // Persist form - key includes stayId + user email (or anon)
+  const persistenceKey = `apply:${stayId}:${
+    (session?.user as any)?.email ?? "anon"
+  }`;
+  const { clear: clearPersistence } = useFormPersistence(
+    persistenceKey,
+    {
+      watch,
+      reset,
+      handleSubmit: (fn: any) => (e?: unknown) => fn(e),
+    } as any /* cast because useFormPersistence expects UseFormReturn; we pass minimal shape */,
+    {
+      debounceMs: 300,
+      restore: true,
+    }
+  );
+
+  // keep nights updated when dates change
   useEffect(() => {
     if (checkInDate && checkOutDate) {
-      const nights = calculateNightsBetween(checkInDate, checkOutDate);
-      setCalculatedNights(nights);
-    } else {
+      setCalculatedNights(calculateNightsBetween(checkInDate, checkOutDate));
+    } else if (stayData) {
       setCalculatedNights(0);
     }
-  }, [checkInDate, checkOutDate]);
+  }, [checkInDate, checkOutDate, stayData]);
 
-  // ✅ Fetch stay data and pre-fill dates
+  // fetch stay and prefill
   useEffect(() => {
     const fetchStayData = async () => {
       try {
-        const response = await fetch(`/api/stays/${stayId}`);
-        if (response.ok) {
-          const data = await response.json();
-
-          console.log("[Apply] Raw stay data:", {
-            startDate: data.startDate,
-            endDate: data.endDate,
-            duration: data.duration,
-          });
-
-          // ✅ Calculate duration FIRST before setting state
-          let duration = 0;
-          if (data.duration && !isNaN(data.duration)) {
-            duration = Number(data.duration);
-          } else if (data.startDate && data.endDate) {
-            duration = calculateNightsBetween(data.startDate, data.endDate);
-          }
-
-          console.log("[Apply] Stay duration calculated:", duration);
-          setStayDuration(duration);
-          setStayData(data);
-
-          // ✅ Pre-fill dates with full stay period
-          if (data.startDate && data.endDate) {
-            try {
-              const checkIn = formatDateForInput(data.startDate);
-              const checkOut = formatDateForInput(data.endDate);
-              console.log("[Apply] Formatted dates:", { checkIn, checkOut });
-              setValue("checkInDate", checkIn);
-              setValue("checkOutDate", checkOut);
-            } catch (dateError) {
-              console.error("[Apply] Date formatting error:", dateError);
-            }
-          }
+        const res = await fetch(`/api/stays/${stayId}`);
+        if (!res.ok) {
+          console.error("Failed to fetch stay", await res.text());
+          return;
         }
-      } catch (error) {
-        console.error("Error fetching stay data:", error);
+        const data = await res.json();
+        setStayData(data);
+
+        // compute stay duration
+        let duration = 0;
+        if (data.duration && !isNaN(data.duration)) {
+          duration = Number(data.duration);
+        } else if (data.startDate && data.endDate) {
+          duration = calculateNightsBetween(data.startDate, data.endDate);
+        }
+        setStayDuration(duration);
+
+        // prefill dates if not present in storage (we restore via hook)
+        // But reset explicit default from stay only if form has no values:
+        const currentCheckIn = formatDateForInput(data.startDate);
+        const currentCheckOut = formatDateForInput(data.endDate);
+
+        // If the form already has values (due to persistence) we don't overwrite.
+        const rawSaved = (() => {
+          try {
+            return localStorage.getItem(persistenceKey);
+          } catch {
+            return null;
+          }
+        })();
+
+        if (!rawSaved) {
+          setValue("checkInDate", currentCheckIn);
+          setValue("checkOutDate", currentCheckOut);
+        }
+      } catch (err) {
+        console.error("Error fetching stay data:", err);
       }
     };
 
-    if (stayId && stayId !== "undefined") {
-      fetchStayData();
-    }
-  }, [stayId, setValue]);
+    if (stayId && stayId !== "undefined") fetchStayData();
+  }, [stayId, setValue, persistenceKey]);
 
-  // ✅ Pre-fill user data from session
+  // prefill user fields when session loads (but don't overwrite persisted values)
   useEffect(() => {
-    if (session?.user && stayData) {
-      const sessionUser = session.user as any;
+    if (!session?.user) return;
 
+    // check if persisted data exists
+    let persisted = null;
+    try {
+      persisted = localStorage.getItem(persistenceKey);
+    } catch {
+      persisted = null;
+    }
+
+    if (!persisted) {
+      const sessionUser = session.user as any;
       reset({
         displayName: sessionUser.name || "",
         email: sessionUser.email || "",
         firstName: sessionUser.firstName || "",
         lastName: sessionUser.lastName || "",
         role: sessionUser.role || "",
-        gender: applySchema.shape.gender.safeParse(sessionUser.gender).success
-          ? sessionUser.gender
-          : undefined,
+        gender:
+          applySchema.shape.gender.safeParse(sessionUser.gender).success &&
+          sessionUser.gender
+            ? sessionUser.gender
+            : undefined,
         age:
           !isNaN(parseFloat(sessionUser.age)) && isFinite(sessionUser.age)
             ? Number(sessionUser.age)
@@ -350,12 +303,12 @@ export default function ApplyPage() {
         socialTelegram: sessionUser.socialTelegram || "",
         selectedRoomId: "",
         selectedCurrency: "",
-        // ✅ Keep the dates that were already set
-        checkInDate: formatDateForInput(stayData.startDate),
-        checkOutDate: formatDateForInput(stayData.endDate),
+        checkInDate: stayData ? formatDateForInput(stayData.startDate) : "",
+        checkOutDate: stayData ? formatDateForInput(stayData.endDate) : "",
       });
     }
-  }, [session, reset, stayData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, stayData]);
 
   const handleRoomSelection = (
     roomId: string,
@@ -370,13 +323,10 @@ export default function ApplyPage() {
     }
   };
 
-  const calculateTotalPrice = (
-    pricePerNight: number | undefined | null
-  ): string => {
+  const calculateTotalPrice = (pricePerNight: number | undefined | null) => {
     const price = Number(pricePerNight) || 0;
     const nights = calculatedNights || 0;
     const total = price * nights;
-
     return isNaN(total) || total === 0 ? "0.00" : total.toFixed(2);
   };
 
@@ -428,6 +378,13 @@ export default function ApplyPage() {
         throw new Error(result.error || "Failed to submit application");
       }
 
+      // clear persisted form and show success
+      try {
+        clearPersistence();
+      } catch (err) {
+        console.warn("Failed to clear persistence", err);
+      }
+
       setIsSuccess(true);
     } catch (error: any) {
       console.error("Application error:", error);
@@ -435,6 +392,7 @@ export default function ApplyPage() {
     }
   };
 
+  /* ---------- Render states ---------- */
   if (!stayId) {
     return (
       <div className="min-h-screen bg-[#f5f5f3] flex items-center justify-center">
@@ -465,14 +423,14 @@ export default function ApplyPage() {
                 </strong>{" "}
                 is now <strong>under review</strong>.
               </p>
-              {checkInDate && checkOutDate && (
+              {watch("checkInDate") && watch("checkOutDate") && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 inline-block">
                   <p className="text-sm text-gray-600 mb-1">
                     Your selected dates:
                   </p>
                   <p className="font-semibold text-gray-800">
-                    📅 {new Date(checkInDate).toLocaleDateString()} -{" "}
-                    {new Date(checkOutDate).toLocaleDateString()}
+                    📅 {new Date(watch("checkInDate")).toLocaleDateString()} -{" "}
+                    {new Date(watch("checkOutDate")).toLocaleDateString()}
                   </p>
                   <p className="text-sm text-blue-600 mt-1">
                     <strong>
@@ -511,7 +469,7 @@ export default function ApplyPage() {
 
   return (
     <div className="min-h-screen bg-[#E7E4DF]">
-      {/* Hero Section */}
+      {/* Hero */}
       <section className="bg-[#172a46] pt-0 pb-32 relative">
         <div className=" mx-auto px-6 pt-12 md:px-38 ">
           <div className="text-gray-300 text-sm mb-8">
@@ -626,16 +584,15 @@ export default function ApplyPage() {
               onSubmit={handleSubmit(onSubmit)}
               className="p-8 md:p-12 space-y-8"
             >
-              {/* ✅ Date Range Selection with Event Timeline */}
+              {/* Date range & timeline */}
               {stayData && (
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6">
                   <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-2">
                     <Calendar size={20} />
-                    Select Your Stay Dates
+                    Select Your Stay Dates{" "}
                     <span className="text-red-500">*</span>
                   </label>
 
-                  {/* ✅ Event Timeline Display */}
                   <div className="bg-white border-2 border-[#172a46] rounded-xl p-4 mb-4">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-sm font-semibold text-gray-600">
@@ -736,7 +693,7 @@ export default function ApplyPage() {
                     </div>
                   </div>
 
-                  {/* ✅ Your Selection Display */}
+                  {/* Selection summary */}
                   {calculatedNights > 0 ? (
                     <div className="bg-white border-2 border-green-400 rounded-xl p-4">
                       <div className="flex items-center justify-between">
@@ -853,7 +810,7 @@ export default function ApplyPage() {
                 )}
               </div>
 
-              {/* Age and Mobile */}
+              {/* Age & Mobile */}
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
                   <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
@@ -898,7 +855,7 @@ export default function ApplyPage() {
                 </div>
               </div>
 
-              {/* Room Selection */}
+              {/* Room selection */}
               {stayData &&
                 stayData.rooms &&
                 stayData.rooms.length > 0 &&
@@ -923,7 +880,6 @@ export default function ApplyPage() {
                               {room.name}
                             </h4>
                           </div>
-
                           <p className="text-sm text-gray-600 mb-3">
                             {room.description}
                           </p>
@@ -937,7 +893,6 @@ export default function ApplyPage() {
                               <DollarSign size={16} /> Select Payment Currency:
                             </p>
                             <div className="flex gap-4">
-                              {/* USDC Option */}
                               <label
                                 className={`flex-1 border-2 rounded-xl cursor-pointer transition-all ${
                                   currentSelectedRoomId === room.id &&
@@ -979,7 +934,6 @@ export default function ApplyPage() {
                                 </div>
                               </label>
 
-                              {/* USDT Option */}
                               <label
                                 className={`flex-1 border-2 rounded-xl cursor-pointer transition-all ${
                                   currentSelectedRoomId === room.id &&
@@ -1024,8 +978,6 @@ export default function ApplyPage() {
                           </div>
                         </div>
                       ))}
-
-                      {/* No Room Preference */}
                     </div>
 
                     {currentSelectedRoomId &&
@@ -1039,7 +991,7 @@ export default function ApplyPage() {
                   </div>
                 )}
 
-              {/* Name Fields */}
+              {/* name fields */}
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
                   <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
@@ -1065,7 +1017,7 @@ export default function ApplyPage() {
                 </div>
               </div>
 
-              {/* Professional Role */}
+              {/* professional role */}
               <div>
                 <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
                   <Briefcase size={20} />
@@ -1079,7 +1031,7 @@ export default function ApplyPage() {
                 />
               </div>
 
-              {/* Social Links */}
+              {/* socials */}
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
                   <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
@@ -1092,7 +1044,6 @@ export default function ApplyPage() {
                     className="w-full px-5 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors"
                   />
                 </div>
-
                 <div>
                   <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
                     <Linkedin size={20} />
@@ -1107,7 +1058,6 @@ export default function ApplyPage() {
                 </div>
               </div>
 
-              {/* Info Box */}
               <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6">
                 <h4 className="font-bold text-[#172a46] mb-2">
                   📋 What Happens Next?
@@ -1124,7 +1074,6 @@ export default function ApplyPage() {
                 </ul>
               </div>
 
-              {/* Error Message */}
               {apiError && (
                 <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex items-start gap-3">
                   <AlertCircle
@@ -1138,7 +1087,6 @@ export default function ApplyPage() {
                 </div>
               )}
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isSubmitting || !isConnected || calculatedNights <= 0}

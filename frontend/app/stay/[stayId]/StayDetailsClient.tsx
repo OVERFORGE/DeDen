@@ -322,7 +322,7 @@ export default function StayDetailsClient({ stay }: { stay: StayData }) {
                   )}
                   <div className="flex items-baseline gap-2 pt-4 border-t-2 border-gray-200">
                     <span className="text-4xl font-bold text-[#172a46]">
-                      ${room.price}
+                      $ {room.price}
                     </span>
                     <span className="text-lg text-gray-500">USDC</span>
                   </div>
