@@ -2,53 +2,98 @@
 
 import { useState, useEffect } from "react";
 import { ApproveWaitlistButton } from "@/components/ApproveWaitlistButton";
+import { 
+  Users, 
+  DollarSign, 
+  CheckCircle, 
+  Clock, 
+  AlertCircle,
+  Filter,
+  Download,
+  Search,
+  ChevronDown,
+  X
+} from "lucide-react";
 
-// Define the types for our data
+// Types
 type Booking = {
+  id: string;
   bookingId: string;
   status: string;
   guestName: string;
   guestEmail: string;
+  guestGender?: string;
+  guestAge?: number;
+  guestMobile?: string;
   paymentAmount?: number;
   paymentToken?: string;
   selectedRoomName?: string;
   selectedRoomPriceUSDC?: number;
   selectedRoomPriceUSDT?: number;
+  numberOfNights?: number;
+  pricePerNightUSDC?: number;
+  pricePerNightUSDT?: number;
+  txHash?: string;
+  chain?: string;
+  chainId?: number;
+  blockNumber?: number;
   expiresAt?: string;
   confirmedAt?: string;
   createdAt: string;
   stay: {
+    id: string;
+    stayId: string;
     title: string;
-    priceUSDC: number;
-    priceUSDT: number;
+    location: string;
+    startDate: string;
+    endDate: string;
+    rooms?: any[];
   };
   user: {
-    walletAddress: string;
+    walletAddress?: string;
     displayName: string;
     email: string;
+    role?: string;
+    firstName?: string;
+    lastName?: string;
+    mobileNumber?: string;
+    socialTwitter?: string;
+    socialTelegram?: string;
+    socialLinkedin?: string;
+    gender?: string;
+    age?: number;
   };
 };
 
 type TabType = "WAITLISTED" | "PENDING" | "CONFIRMED" | "ALL";
+
+// Helper function - defined before component to avoid hoisting issues
+const getChainName = (chainId?: number): string => {
+  const chains: Record<number, string> = {
+    42161: 'Arbitrum',
+    56: 'BNB Chain',
+    8453: 'Base',
+  };
+  return chainId ? (chains[chainId] || `Chain ${chainId}`) : 'Unknown';
+};
 
 export default function AdminDashboard() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("WAITLISTED");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedStay, setSelectedStay] = useState<string>("ALL");
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Fetch bookings based on active tab
-  const fetchBookings = async (status?: TabType) => {
+  // Fetch bookings - ALWAYS fetch ALL bookings for correct stats
+  const fetchBookings = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      let url = '/api/admin/bookings';
-      if (status && status !== "ALL") {
-        url += `?status=${status}`;
-      }
-      
-      const res = await fetch(url);
+      // Always fetch ALL bookings (no status filter)
+      const res = await fetch('/api/admin/bookings');
       if (!res.ok) {
         throw new Error('Failed to fetch bookings');
       }
@@ -56,46 +101,52 @@ export default function AdminDashboard() {
       setBookings(data);
     } catch (err: any) {
       setError(err.message);
+      console.error('Error fetching bookings:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchBookings(activeTab);
-  }, [activeTab]);
+    fetchBookings();
+  }, []); // Only fetch once on mount
 
   const handleApproved = () => {
-    // Refresh the list after approval
-    fetchBookings(activeTab);
+    fetchBookings(); // Refresh all bookings
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusStyles: Record<string, any> = {
-      WAITLISTED: { bg: '#fef3c7', color: '#92400e', label: '⏳ Waitlisted' },
-      PENDING: { bg: '#dbeafe', color: '#1e40af', label: '💳 Pending Payment' },
-      CONFIRMED: { bg: '#d1fae5', color: '#065f46', label: '✅ Confirmed' },
-      CANCELLED: { bg: '#fee2e2', color: '#991b1b', label: '❌ Cancelled' },
-      EXPIRED: { bg: '#f3f4f6', color: '#374151', label: '⌛ Expired' },
-      FAILED: { bg: '#fce7f3', color: '#831843', label: '⚠️ Failed' },
+  // Get unique stays for filter
+  const uniqueStays = Array.from(
+    new Set(bookings.map(b => b.stay.stayId))
+  ).map(stayId => {
+    const booking = bookings.find(b => b.stay.stayId === stayId);
+    return {
+      id: stayId,
+      title: booking?.stay.title || stayId
     };
+  });
 
-    const style = statusStyles[status] || { bg: '#f3f4f6', color: '#374151', label: status };
+  // Filter bookings by tab, search, and stay
+  const filteredBookings = bookings.filter(booking => {
+    // Filter by active tab
+    const matchesTab = 
+      activeTab === "ALL" || 
+      booking.status === activeTab;
     
-    return (
-      <span style={{
-        backgroundColor: style.bg,
-        color: style.color,
-        padding: '4px 12px',
-        borderRadius: '12px',
-        fontSize: '0.85rem',
-        fontWeight: '600',
-      }}>
-        {style.label}
-      </span>
-    );
-  };
+    // Filter by search term
+    const matchesSearch = 
+      booking.guestName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.guestEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.bookingId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.user.walletAddress?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Filter by selected stay
+    const matchesStay = selectedStay === "ALL" || booking.stay.stayId === selectedStay;
+    
+    return matchesTab && matchesSearch && matchesStay;
+  });
 
+  // Calculate statistics
   const stats = {
     waitlisted: bookings.filter(b => b.status === 'WAITLISTED').length,
     pending: bookings.filter(b => b.status === 'PENDING').length,
@@ -103,371 +154,533 @@ export default function AdminDashboard() {
     total: bookings.length,
   };
 
-  // Helper function to get display price
-  const getDisplayPrice = (booking: Booking) => {
-    // If payment is already locked (status CONFIRMED or has paymentAmount)
-    if (booking.paymentAmount && booking.paymentToken) {
-      return `$${booking.paymentAmount} ${booking.paymentToken}`;
-    }
-    
-    // Show room prices if available
-    if (booking.selectedRoomPriceUSDC || booking.selectedRoomPriceUSDT) {
-      const prices = [];
-      if (booking.selectedRoomPriceUSDC) prices.push(`$${booking.selectedRoomPriceUSDC} USDC`);
-      if (booking.selectedRoomPriceUSDT) prices.push(`$${booking.selectedRoomPriceUSDT} USDT`);
-      return prices.join(' / ');
-    }
-    
-    // Fall back to stay prices
-    return `$${booking.stay.priceUSDC} USDC / $${booking.stay.priceUSDT} USDT`;
+  // Calculate revenue analytics
+  const analytics = {
+    totalUSDC: bookings
+      .filter(b => b.status === 'CONFIRMED' && b.paymentToken === 'USDC')
+      .reduce((sum, b) => sum + (b.paymentAmount || 0), 0),
+    totalUSDT: bookings
+      .filter(b => b.status === 'CONFIRMED' && b.paymentToken === 'USDT')
+      .reduce((sum, b) => sum + (b.paymentAmount || 0), 0),
+    byChain: bookings
+      .filter(b => b.status === 'CONFIRMED')
+      .reduce((acc, b) => {
+        const chain = getChainName(b.chainId);
+        if (!acc[chain]) {
+          acc[chain] = { USDC: 0, USDT: 0 };
+        }
+        if (b.paymentToken === 'USDC') {
+          acc[chain].USDC += b.paymentAmount || 0;
+        } else if (b.paymentToken === 'USDT') {
+          acc[chain].USDT += b.paymentAmount || 0;
+        }
+        return acc;
+      }, {} as Record<string, { USDC: number; USDT: number }>),
   };
 
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, { bg: string; text: string; label: string }> = {
+      WAITLISTED: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '⏳ Waitlisted' },
+      PENDING: { bg: 'bg-blue-100', text: 'text-blue-800', label: '💳 Pending Payment' },
+      CONFIRMED: { bg: 'bg-green-100', text: 'text-green-800', label: '✅ Confirmed' },
+      CANCELLED: { bg: 'bg-red-100', text: 'text-red-800', label: '❌ Cancelled' },
+      EXPIRED: { bg: 'bg-gray-100', text: 'text-gray-800', label: '⌛ Expired' },
+      FAILED: { bg: 'bg-pink-100', text: 'text-pink-800', label: '⚠️ Failed' },
+    };
+
+    const style = styles[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status };
+    
+    return (
+      <span className={`${style.bg} ${style.text} px-3 py-1 rounded-full text-xs font-semibold`}>
+        {style.label}
+      </span>
+    );
+  };
+
+  const exportToCSV = () => {
+    const headers = [
+      'Booking ID',
+      'Status',
+      'Guest Name',
+      'Email',
+      'Phone',
+      'Age',
+      'Gender',
+      'Stay',
+      'Room',
+      'Nights',
+      'Payment Amount',
+      'Payment Token',
+      'Chain',
+      'TX Hash',
+      'Wallet Address',
+      'Social Twitter',
+      'Social Telegram',
+      'Date'
+    ];
+
+    const rows = filteredBookings.map(b => [
+      b.bookingId,
+      b.status,
+      b.user.displayName,
+      b.user.email,
+      b.user.mobileNumber || b.guestMobile || '',
+      b.user.age || b.guestAge || '',
+      b.user.gender || b.guestGender || '',
+      b.stay.title,
+      b.selectedRoomName || 'Not specified',
+      b.numberOfNights || '',
+      b.paymentAmount || '',
+      b.paymentToken || '',
+      getChainName(b.chainId),
+      b.txHash || '',
+      b.user.walletAddress || '',
+      b.user.socialTwitter || '',
+      b.user.socialTelegram || '',
+      new Date(b.createdAt).toLocaleDateString()
+    ]);
+
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bookings-${activeTab}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
+  if (loading && bookings.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">Loading bookings...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={styles.container}>
-      <h2>Admin Dashboard - Booking Management</h2>
-      
-      {error && <div style={styles.error}>{error}</div>}
-      
-      {/* Stats Cards */}
-      <div style={styles.statsBox}>
-        <div style={styles.stat}>
-          <div style={styles.statNumber}>{stats.waitlisted}</div>
-          <div style={styles.statLabel}>Pending Approval</div>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Booking Management
+          </h1>
+          <p className="text-gray-600">
+            Manage applications, payments, and guest information
+          </p>
         </div>
-        <div style={styles.stat}>
-          <div style={styles.statNumber}>{stats.pending}</div>
-          <div style={styles.statLabel}>Awaiting Payment</div>
-        </div>
-        <div style={styles.stat}>
-          <div style={styles.statNumber}>{stats.confirmed}</div>
-          <div style={styles.statLabel}>Confirmed</div>
-        </div>
-        <div style={styles.stat}>
-          <div style={styles.statNumber}>{stats.total}</div>
-          <div style={styles.statLabel}>Total Bookings</div>
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div style={styles.tabs}>
-        <button
-          onClick={() => setActiveTab("WAITLISTED")}
-          style={{
-            ...styles.tab,
-            ...(activeTab === "WAITLISTED" ? styles.activeTab : {}),
-          }}
-        >
-          Pending Approval ({stats.waitlisted})
-        </button>
-        <button
-          onClick={() => setActiveTab("PENDING")}
-          style={{
-            ...styles.tab,
-            ...(activeTab === "PENDING" ? styles.activeTab : {}),
-          }}
-        >
-          Awaiting Payment ({stats.pending})
-        </button>
-        <button
-          onClick={() => setActiveTab("CONFIRMED")}
-          style={{
-            ...styles.tab,
-            ...(activeTab === "CONFIRMED" ? styles.activeTab : {}),
-          }}
-        >
-          Confirmed ({stats.confirmed})
-        </button>
-        <button
-          onClick={() => setActiveTab("ALL")}
-          style={{
-            ...styles.tab,
-            ...(activeTab === "ALL" ? styles.activeTab : {}),
-          }}
-        >
-          All Bookings ({stats.total})
-        </button>
-      </div>
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-semibold text-red-800">Error</p>
+              <p className="text-red-700">{error}</p>
+            </div>
+          </div>
+        )}
 
-      {/* Table */}
-      <div style={styles.tableContainer}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Booking ID</th>
-              <th style={styles.th}>Stay</th>
-              <th style={styles.th}>Guest</th>
-              <th style={styles.th}>Email</th>
-              <th style={styles.th}>Room</th>
-              <th style={styles.th}>Price</th>
-              <th style={styles.th}>Status</th>
-              <th style={styles.th}>Date</th>
-              <th style={styles.th}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={9} style={styles.td}>
-                  <div style={styles.loading}>Loading...</div>
-                </td>
-              </tr>
-            ) : bookings.length === 0 ? (
-              <tr>
-                <td colSpan={9} style={styles.td}>
-                  <div style={styles.empty}>
-                    No {activeTab.toLowerCase()} bookings found.
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <Clock className="text-yellow-600" size={24} />
+              </div>
+              <span className="text-3xl font-bold text-gray-900">
+                {stats.waitlisted}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Pending Approval</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <DollarSign className="text-blue-600" size={24} />
+              </div>
+              <span className="text-3xl font-bold text-gray-900">
+                {stats.pending}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Awaiting Payment</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <CheckCircle className="text-green-600" size={24} />
+              </div>
+              <span className="text-3xl font-bold text-gray-900">
+                {stats.confirmed}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Confirmed</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <Users className="text-purple-600" size={24} />
+              </div>
+              <span className="text-3xl font-bold text-gray-900">
+                {stats.total}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Total Bookings</p>
+          </div>
+        </div>
+
+        {/* Revenue Analytics */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-200">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Revenue Analytics</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="bg-green-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Total USDC Received</p>
+              <p className="text-3xl font-bold text-green-600">
+                ${analytics.totalUSDC.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Total USDT Received</p>
+              <p className="text-3xl font-bold text-purple-600">
+                ${analytics.totalUSDT.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-900">By Chain</h3>
+            {Object.entries(analytics.byChain).map(([chain, amounts]) => (
+              <div key={chain} className="bg-gray-50 rounded-lg p-4">
+                <p className="font-semibold text-gray-900 mb-2">{chain}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-600">USDC</p>
+                    <p className="text-lg font-bold text-green-600">
+                      ${amounts.USDC.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
                   </div>
-                </td>
-              </tr>
-            ) : (
-              bookings.map((booking) => (
-                <tr key={booking.bookingId} style={styles.tr}>
-                  <td style={styles.td}>
-                    <code style={styles.code}>{booking.bookingId}</code>
-                  </td>
-                  <td style={styles.td}>
-                    <strong>{booking.stay.title}</strong>
-                  </td>
-                  <td style={styles.td}>
-                    {booking.user.displayName || booking.guestName}
-                  </td>
-                  <td style={styles.td}>
-                    <a 
-                      href={`mailto:${booking.user.email || booking.guestEmail}`}
-                      style={styles.emailLink}
-                    >
-                      {booking.user.email || booking.guestEmail}
-                    </a>
-                  </td>
-                  <td style={styles.td}>
-                    {booking.selectedRoomName ? (
-                      <span style={styles.roomBadge}>
-                        {booking.selectedRoomName}
-                      </span>
-                    ) : (
-                      <span style={{ color: '#999' }}>No preference</span>
-                    )}
-                  </td>
-                  <td style={styles.td}>
-                    <span style={styles.amount}>
-                      {getDisplayPrice(booking)}
-                    </span>
-                  </td>
-                  <td style={styles.td}>
-                    {getStatusBadge(booking.status)}
-                  </td>
-                  <td style={styles.td}>
-                    <div style={styles.dateText}>
-                      {new Date(booking.createdAt).toLocaleDateString()}
-                    </div>
-                    <div style={styles.timeText}>
-                      {new Date(booking.createdAt).toLocaleTimeString()}
-                    </div>
-                  </td>
-                  <td style={styles.td}>
-                    {booking.status === 'WAITLISTED' ? (
-                      <ApproveWaitlistButton 
-                        bookingId={booking.bookingId}
-                        onApproved={handleApproved}
-                      />
-                    ) : booking.status === 'PENDING' ? (
-                      <div>
-                        <a 
-                          href={`/booking/${booking.bookingId}`}
-                          target="_blank"
-                          style={styles.viewLink}
-                        >
-                          View Payment
-                        </a>
-                        {booking.expiresAt && new Date(booking.expiresAt) > new Date() && (
-                          <div style={styles.expiryNote}>
-                            Expires: {new Date(booking.expiresAt).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-                    ) : booking.status === 'CONFIRMED' ? (
-                      <span style={{ color: '#10b981', fontWeight: '600' }}>
-                        ✓ Paid
-                      </span>
-                    ) : (
-                      <span style={{ color: '#999' }}>—</span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  <div>
+                    <p className="text-xs text-gray-600">USDT</p>
+                    <p className="text-lg font-bold text-purple-600">
+                      ${amounts.USDT.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-      {/* Legend */}
-      <div style={styles.legend}>
-        <p><strong>Note:</strong></p>
-        <ul style={styles.legendList}>
-          <li>Users select their preferred room and see both USDC/USDT prices during application</li>
-          <li>After approval, users choose their payment token (USDC or USDT) when paying</li>
-          <li>The system uses the room-specific price for the chosen token</li>
-        </ul>
+        {/* Filters and Search */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
+          <div className="flex flex-col md:flex-row gap-4 mb-4">
+            {/* Search */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, booking ID, or wallet..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={20} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Stay Filter */}
+            <div className="relative">
+              <select
+                value={selectedStay}
+                onChange={(e) => setSelectedStay(e.target.value)}
+                className="appearance-none pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              >
+                <option value="ALL">All Events</option>
+                {uniqueStays.map(stay => (
+                  <option key={stay.id} value={stay.id}>
+                    {stay.title}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+            </div>
+
+            {/* Export Button */}
+            <button
+              onClick={exportToCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              <Download size={20} />
+              <span>Export CSV</span>
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-2 border-b border-gray-200">
+            {(['WAITLISTED', 'PENDING', 'CONFIRMED', 'ALL'] as TabType[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 font-medium transition-colors relative ${
+                  activeTab === tab
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {tab.charAt(0) + tab.slice(1).toLowerCase()}
+                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+                  activeTab === tab ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {tab === 'ALL' ? stats.total : stats[tab.toLowerCase() as keyof typeof stats]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Results Info */}
+        <div className="mb-4 text-sm text-gray-600">
+          Showing {filteredBookings.length} of {bookings.length} bookings
+        </div>
+
+        {/* Bookings Table */}
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Booking Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Guest Info
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Room & Pricing
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Payment Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <div className="flex justify-center">
+                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredBookings.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                      No bookings found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredBookings.map((booking) => (
+                    <tr key={booking.bookingId} className="hover:bg-gray-50 transition-colors">
+                      {/* Booking Details */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <p className="font-mono text-xs text-gray-600">
+                            {booking.bookingId}
+                          </p>
+                          <p className="font-semibold text-gray-900">
+                            {booking.stay.title}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            📍 {booking.stay.location}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(booking.createdAt).toLocaleDateString()} at{' '}
+                            {new Date(booking.createdAt).toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Guest Info */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <p className="font-semibold text-gray-900">
+                            {booking.user.displayName}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            ✉️ {booking.user.email}
+                          </p>
+                          {(booking.user.mobileNumber || booking.guestMobile) && (
+                            <p className="text-sm text-gray-600">
+                              📱 {booking.user.mobileNumber || booking.guestMobile}
+                            </p>
+                          )}
+                          {(booking.user.age || booking.guestAge) && (
+                            <p className="text-xs text-gray-500">
+                              Age: {booking.user.age || booking.guestAge}
+                            </p>
+                          )}
+                          {(booking.user.gender || booking.guestGender) && (
+                            <p className="text-xs text-gray-500">
+                              Gender: {booking.user.gender || booking.guestGender}
+                            </p>
+                          )}
+                          {booking.user.walletAddress && (
+                            <p className="text-xs text-gray-500 font-mono">
+                              🔐 {booking.user.walletAddress.slice(0, 6)}...{booking.user.walletAddress.slice(-4)}
+                            </p>
+                          )}
+                          {booking.user.socialTwitter && (
+                            <p className="text-xs text-blue-600">
+                              🐦 {booking.user.socialTwitter}
+                            </p>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Room & Pricing */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          {booking.selectedRoomName ? (
+                            <>
+                              <p className="font-semibold text-gray-900">
+                                🛏️ {booking.selectedRoomName}
+                              </p>
+                              {booking.numberOfNights && (
+                                <p className="text-sm text-gray-600">
+                                  {booking.numberOfNights} night{booking.numberOfNights !== 1 ? 's' : ''}
+                                </p>
+                              )}
+                              {booking.pricePerNightUSDC && (
+                                <p className="text-sm text-green-600">
+                                  ${booking.pricePerNightUSDC}/night USDC
+                                </p>
+                              )}
+                              {booking.pricePerNightUSDT && (
+                                <p className="text-sm text-purple-600">
+                                  ${booking.pricePerNightUSDT}/night USDT
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm text-gray-500">
+                              No room preference
+                            </p>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Payment Details */}
+                      <td className="px-6 py-4">
+                        {booking.status === 'CONFIRMED' && booking.paymentAmount ? (
+                          <div className="space-y-1">
+                            <p className="font-bold text-lg text-green-600">
+                              ${booking.paymentAmount} {booking.paymentToken}
+                            </p>
+                            {booking.chainId && (
+                              <p className="text-xs text-gray-600">
+                                ⛓️ {getChainName(booking.chainId)}
+                              </p>
+                            )}
+                            {booking.txHash && (
+                              <a
+                                href={`https://arbiscan.io/tx/${booking.txHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:underline font-mono block truncate max-w-[150px]"
+                                title={booking.txHash}
+                              >
+                                {booking.txHash.slice(0, 8)}...{booking.txHash.slice(-6)}
+                              </a>
+                            )}
+                            {booking.blockNumber && (
+                              <p className="text-xs text-gray-500">
+                                Block: {booking.blockNumber}
+                              </p>
+                            )}
+                          </div>
+                        ) : booking.selectedRoomPriceUSDC || booking.selectedRoomPriceUSDT ? (
+                          <div className="space-y-1">
+                            {booking.selectedRoomPriceUSDC && (
+                              <p className="text-sm text-green-600">
+                                ${booking.selectedRoomPriceUSDC} USDC
+                              </p>
+                            )}
+                            {booking.selectedRoomPriceUSDT && (
+                              <p className="text-sm text-purple-600">
+                                ${booking.selectedRoomPriceUSDT} USDT
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">
+                            Not yet determined
+                          </p>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-6 py-4">
+                        {getStatusBadge(booking.status)}
+                      </td>
+
+                      {/* Action */}
+                      <td className="px-6 py-4">
+                        {booking.status === 'WAITLISTED' ? (
+                          <ApproveWaitlistButton 
+                            bookingId={booking.bookingId}
+                            onApproved={handleApproved}
+                          />
+                        ) : booking.status === 'PENDING' ? (
+                          <div className="space-y-2">
+                            <a 
+                              href={`/booking/${booking.bookingId}`}
+                              target="_blank"
+                              className="text-sm text-blue-600 hover:underline block"
+                            >
+                              View Payment →
+                            </a>
+                            {booking.expiresAt && new Date(booking.expiresAt) > new Date() && (
+                              <p className="text-xs text-amber-600">
+                                Expires: {new Date(booking.expiresAt).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        ) : booking.status === 'CONFIRMED' ? (
+                          <span className="text-green-600 font-semibold text-sm">
+                            ✓ Paid
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-sm">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-
-// --- Styling ---
-const styles = {
-  container: {
-    fontFamily: "Arial, sans-serif",
-    maxWidth: "1600px",
-    margin: "0 auto",
-    padding: "20px",
-  },
-  error: {
-    color: "#c00",
-    backgroundColor: "#ffebee",
-    padding: "12px",
-    borderRadius: "6px",
-    marginBottom: "20px",
-    border: "1px solid #fcc",
-  },
-  statsBox: {
-    display: "flex",
-    gap: "20px",
-    marginBottom: "30px",
-    flexWrap: "wrap" as const,
-  },
-  stat: {
-    backgroundColor: "white",
-    padding: "24px",
-    borderRadius: "8px",
-    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-    minWidth: "150px",
-    flex: "1",
-  },
-  statNumber: {
-    fontSize: "2.5rem",
-    fontWeight: "bold",
-    color: "#0070f3",
-  },
-  statLabel: {
-    fontSize: "0.9rem",
-    color: "#666",
-    marginTop: "8px",
-  },
-  tabs: {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "20px",
-    borderBottom: "2px solid #e0e0e0",
-  },
-  tab: {
-    padding: "12px 24px",
-    backgroundColor: "transparent",
-    border: "none",
-    borderBottom: "3px solid transparent",
-    cursor: "pointer",
-    fontSize: "0.95rem",
-    fontWeight: "500",
-    color: "#666",
-    transition: "all 0.2s",
-  },
-  activeTab: {
-    color: "#0070f3",
-    borderBottomColor: "#0070f3",
-    fontWeight: "600",
-  },
-  tableContainer: {
-    backgroundColor: "white",
-    borderRadius: "8px",
-    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-    overflow: "auto",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse" as const,
-  },
-  th: {
-    padding: "12px 16px",
-    textAlign: "left" as const,
-    backgroundColor: "#f5f5f5",
-    fontWeight: "600",
-    fontSize: "0.85rem",
-    color: "#333",
-    borderBottom: "2px solid #e0e0e0",
-    whiteSpace: "nowrap" as const,
-  },
-  tr: {
-    borderBottom: "1px solid #e0e0e0",
-    transition: "background-color 0.2s",
-  },
-  td: {
-    padding: "12px 16px",
-    fontSize: "0.9rem",
-    color: "#333",
-  },
-  code: {
-    backgroundColor: "#f5f5f5",
-    padding: "4px 8px",
-    borderRadius: "4px",
-    fontSize: "0.8rem",
-    fontFamily: "monospace",
-  },
-  roomBadge: {
-    backgroundColor: "#e0f2fe",
-    color: "#075985",
-    padding: "4px 8px",
-    borderRadius: "4px",
-    fontSize: "0.85rem",
-    fontWeight: "500",
-  },
-  emailLink: {
-    color: "#0070f3",
-    textDecoration: "none",
-  },
-  amount: {
-    fontWeight: "600",
-    color: "#059669",
-    fontSize: "0.85rem",
-  },
-  dateText: {
-    fontSize: "0.9rem",
-    color: "#333",
-  },
-  timeText: {
-    fontSize: "0.8rem",
-    color: "#999",
-    marginTop: "2px",
-  },
-  viewLink: {
-    color: "#0070f3",
-    textDecoration: "none",
-    fontSize: "0.9rem",
-    fontWeight: "500",
-  },
-  expiryNote: {
-    fontSize: "0.75rem",
-    color: "#f59e0b",
-    marginTop: "4px",
-  },
-  loading: {
-    textAlign: "center" as const,
-    padding: "40px",
-    color: "#666",
-  },
-  empty: {
-    textAlign: "center" as const,
-    padding: "40px",
-    color: "#999",
-  },
-  legend: {
-    marginTop: "20px",
-    padding: "16px",
-    backgroundColor: "#f9fafb",
-    borderRadius: "6px",
-    fontSize: "0.85rem",
-    color: "#4b5563",
-  },
-  legendList: {
-    marginTop: "8px",
-    marginLeft: "20px",
-  },
-} as const;

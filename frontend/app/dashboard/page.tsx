@@ -7,30 +7,38 @@ import { SiweMessage } from "siwe";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ConnectKitButton } from "connectkit";
 import Link from "next/link";
-import { AlertTriangle, Calendar, DollarSign } from "lucide-react"; // Added Calendar and DollarSign
+import { AlertTriangle, Calendar, DollarSign, ExternalLink } from "lucide-react";
 
-// ✅ UPDATED: Added nights-based pricing fields
+// ✅ UPDATED: Added check-in/out date fields
 type Booking = {
   bookingId: string;
   status: string;
   guestName: string;
   guestEmail: string;
   
-  // ✅ NEW: Nights-based pricing
+  // ✅ NEW: Date fields
   numberOfNights: number | null;
+  checkInDate: string | null;   // ✅ NEW
+  checkOutDate: string | null;  // ✅ NEW
+  
+  // Pricing
   pricePerNightUSDC: number | null;
   pricePerNightUSDT: number | null;
-  selectedRoomPriceUSDC: number | null;  // Total price USDC
-  selectedRoomPriceUSDT: number | null;  // Total price USDT
+  selectedRoomPriceUSDC: number | null;
+  selectedRoomPriceUSDT: number | null;
   selectedRoomName: string | null;
   
-  // Legacy fields
+  // Payment
   paymentAmount: number | null;
   paymentToken: string | null;
+  txHash: string | null;        // ✅ Transaction hash
+  chain: string | null;
+  chainId: number | null;
+  blockNumber: number | null;
   
   expiresAt: string | null;
-  createdAt: string;
   confirmedAt: string | null;
+  createdAt: string;
   
   stay: {
     id: string;
@@ -39,7 +47,7 @@ type Booking = {
     location: string;
     startDate: string;
     endDate: string;
-    duration: number;  // ✅ NEW: Number of nights
+    duration: number;
     priceUSDC: number;
     priceUSDT: number;
   };
@@ -70,6 +78,27 @@ export default function UserDashboard() {
   const truncateAddress = (addr: string | null) => {
     if (!addr) return "";
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+  };
+
+  // ✅ Helper to get block explorer URL
+  const getExplorerUrl = (chainId: number | null, txHash: string) => {
+    const explorers: Record<number, string> = {
+      42161: 'https://arbiscan.io',
+      56: 'https://bscscan.com',
+      8453: 'https://basescan.org',
+    };
+    const baseUrl = chainId ? explorers[chainId] || 'https://etherscan.io' : 'https://etherscan.io';
+    return `${baseUrl}/tx/${txHash}`;
+  };
+
+  // ✅ Helper to get chain name
+  const getChainName = (chainId: number | null): string => {
+    const chains: Record<number, string> = {
+      42161: 'Arbitrum',
+      56: 'BNB Chain',
+      8453: 'Base',
+    };
+    return chainId ? (chains[chainId] || `Chain ${chainId}`) : 'Unknown';
   };
 
   // Detects if a wallet is connected, but it's not the one linked to the session
@@ -520,16 +549,18 @@ export default function UserDashboard() {
             const isExpired =
               booking.expiresAt && new Date(booking.expiresAt) < new Date();
             
-            // ✅ Calculate nights from stay duration or booking
+            // Calculate nights and dates
             const nights = booking.numberOfNights || booking.stay.duration || 0;
+            const checkInDate = booking.checkInDate ? new Date(booking.checkInDate) : null;
+            const checkOutDate = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
             
-            // ✅ Get per-night and total prices
+            // Get prices
             const perNightUSDC = booking.pricePerNightUSDC;
             const perNightUSDT = booking.pricePerNightUSDT;
             const totalUSDC = booking.selectedRoomPriceUSDC || booking.paymentAmount;
             const totalUSDT = booking.selectedRoomPriceUSDT;
             
-            // Determine which token was used for payment
+            // Determine which token was used
             const paymentToken = booking.paymentToken || 
               (totalUSDC && totalUSDT ? 'USDC' : totalUSDC ? 'USDC' : 'USDT');
             
@@ -548,7 +579,7 @@ export default function UserDashboard() {
                   {booking.stay.title}
                 </h3>
                 
-                {/* ✅ NEW: Show room name if selected */}
+                {/* Room name if selected */}
                 {booking.selectedRoomName && (
                   <p className="text-md text-blue-600 font-semibold mb-2">
                     🛏️ {booking.selectedRoomName}
@@ -558,10 +589,38 @@ export default function UserDashboard() {
                 <p className="text-lg text-gray-600 mb-1">
                   📍 {booking.stay.location}
                 </p>
-                <p className="text-base text-gray-500 mb-5">
-                  🗓️ {new Date(booking.stay.startDate).toLocaleDateString()} -{" "}
-                  {new Date(booking.stay.endDate).toLocaleDateString()}
-                </p>
+
+                {/* ✅ NEW: Show Check-In/Out Dates */}
+                {checkInDate && checkOutDate && (
+                  <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 my-4">
+                    <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                      <Calendar size={16} />
+                      Your Stay Period
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="text-center">
+                        <div className="text-xs text-gray-500 mb-1">Check-in</div>
+                        <div className="font-bold text-gray-900">
+                          {checkInDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 px-3">
+                        <div className="text-center">
+                          <div className="text-xs text-gray-500 mb-1">Duration</div>
+                          <div className="font-bold text-blue-600">
+                            {nights} night{nights !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-gray-500 mb-1">Check-out</div>
+                        <div className="font-bold text-gray-900">
+                          {checkOutDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="p-4 bg-gray-50 rounded-lg mb-5 text-base text-gray-700">
                   {statusInfo.message}
@@ -581,20 +640,7 @@ export default function UserDashboard() {
                     </span>
                   </div>
                   
-                  {/* ✅ NEW: Show nights */}
-                  {nights > 0 && (
-                    <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
-                      <span className="text-gray-500 flex items-center gap-1">
-                        <Calendar size={16} />
-                        Duration:
-                      </span>
-                      <span className="text-gray-900 font-semibold">
-                        {nights} night{nights !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {/* ✅ UPDATED: Show per-night price if available */}
+                  {/* Per-night pricing if available */}
                   {perNightUSDC && perNightUSDT && nights > 0 && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
                       <div className="flex justify-between items-center mb-2 text-sm">
@@ -615,7 +661,7 @@ export default function UserDashboard() {
                     </div>
                   )}
                   
-                  {/* ✅ UPDATED: Show total amount */}
+                  {/* Total amount */}
                   {(totalUSDC || totalUSDT || booking.paymentAmount) && (
                     <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
                       <span className="text-gray-500 font-semibold">Total Amount:</span>
@@ -624,23 +670,47 @@ export default function UserDashboard() {
                       </span>
                     </div>
                   )}
+
+                  {/* ✅ NEW: Transaction Hash (for confirmed bookings) */}
+                  {booking.status === "CONFIRMED" && booking.txHash && (
+                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mt-4">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <span className="text-sm font-semibold text-gray-700">
+                          Transaction Hash:
+                        </span>
+                        <a
+                          href={getExplorerUrl(booking.chainId, booking.txHash)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-mono hover:underline"
+                        >
+                          {booking.txHash.slice(0, 10)}...{booking.txHash.slice(-8)}
+                          <ExternalLink size={14} />
+                        </a>
+                      </div>
+                      {booking.chainId && (
+                        <div className="flex justify-between items-center text-xs text-gray-600">
+                          <span>Network:</span>
+                          <span className="font-semibold">{getChainName(booking.chainId)}</span>
+                        </div>
+                      )}
+                      {booking.blockNumber && (
+                        <div className="flex justify-between items-center text-xs text-gray-600 mt-1">
+                          <span>Block:</span>
+                          <span className="font-mono">#{booking.blockNumber}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
+                {/* Action Buttons */}
                 {booking.status === "PENDING" && !isExpired && (
                   <Link
                     href={`/booking/${booking.bookingId}`}
                     className="block w-full py-3 px-5 bg-[#172a46] text-white text-center rounded-lg font-semibold text-lg hover:bg-[#172a46]/80 transition-colors"
                   >
                     Complete Payment
-                  </Link>
-                )}
-
-                {booking.status === "CONFIRMED" && (
-                  <Link
-                    href={`/booking/${booking.bookingId}/details`}
-                    className="block w-full py-3 px-5 bg-[#172a46] text-white text-center rounded-lg font-semibold text-lg hover:bg-[#172a46]/80 transition-colors"
-                  >
-                    View Booking Details
                   </Link>
                 )}
 
@@ -652,6 +722,8 @@ export default function UserDashboard() {
                     View Stay Details
                   </Link>
                 )}
+
+                {/* ✅ REMOVED: "View Booking Details" button - everything is shown here */}
               </div>
             );
           })}
