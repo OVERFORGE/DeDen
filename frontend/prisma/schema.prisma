@@ -1,6 +1,6 @@
 // Decentralized Den - Production-Ready Prisma Schema
-// ✅ UPDATED: Added checkInDate and checkOutDate to Booking model
-// Version: 2.1 - MongoDB Optimized
+// ✅ UPDATED: Added Community Referral & Loyalty Discount System
+// Version: 3.0 - MongoDB Optimized
 
 generator client {
   provider = "prisma-client-js"
@@ -88,20 +88,19 @@ enum UserRole {
 
 // ============================================================================
 // USER MODEL - Authentication, profile, and privacy
-// ✅ FIXED: walletAddress is now NOT unique (allows multiple nulls)
 // ============================================================================
 
 model User {
   id              String    @id @default(auto()) @map("_id") @db.ObjectId
   
   // Authentication - NextAuth fields
-  name            String?   // NextAuth uses 'name' field
+  name            String?
   email           String?   @unique
-  emailVerified   DateTime? // NextAuth uses DateTime? for this
-  image           String?   // NextAuth profile image
+  emailVerified   DateTime?
+  image           String?
   
-  // ✅ FIXED: Web3 Authentication - NOT unique to allow multiple users without wallets
-  walletAddress   String?   // ← REMOVED @unique to fix duplicate null error
+  // Web3 Authentication
+  walletAddress   String?
   
   // Profile Information
   displayName     String?
@@ -151,12 +150,11 @@ model User {
   
   @@index([userRole])
   @@index([createdAt])
-  @@index([walletAddress]) // Index for performance (not uniqueness)
+  @@index([walletAddress])
 }
 
 // ============================================================================
 // STAY MODEL - The core product/event
-// ✅ UPDATED: duration is now mandatory, prices are PER NIGHT
 // ============================================================================
 
 model Stay {
@@ -171,19 +169,19 @@ model Stay {
   location        String
   venue           String?
   
-  // ✅ UPDATED: Dates & Duration (NIGHTS)
+  // Dates & Duration (NIGHTS)
   startDate       DateTime
   endDate         DateTime
-  duration        Int       // ✅ MANDATORY: Number of nights (auto-calculated from dates)
+  duration        Int
   
   // Capacity
   slotsTotal      Int
   slotsAvailable  Int
   guestCapacity   Int?
   
-  // ✅ UPDATED: Pricing PER NIGHT (used as default for rooms)
-  priceUSDC       Float     // Price per night in USDC
-  priceUSDT       Float     // Price per night in USDT
+  // Pricing PER NIGHT (used as default for rooms)
+  priceUSDC       Float
+  priceUSDT       Float
   currency        String    @default("USD")
   depositAmount   Float?
   
@@ -193,8 +191,7 @@ model Stay {
   images          String[]  @default([])
   videoUrl        String?
   
-  // ✅ Rooms Configuration (prices are PER NIGHT)
-  // Structure: { id, name, description, capacity, priceUSDC, priceUSDT, images, amenities }
+  // Rooms Configuration (prices are PER NIGHT)
   rooms           Json[]    @default([])
   
   // Amenities & Features
@@ -231,6 +228,9 @@ model Stay {
   waitlistEntries WaitlistEntry[]
   addons          Addon[]
   
+  // ✅ NEW: Referral Codes for this stay
+  referralCodes   ReferralCode[]
+  
   // Metadata
   metadata        Json?
   
@@ -244,8 +244,49 @@ model Stay {
 }
 
 // ============================================================================
+// ✅ NEW: REFERRAL CODE MODEL - Community Referral System
+// ============================================================================
+
+model ReferralCode {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Community Info
+  communityName   String
+  code            String    @unique
+  
+  // Link to specific stay/event
+  stay            Stay      @relation(fields: [stayId], references: [id])
+  stayId          String    @db.ObjectId
+  
+  // Discount Configuration
+  discountPercent Int       @default(10) // 10% discount
+  
+  // Usage Tracking
+  usageCount      Int       @default(0)
+  maxUsage        Int?      // Optional usage limit
+  
+  // Status
+  isActive        Boolean   @default(true)
+  expiresAt       DateTime?
+  
+  // Relations
+  bookings        Booking[]
+  
+  // Metadata
+  notes           String?
+  createdBy       String?   // Admin who created it
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([stayId])
+  @@index([communityName])
+  @@index([isActive])
+}
+
+// ============================================================================
 // BOOKING MODEL - Core transaction/reservation
-// ✅ UPDATED: Now includes check-in/out dates and nights-based pricing
+// ✅ UPDATED: Added referral and loyalty discount fields
 // ============================================================================
 
 model Booking {
@@ -270,16 +311,16 @@ model Booking {
   selectedRoomId  String?
   guestCount      Int           @default(1)
   
-  // ✅ NEW: Nights-Based Pricing Fields with Check-In/Out Dates
-  numberOfNights      Int?          // Number of nights for this booking
-  checkInDate         DateTime?     // ✅ NEW: User-selected check-in date
-  checkOutDate        DateTime?     // ✅ NEW: User-selected check-out date
-  pricePerNightUSDC   Float?        // Room price PER NIGHT in USDC
-  pricePerNightUSDT   Float?        // Room price PER NIGHT in USDT
+  // Nights-Based Pricing Fields with Check-In/Out Dates
+  numberOfNights      Int?
+  checkInDate         DateTime?
+  checkOutDate        DateTime?
+  pricePerNightUSDC   Float?
+  pricePerNightUSDT   Float?
   
-  // ✅ UPDATED: Total Prices (calculated: pricePerNight × numberOfNights)
-  selectedRoomPriceUSDC Float?      // TOTAL price (per night × nights) in USDC
-  selectedRoomPriceUSDT Float?      // TOTAL price (per night × nights) in USDT
+  // Total Prices (calculated: pricePerNight × numberOfNights)
+  selectedRoomPriceUSDC Float?
+  selectedRoomPriceUSDT Float?
   selectedRoomName      String?
   
   // Guest Info Snapshot
@@ -287,9 +328,21 @@ model Booking {
   guestEmail      String?
   guestPhone      String?
   
+  // ✅ NEW: Referral Code & Discount Tracking
+  referralCode     ReferralCode?  @relation(fields: [referralCodeId], references: [id])
+  referralCodeId   String?        @db.ObjectId
+  referralCodeUsed String?        // Store the actual code string for reference
+  
+  discountPercent  Int?           // Percentage discount applied (10% or 20%)
+  discountAmount   Float?         // Dollar amount discounted
+  originalPrice    Float?         // Price before discount
+  finalPrice       Float?         // Price after discount (what user actually pays)
+  
+  isLoyaltyDiscount Boolean       @default(false) // TRUE if 20% loyalty discount applied
+  
   // Payment Information
   paymentToken    PaymentToken?
-  paymentAmount   Float?            // Total amount to pay (matches selectedRoomPrice)
+  paymentAmount   Float?
   amountBaseUnits String?
   chain           String?
   chainId         Int?
@@ -355,6 +408,7 @@ model Booking {
   @@index([numberOfNights])
   @@index([checkInDate])
   @@index([checkOutDate])
+  @@index([referralCodeId])
 }
 
 // ============================================================================

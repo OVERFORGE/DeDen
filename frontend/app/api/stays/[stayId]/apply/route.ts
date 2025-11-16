@@ -1,393 +1,487 @@
 // File: app/api/stays/[stayId]/apply/route.ts
-// ✅ UPDATED: Now saves checkInDate and checkOutDate to database
+// ✅ UPDATED: Now handles referral codes and loyalty discounts
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
-import { BookingStatus } from '@prisma/client'; 
-import { getServerSession } from "next-auth"; 
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"; 
+import { BookingStatus } from '@prisma/client';
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 /**
- * Apply for a stay (join waitlist) - WITH USER-SELECTED DATES & NIGHTS
+ * Apply for a stay with referral code and loyalty discount support
  * POST /api/stays/[stayId]/apply
  */
 export async function POST(
-	request: Request,
-	context: { params: Promise<{ stayId: string }> }
+  request: Request,
+  context: { params: Promise<{ stayId: string }> }
 ) {
-	try {
-		// 1. Get Authenticated Session
-		const session = await getServerSession(authOptions);
-		if (!session || !session.user || !session.user.id) {
-			return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-		}
-		const userId = session.user.id;
+  try {
+    // 1. Get Authenticated Session
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user || !session.user.id) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const userId = session.user.id;
 
-		const { stayId } = await context.params;
-		
-		const body = await request.json();
+    const { stayId } = await context.params;
+    const body = await request.json();
 
-		const {
-			walletAddress,
-			email,
-			displayName,
-			firstName,
-			lastName,
-			role,
-			gender,
-			age,
-			mobileNumber,
-			selectedRoomId,
-			numberOfNights, // User-selected nights
-			checkInDate,    // ✅ NEW: User-selected check-in date
-			checkOutDate,   // ✅ NEW: User-selected check-out date
-			socialTwitter,
-			socialTelegram,
-			socialLinkedin,
-		} = body;
+    const {
+      walletAddress,
+      email,
+      displayName,
+      firstName,
+      lastName,
+      role,
+      gender,
+      age,
+      mobileNumber,
+      selectedRoomId,
+      numberOfNights,
+      checkInDate,
+      checkOutDate,
+      socialTwitter,
+      socialTelegram,
+      socialLinkedin,
+      referralCode, // ✅ NEW: Referral code from form
+    } = body;
 
-		// 2. Validation
-		if (!stayId || stayId === 'undefined') {
-			return NextResponse.json(
-				{ error: 'A valid stayId is required in the URL' },
-				{ status: 400 }
-			);
-		}
+    // 2. Validation
+    if (!stayId || stayId === 'undefined') {
+      return NextResponse.json(
+        { error: 'A valid stayId is required in the URL' },
+        { status: 400 }
+      );
+    }
 
-		if (!walletAddress || !gender || !age || !mobileNumber || !email || !displayName) {
-			return NextResponse.json(
-				{ error: 'Missing required fields: walletAddress, email, displayName, gender, age, mobileNumber' },
-				{ status: 400 }
-			);
-		}
+    if (!walletAddress || !gender || !age || !mobileNumber || !email || !displayName) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
 
-		if (age < 18) {
-			return NextResponse.json(
-				{ error: 'You must be at least 18 years old to apply' },
-				{ status: 400 }
-			);
-		}
+    if (age < 18) {
+      return NextResponse.json(
+        { error: 'You must be at least 18 years old to apply' },
+        { status: 400 }
+      );
+    }
 
-		// ✅ NEW: Validate numberOfNights and dates
-		if (!numberOfNights || numberOfNights < 1) {
-			return NextResponse.json(
-				{ error: 'Please select at least 1 night' },
-				{ status: 400 }
-			);
-		}
+    if (!numberOfNights || numberOfNights < 1) {
+      return NextResponse.json(
+        { error: 'Please select at least 1 night' },
+        { status: 400 }
+      );
+    }
 
-		if (!checkInDate || !checkOutDate) {
-			return NextResponse.json(
-				{ error: 'Please select check-in and check-out dates' },
-				{ status: 400 }
-			);
-		}
+    if (!checkInDate || !checkOutDate) {
+      return NextResponse.json(
+        { error: 'Please select check-in and check-out dates' },
+        { status: 400 }
+      );
+    }
 
-		// 3. Find the Stay
-		const stay = await db.stay.findUnique({
-			where: { stayId: stayId },
-		});
+    // 3. Find the Stay
+    const stay = await db.stay.findUnique({
+      where: { stayId: stayId },
+    });
 
-		if (!stay) {
-			return NextResponse.json(
-				{ error: `Stay with ID '${stayId}' not found` },
-				{ status: 404 }
-			);
-		}
+    if (!stay) {
+      return NextResponse.json(
+        { error: `Stay with ID '${stayId}' not found` },
+        { status: 404 }
+      );
+    }
 
-		if (!stay.allowWaitlist) {
-			return NextResponse.json(
-				{ error: 'This stay is not accepting applications' },
-				{ status: 400 }
-			);
-		}
+    if (!stay.allowWaitlist) {
+      return NextResponse.json(
+        { error: 'This stay is not accepting applications' },
+        { status: 400 }
+      );
+    }
 
-		// ✅ Validate that selected nights don't exceed stay duration
-		const stayDuration = stay.duration || Math.ceil(
-			(new Date(stay.endDate).getTime() - new Date(stay.startDate).getTime()) / (1000 * 60 * 60 * 24)
-		);
+    // Validate nights
+    const stayDuration = stay.duration || Math.ceil(
+      (new Date(stay.endDate).getTime() - new Date(stay.startDate).getTime()) / (1000 * 60 * 60 * 24)
+    );
 
-		if (numberOfNights > stayDuration) {
-			return NextResponse.json(
-				{ error: `Cannot book more than ${stayDuration} nights for this stay` },
-				{ status: 400 }
-			);
-		}
+    if (numberOfNights > stayDuration) {
+      return NextResponse.json(
+        { error: `Cannot book more than ${stayDuration} nights for this stay` },
+        { status: 400 }
+      );
+    }
 
-		console.log(`[Apply] User selected ${numberOfNights} nights from ${checkInDate} to ${checkOutDate}`);
+    // 4. ✅ CHECK LOYALTY DISCOUNT (20% for returning customers)
+    const previousBookings = await db.booking.count({
+      where: {
+        userId: userId,
+        status: BookingStatus.CONFIRMED,
+      },
+    });
 
-		// ============================================
-		// ✅ Find selected room & calculate price based on USER-SELECTED nights
-		// ============================================
-		let pricePerNightUSDC: number | null = null;
-		let pricePerNightUSDT: number | null = null;
-		let totalPriceUSDC: number | null = null;
-		let totalPriceUSDT: number | null = null;
-		let roomName: string | null = null;
+    const isLoyaltyEligible = previousBookings > 0;
+    let loyaltyDiscountPercent = isLoyaltyEligible ? 20 : 0;
 
-		if (selectedRoomId) {
-			const rooms = (stay.rooms as any[]) || [];
-			const selectedRoom = rooms.find((r: any) => r.id === selectedRoomId);
-			
-			if (selectedRoom) {
-				// Room prices are PER NIGHT
-				pricePerNightUSDC = selectedRoom.priceUSDC ?? stay.priceUSDC;
-				pricePerNightUSDT = selectedRoom.priceUSDT ?? stay.priceUSDT;
-				
-				if (typeof pricePerNightUSDC !== 'number' || typeof pricePerNightUSDT !== 'number') {
-					console.error(`[Apply] Invalid price for room ${selectedRoomId}.`);
-					return NextResponse.json({ error: "Could not determine price for selected room" }, { status: 500 });
-				}
-				
-				// ✅ Calculate TOTAL using USER-SELECTED nights
-				totalPriceUSDC = pricePerNightUSDC * numberOfNights;
-				totalPriceUSDT = pricePerNightUSDT * numberOfNights;
-				roomName = selectedRoom.name;
+    console.log(`[Apply] User has ${previousBookings} previous confirmed bookings`);
+    console.log(`[Apply] Loyalty discount: ${loyaltyDiscountPercent}%`);
 
-				console.log(`[Apply] Room: ${roomName}`);
-				console.log(`[Apply] Price per night: $${pricePerNightUSDC} USDC / $${pricePerNightUSDT} USDT`);
-				console.log(`[Apply] Total for ${numberOfNights} nights: $${totalPriceUSDC} USDC / $${totalPriceUSDT} USDT`);
-			}
-		} else {
-			// No room selected - use default stay prices
-			pricePerNightUSDC = stay.priceUSDC;
-			pricePerNightUSDT = stay.priceUSDT;
-			totalPriceUSDC = pricePerNightUSDC * numberOfNights;
-			totalPriceUSDT = pricePerNightUSDT * numberOfNights;
+    // 5. ✅ VALIDATE REFERRAL CODE (10% discount)
+    let validatedReferralCode = null;
+    let referralDiscountPercent = 0;
 
-			console.log(`[Apply] No room preference - using default prices`);
-			console.log(`[Apply] Total for ${numberOfNights} nights: $${totalPriceUSDC} USDC / $${totalPriceUSDT} USDT`);
-		}
+    if (referralCode && referralCode.trim()) {
+      const referral = await db.referralCode.findFirst({
+        where: {
+          code: referralCode.trim().toUpperCase(),
+          stayId: stay.id,
+          isActive: true,
+        },
+      });
 
-		// 5. Get & Update Authenticated User
-		const emailConflict = await db.user.findFirst({
-			where: {
-				email: email,
-				id: { not: userId },
-			},
-		});
+      if (referral) {
+        // Check expiration
+        if (referral.expiresAt && new Date(referral.expiresAt) < new Date()) {
+          return NextResponse.json(
+            { error: 'This referral code has expired' },
+            { status: 410 }
+          );
+        }
 
-		if (emailConflict) {
-			return NextResponse.json(
-				{ error: 'This email is already registered with another account.' },
-				{ status: 409 }
-			);
-		}
+        // Check usage limit
+        if (referral.maxUsage && referral.usageCount >= referral.maxUsage) {
+          return NextResponse.json(
+            { error: 'This referral code has reached its usage limit' },
+            { status: 410 }
+          );
+        }
 
-		const user = await db.user.update({
-			where: { id: userId },
-			data: {
-				displayName: displayName,
-				email: email,
-				firstName: firstName,
-				lastName: lastName,
-				role: role,
-				gender: gender,
-				age: age,
-				mobileNumber: mobileNumber,
-				socialTwitter: socialTwitter,
-				socialTelegram: socialTelegram,
-				socialLinkedin: socialLinkedin,
-				walletAddress: walletAddress,
-			},
-		});
-		
-		// 6. Check for existing booking
-		const existingBooking = await db.booking.findFirst({
-			where: {
-				userId: user.id,
-				stayId: stay.id,
-			},
-			select: {
-				id: true,
-				bookingId: true,
-				status: true
-			}
-		});
+        validatedReferralCode = referral;
+        referralDiscountPercent = referral.discountPercent;
+        console.log(`[Apply] Valid referral code: ${referral.code} (${referralDiscountPercent}%)`);
+      } else {
+        return NextResponse.json(
+          { error: 'Invalid referral code for this stay' },
+          { status: 404 }
+        );
+      }
+    }
 
-		if (existingBooking) {
-			const isTerminalStatus = 
-				existingBooking.status === BookingStatus.FAILED ||
-				existingBooking.status === BookingStatus.EXPIRED ||
-				existingBooking.status === BookingStatus.CANCELLED ||
-				existingBooking.status === BookingStatus.REFUNDED;
+    // 6. ✅ CALCULATE FINAL DISCOUNT
+    // Priority: Loyalty (20%) > Referral (10%)
+    // User gets the HIGHEST discount available
+    const finalDiscountPercent = Math.max(loyaltyDiscountPercent, referralDiscountPercent);
+    const isLoyaltyDiscount = finalDiscountPercent === loyaltyDiscountPercent && loyaltyDiscountPercent > 0;
 
-			if (isTerminalStatus) {
-				// Update old booking
-				const updatedBooking = await db.booking.update({
-					where: { id: existingBooking.id },
-					data: {
-						status: BookingStatus.WAITLISTED,
-						preferredRoomId: selectedRoomId || null,
-						selectedRoomId: selectedRoomId || null,
-						// ✅ UPDATED: Store user-selected dates and nights
-						numberOfNights: numberOfNights,
-						checkInDate: new Date(checkInDate),      // ✅ NEW
-						checkOutDate: new Date(checkOutDate),    // ✅ NEW
-						pricePerNightUSDC: pricePerNightUSDC,
-						pricePerNightUSDT: pricePerNightUSDT,
-						// ✅ Store calculated totals
-						selectedRoomPriceUSDC: totalPriceUSDC,  
-						selectedRoomPriceUSDT: totalPriceUSDT,  
-						selectedRoomName: roomName,
-						guestName: user.displayName,
-						guestEmail: user.email,
-						guestGender: gender,
-						guestAge: age,
-						guestMobile: mobileNumber,
-						// Clear payment fields
-						paymentToken: null,
-						paymentAmount: null,
-						txHash: null,
-						chainId: null,
-						expiresAt: null,
-						confirmedAt: null,
-					}
-				});
-				
-				return NextResponse.json(
-					{
-						success: true,
-						message: 'Application re-submitted successfully. Check your dashboard for status updates.',
-						booking: {
-							bookingId: updatedBooking.bookingId,
-							status: updatedBooking.status,
-							stayTitle: stay.title,
-							selectedRoomName: roomName,
-							numberOfNights: numberOfNights,
-							checkInDate: checkInDate,
-							checkOutDate: checkOutDate,
-							pricePerNightUSDC: pricePerNightUSDC,
-							pricePerNightUSDT: pricePerNightUSDT,
-							totalPriceUSDC: totalPriceUSDC,
-							totalPriceUSDT: totalPriceUSDT,
-						},
-					},
-					{ status: 201 }
-				);
+    console.log(`[Apply] Final discount applied: ${finalDiscountPercent}% (${isLoyaltyDiscount ? 'Loyalty' : 'Referral'})`);
 
-			} else {
-				return NextResponse.json(
-					{
-						error: `You have an active application for this stay. Status: ${existingBooking.status}. Check your dashboard for details.`,
-						bookingId: existingBooking.bookingId,
-						status: existingBooking.status,
-					},
-					{ status: 409 }
-				);
-			}
-		}
+    // 7. ✅ CALCULATE PRICES WITH DISCOUNT
+    let pricePerNightUSDC: number | null = null;
+    let pricePerNightUSDT: number | null = null;
+    let originalTotalUSDC: number | null = null;
+    let originalTotalUSDT: number | null = null;
+    let finalTotalUSDC: number | null = null;
+    let finalTotalUSDT: number | null = null;
+    let discountAmountUSDC: number | null = null;
+    let discountAmountUSDT: number | null = null;
+    let roomName: string | null = null;
 
-		// 7. Create NEW Booking
-		const randomId = `${stayId}-${Date.now()}`;
+    if (selectedRoomId) {
+      const rooms = (stay.rooms as any[]) || [];
+      const selectedRoom = rooms.find((r: any) => r.id === selectedRoomId);
 
-		const newBooking = await db.booking.create({
-			data: {
-				bookingId: randomId,
-				status: BookingStatus.WAITLISTED,
-				userId: user.id,
-				stayId: stay.id,
-				guestName: user.displayName,
-				guestEmail: user.email,
-				guestGender: gender,
-				guestAge: age,
-				guestMobile: mobileNumber,
-				preferredRoomId: selectedRoomId || null,
-				selectedRoomId: selectedRoomId || null,
-				// ✅ UPDATED: Store user-selected dates and nights
-				numberOfNights: numberOfNights,
-				checkInDate: new Date(checkInDate),      // ✅ NEW
-				checkOutDate: new Date(checkOutDate),    // ✅ NEW
-				pricePerNightUSDC: pricePerNightUSDC,
-				pricePerNightUSDT: pricePerNightUSDT,
-				// ✅ Store calculated totals
-				selectedRoomPriceUSDC: totalPriceUSDC, 
-				selectedRoomPriceUSDT: totalPriceUSDT, 
-				selectedRoomName: roomName,
-				guestCount: 1,
-				optInGuestList: false,
-				shareContactInfo: false, 
-				contentReuseConsent: false, 
-				needsTravelHelp: false, 
-			},
-		});
+      if (selectedRoom) {
+        pricePerNightUSDC = selectedRoom.priceUSDC ?? stay.priceUSDC;
+        pricePerNightUSDT = selectedRoom.priceUSDT ?? stay.priceUSDT;
+        roomName = selectedRoom.name;
+      }
+    } else {
+      pricePerNightUSDC = stay.priceUSDC;
+      pricePerNightUSDT = stay.priceUSDT;
+    }
 
-		// 8. Log Activity
-		await db.activityLog.create({
-			data: {
-				userId: user.id,
-				bookingId: newBooking.id,
-				action: 'application_submitted',
-				entity: 'booking',
-				entityId: newBooking.id,
-				details: {
-					stayId: stay.stayId,
-					email: user.email,
-					walletAddress: walletAddress,
-					gender: gender,
-					age: age,
-					mobileNumber: mobileNumber,
-					selectedRoomId: selectedRoomId,
-					selectedRoomName: roomName,
-					numberOfNights: numberOfNights,
-					checkInDate: checkInDate,
-					checkOutDate: checkOutDate,
-					pricePerNightUSDC: pricePerNightUSDC,
-					pricePerNightUSDT: pricePerNightUSDT,
-					totalPriceUSDC: totalPriceUSDC,
-					totalPriceUSDT: totalPriceUSDT,
-				},
-			},
-		});
+    if (typeof pricePerNightUSDC !== 'number' || typeof pricePerNightUSDT !== 'number') {
+      return NextResponse.json({ error: "Could not determine price" }, { status: 500 });
+    }
 
-		// 9. Return Success
-		return NextResponse.json(
-			{
-				success: true,
-				message: 'Application submitted successfully. Check your dashboard for status updates.',
-				booking: {
-					bookingId: newBooking.bookingId,
-					status: newBooking.status,
-					stayTitle: stay.title,
-					selectedRoomName: roomName,
-					numberOfNights: numberOfNights,
-					checkInDate: checkInDate,
-					checkOutDate: checkOutDate,
-					pricePerNightUSDC: pricePerNightUSDC,
-					pricePerNightUSDT: pricePerNightUSDT,
-					totalPriceUSDC: totalPriceUSDC,
-					totalPriceUSDT: totalPriceUSDT,
-				},
-			},
-			{ status: 201 }
-		);
-	} catch (error) {
-		console.error('[Apply API Error]:', error);
-		
-		if ((error as any).name === 'PrismaClientValidationError') {
-			return NextResponse.json(
-				{ error: 'Invalid data provided to database' },
-				{ status: 400 }
-			);
-		}
+    // Calculate original totals
+    originalTotalUSDC = pricePerNightUSDC * numberOfNights;
+    originalTotalUSDT = pricePerNightUSDT * numberOfNights;
 
-		if ((error as any).code === 'P2002') {
-			const meta = (error as any).meta;
-			if (meta?.target?.includes('email')) {
-				return NextResponse.json(
-					{ error: 'This email is already registered. Please use a different email or sign in.' },
-					{ status: 409 }
-				);
-			}
-			return NextResponse.json(
-				{ error: 'You have already applied for this stay' },
-				{ status: 409 }
-			);
-		}
+    // Calculate discount amounts
+    discountAmountUSDC = (originalTotalUSDC * finalDiscountPercent) / 100;
+    discountAmountUSDT = (originalTotalUSDT * finalDiscountPercent) / 100;
 
-		return NextResponse.json(
-			{ error: 'Internal server error', details: (error as Error).message },
-			{ status: 500 }
-		);
-	}
+    // Calculate final prices
+    finalTotalUSDC = originalTotalUSDC - discountAmountUSDC;
+    finalTotalUSDT = originalTotalUSDT - discountAmountUSDT;
+
+    console.log(`[Apply] Original: $${originalTotalUSDC} USDC / $${originalTotalUSDT} USDT`);
+    console.log(`[Apply] Discount: -$${discountAmountUSDC} USDC / -$${discountAmountUSDT} USDT (${finalDiscountPercent}%)`);
+    console.log(`[Apply] Final: $${finalTotalUSDC} USDC / $${finalTotalUSDT} USDT`);
+
+    // 8. Get & Update Authenticated User
+    const emailConflict = await db.user.findFirst({
+      where: {
+        email: email,
+        id: { not: userId },
+      },
+    });
+
+    if (emailConflict) {
+      return NextResponse.json(
+        { error: 'This email is already registered with another account.' },
+        { status: 409 }
+      );
+    }
+
+    const user = await db.user.update({
+      where: { id: userId },
+      data: {
+        displayName,
+        email,
+        firstName,
+        lastName,
+        role,
+        gender,
+        age,
+        mobileNumber,
+        socialTwitter,
+        socialTelegram,
+        socialLinkedin,
+        walletAddress,
+      },
+    });
+
+    // 9. Check for existing booking
+    const existingBooking = await db.booking.findFirst({
+      where: {
+        userId: user.id,
+        stayId: stay.id,
+      },
+      select: {
+        id: true,
+        bookingId: true,
+        status: true,
+      },
+    });
+
+    if (existingBooking) {
+      const isTerminalStatus =
+        existingBooking.status === BookingStatus.FAILED ||
+        existingBooking.status === BookingStatus.EXPIRED ||
+        existingBooking.status === BookingStatus.CANCELLED ||
+        existingBooking.status === BookingStatus.REFUNDED;
+
+      if (isTerminalStatus) {
+        // Update old booking with new discount info
+        const updatedBooking = await db.booking.update({
+          where: { id: existingBooking.id },
+          data: {
+            status: BookingStatus.WAITLISTED,
+            preferredRoomId: selectedRoomId || null,
+            selectedRoomId: selectedRoomId || null,
+            numberOfNights,
+            checkInDate: new Date(checkInDate),
+            checkOutDate: new Date(checkOutDate),
+            pricePerNightUSDC,
+            pricePerNightUSDT,
+            // ✅ Discount fields
+            originalPrice: originalTotalUSDC,
+            discountPercent: finalDiscountPercent,
+            discountAmount: discountAmountUSDC,
+            finalPrice: finalTotalUSDC,
+            isLoyaltyDiscount,
+            referralCodeId: validatedReferralCode?.id || null,
+            referralCodeUsed: validatedReferralCode?.code || null,
+            // Store both currency options
+            selectedRoomPriceUSDC: finalTotalUSDC,
+            selectedRoomPriceUSDT: finalTotalUSDT,
+            selectedRoomName: roomName,
+            guestName: user.displayName,
+            guestEmail: user.email,
+            guestGender: gender,
+            guestAge: age,
+            guestMobile: mobileNumber,
+            // Clear payment fields
+            paymentToken: null,
+            paymentAmount: null,
+            txHash: null,
+            chainId: null,
+            expiresAt: null,
+            confirmedAt: null,
+          },
+        });
+
+        // Update referral code usage
+        if (validatedReferralCode) {
+          await db.referralCode.update({
+            where: { id: validatedReferralCode.id },
+            data: {
+              usageCount: { increment: 1 },
+            },
+          });
+        }
+
+        return NextResponse.json(
+          {
+            success: true,
+            message: 'Application re-submitted with discount applied!',
+            booking: {
+              bookingId: updatedBooking.bookingId,
+              status: updatedBooking.status,
+              stayTitle: stay.title,
+              selectedRoomName: roomName,
+              numberOfNights,
+              checkInDate,
+              checkOutDate,
+              originalPrice: originalTotalUSDC,
+              discountPercent: finalDiscountPercent,
+              discountAmount: discountAmountUSDC,
+              finalPriceUSDC: finalTotalUSDC,
+              finalPriceUSDT: finalTotalUSDT,
+              discountType: isLoyaltyDiscount ? 'Loyalty (20%)' : validatedReferralCode ? `Referral (${referralDiscountPercent}%)` : 'None',
+            },
+          },
+          { status: 201 }
+        );
+      } else {
+        return NextResponse.json(
+          {
+            error: `You have an active application for this stay. Status: ${existingBooking.status}`,
+            bookingId: existingBooking.bookingId,
+            status: existingBooking.status,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // 10. Create NEW Booking with discounts
+    const randomId = `${stayId}-${Date.now()}`;
+
+    const newBooking = await db.booking.create({
+      data: {
+        bookingId: randomId,
+        status: BookingStatus.WAITLISTED,
+        userId: user.id,
+        stayId: stay.id,
+        guestName: user.displayName,
+        guestEmail: user.email,
+        guestGender: gender,
+        guestAge: age,
+        guestMobile: mobileNumber,
+        preferredRoomId: selectedRoomId || null,
+        selectedRoomId: selectedRoomId || null,
+        numberOfNights,
+        checkInDate: new Date(checkInDate),
+        checkOutDate: new Date(checkOutDate),
+        pricePerNightUSDC,
+        pricePerNightUSDT,
+        // ✅ Discount tracking
+        originalPrice: originalTotalUSDC,
+        discountPercent: finalDiscountPercent,
+        discountAmount: discountAmountUSDC,
+        finalPrice: finalTotalUSDC,
+        isLoyaltyDiscount,
+        referralCodeId: validatedReferralCode?.id || null,
+        referralCodeUsed: validatedReferralCode?.code || null,
+        // Store final prices in both currencies
+        selectedRoomPriceUSDC: finalTotalUSDC,
+        selectedRoomPriceUSDT: finalTotalUSDT,
+        selectedRoomName: roomName,
+        guestCount: 1,
+        optInGuestList: false,
+        shareContactInfo: false,
+        contentReuseConsent: false,
+        needsTravelHelp: false,
+      },
+    });
+
+    // Update referral code usage
+    if (validatedReferralCode) {
+      await db.referralCode.update({
+        where: { id: validatedReferralCode.id },
+        data: {
+          usageCount: { increment: 1 },
+        },
+      });
+    }
+
+    // 11. Log Activity
+    await db.activityLog.create({
+      data: {
+        userId: user.id,
+        bookingId: newBooking.id,
+        action: 'application_submitted',
+        entity: 'booking',
+        entityId: newBooking.id,
+        details: {
+          stayId: stay.stayId,
+          email: user.email,
+          walletAddress,
+          selectedRoomId,
+          selectedRoomName: roomName,
+          numberOfNights,
+          checkInDate,
+          checkOutDate,
+          originalPrice: originalTotalUSDC,
+          discountPercent: finalDiscountPercent,
+          discountAmount: discountAmountUSDC,
+          finalPrice: finalTotalUSDC,
+          discountType: isLoyaltyDiscount ? 'loyalty' : 'referral',
+          referralCode: validatedReferralCode?.code,
+        },
+      },
+    });
+
+    // 12. Return Success
+    return NextResponse.json(
+      {
+        success: true,
+        message: finalDiscountPercent > 0 
+          ? `Application submitted with ${finalDiscountPercent}% discount!` 
+          : 'Application submitted successfully!',
+        booking: {
+          bookingId: newBooking.bookingId,
+          status: newBooking.status,
+          stayTitle: stay.title,
+          selectedRoomName: roomName,
+          numberOfNights,
+          checkInDate,
+          checkOutDate,
+          originalPrice: originalTotalUSDC,
+          discountPercent: finalDiscountPercent,
+          discountAmount: discountAmountUSDC,
+          finalPriceUSDC: finalTotalUSDC,
+          finalPriceUSDT: finalTotalUSDT,
+          discountType: isLoyaltyDiscount ? 'Loyalty (20%)' : validatedReferralCode ? `Referral (${referralDiscountPercent}%)` : 'None',
+        },
+      },
+      { status: 201 }
+    );
+
+  } catch (error) {
+    console.error('[Apply API Error]:', error);
+
+    if ((error as any).name === 'PrismaClientValidationError') {
+      return NextResponse.json(
+        { error: 'Invalid data provided to database' },
+        { status: 400 }
+      );
+    }
+
+    if ((error as any).code === 'P2002') {
+      return NextResponse.json(
+        { error: 'You have already applied for this stay' },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Internal server error', details: (error as Error).message },
+      { status: 500 }
+    );
+  }
 }

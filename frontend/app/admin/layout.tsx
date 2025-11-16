@@ -9,7 +9,8 @@ import {
   Settings, 
   LogOut,
   Menu,
-  X
+  X,
+  Gift, // For Referrals icon
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -33,6 +34,12 @@ export default function AdminLayout({
       href: '/admin/stays', 
       icon: Calendar,
       description: 'Manage events and accommodations'
+    },
+    { 
+      name: 'Referrals', 
+      href: '/admin/referrals', 
+      icon: Gift,
+      description: 'Community referral codes'
     },
     { 
       name: 'Users', 
