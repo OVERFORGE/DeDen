@@ -253,7 +253,7 @@ export default function HomePage() {
                 where innovation never sleeps.
               </p>
               <Link
-                href="/stay/IBW-2025-2025"
+                href="/stay/IBW-2025"
                 className="bg-[#172a46] text-white text-base font-semibold py-4 px-9 rounded-full flex items-center justify-center space-x-3 mt-10 w-fit transition-all hover:scale-105 hover:shadow-2xl"
               >
                 <span>Meet us at Bangalore</span>
@@ -376,7 +376,7 @@ export default function HomePage() {
             {/* Image 4 */}
             <div className="relative h-56 md:h-96 col-span-3 rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-transform hover:scale-[1.02]">
               <Image
-                src="/images/dedenbangalore6.jpeg"
+                src="/images/dedenbangalore4.jpeg"
                 alt="DeDen Bangalore Villa 4"
                 fill
                 className="object-cover"

@@ -86,8 +86,8 @@ const applySchema = z
 type ApplyFormInputs = z.infer<typeof applySchema>;
 
 type StayData = {
-id: string; // ✅ ADD THIS <-- Your comment, but this field is the problem  stayId: string;
-stayId: string;
+  id: string; // ✅ ADD THIS <-- Your comment, but this field is the problem  stayId: string;
+  stayId: string;
   title: string;
   location: string;
   startDate: string;
@@ -168,22 +168,22 @@ export default function ApplyPage() {
   const [stayData, setStayData] = useState<StayData | null>(null);
   const [calculatedNights, setCalculatedNights] = useState<number>(0);
   const [stayDuration, setStayDuration] = useState<number>(0);
-// Coupon/Referral State
-const [couponCode, setCouponCode] = useState("");
-const [couponValidating, setCouponValidating] = useState(false);
-const [couponApplied, setCouponApplied] = useState(false);
-const [couponError, setCouponError] = useState<string | null>(null);
-const [validatedCoupon, setValidatedCoupon] = useState<{
-  id: string;
-  code: string;
-  communityName: string;
-  discountPercent: number;
-} | null>(null);
-const [loyaltyDiscount, setLoyaltyDiscount] = useState<{
-  isEligible: boolean;
-  discountPercent: number;
-  previousBookingsCount: number;
-} | null>(null);
+  // Coupon/Referral State
+  const [couponCode, setCouponCode] = useState("");
+  const [couponValidating, setCouponValidating] = useState(false);
+  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [validatedCoupon, setValidatedCoupon] = useState<{
+    id: string;
+    code: string;
+    communityName: string;
+    discountPercent: number;
+  } | null>(null);
+  const [loyaltyDiscount, setLoyaltyDiscount] = useState<{
+    isEligible: boolean;
+    discountPercent: number;
+    previousBookingsCount: number;
+  } | null>(null);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [isSuccess]);
@@ -227,109 +227,115 @@ const [loyaltyDiscount, setLoyaltyDiscount] = useState<{
       restore: true,
     }
   );
-// Check loyalty discount on component mount
-useEffect(() => {
-  const checkLoyalty = async () => {
-    if (sessionStatus === "authenticated") {
-      try {
-        const res = await fetch("/api/user/check-loyalty");
-        if (res.ok) {
-          const data = await res.json();
-          setLoyaltyDiscount(data);
-          if (data.isEligible) {
-            console.log(`[Loyalty] ${data.discountPercent}% discount available`);
+  // Check loyalty discount on component mount
+  useEffect(() => {
+    const checkLoyalty = async () => {
+      if (sessionStatus === "authenticated") {
+        try {
+          const res = await fetch("/api/user/check-loyalty");
+          if (res.ok) {
+            const data = await res.json();
+            setLoyaltyDiscount(data);
+            if (data.isEligible) {
+              console.log(
+                `[Loyalty] ${data.discountPercent}% discount available`
+              );
+            }
           }
+        } catch (error) {
+          console.error("[Loyalty Check] Error:", error);
         }
-      } catch (error) {
-        console.error("[Loyalty Check] Error:", error);
       }
+    };
+
+    checkLoyalty();
+  }, [sessionStatus]);
+
+  // Validate coupon code
+  const validateCoupon = async () => {
+    if (!couponCode.trim()) return;
+
+    setCouponValidating(true);
+    setCouponError(null);
+
+    try {
+      const res = await fetch("/api/bookings/validate-referral", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: couponCode.trim().toUpperCase(),
+          publicStayId: stayData?.stayId, // ✅ THIS IS THE FIX
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.valid) {
+        setValidatedCoupon(data.referralCode);
+        setCouponApplied(true);
+        setCouponError(null);
+      } else {
+        setCouponError(data.error || "Invalid coupon code");
+        setValidatedCoupon(null);
+        setCouponApplied(false);
+      }
+    } catch (error) {
+      setCouponError("Failed to validate coupon code");
+      console.error("[Coupon Validation] Error:", error);
+    } finally {
+      setCouponValidating(false);
     }
   };
-  
-  checkLoyalty();
-}, [sessionStatus]);
 
-// Validate coupon code
-const validateCoupon = async () => {
-  if (!couponCode.trim()) return;
-  
-  setCouponValidating(true);
-  setCouponError(null);
-  
-  try {
-    const res = await fetch("/api/bookings/validate-referral", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-        code: couponCode.trim().toUpperCase(),
-        publicStayId: stayData?.stayId, // ✅ THIS IS THE FIX
-      }),
-    });
-    
-    const data = await res.json();
-    
-    if (data.valid) {
-      setValidatedCoupon(data.referralCode);
-      setCouponApplied(true);
-      setCouponError(null);
+  // Remove applied coupon
+  const removeCoupon = () => {
+    setCouponCode("");
+    setCouponApplied(false);
+    setValidatedCoupon(null);
+    setCouponError(null);
+  };
+
+  // Calculate prices with discount
+  // Calculate prices with discount
+  const calculateOriginalPrice = () => {
+    if (!stayData || calculatedNights <= 0) return "0.00";
+
+    let pricePerNight = 0;
+
+    if (currentSelectedRoomId) {
+      // Room is selected
+      const rooms = (stayData.rooms as any[]) || [];
+      const selectedRoom = rooms.find(
+        (r: any) => r.id === currentSelectedRoomId
+      );
+
+      pricePerNight =
+        currentSelectedCurrency === "USDC"
+          ? selectedRoom?.priceUSDC ?? stayData.priceUSDC
+          : selectedRoom?.priceUSDT ?? stayData.priceUSDT;
     } else {
-      setCouponError(data.error || "Invalid coupon code");
-      setValidatedCoupon(null);
-      setCouponApplied(false);
+      // No room selected, use default stay prices
+      pricePerNight =
+        currentSelectedCurrency === "USDC"
+          ? stayData.priceUSDC
+          : stayData.priceUSDT;
     }
-  } catch (error) {
-    setCouponError("Failed to validate coupon code");
-    console.error("[Coupon Validation] Error:", error);
-  } finally {
-    setCouponValidating(false);
-  }
-};
 
-// Remove applied coupon
-const removeCoupon = () => {
-  setCouponCode("");
-  setCouponApplied(false);
-  setValidatedCoupon(null);
-  setCouponError(null);
-};
+    const total = pricePerNight * calculatedNights;
+    return total.toFixed(2);
+  };
 
-// Calculate prices with discount
-// Calculate prices with discount
-const calculateOriginalPrice = () => {
-  if (!stayData || calculatedNights <= 0) return "0.00";
-  
-  let pricePerNight = 0;
-  
-  if (currentSelectedRoomId) {
-    // Room is selected
-    const rooms = (stayData.rooms as any[]) || [];
-    const selectedRoom = rooms.find((r: any) => r.id === currentSelectedRoomId);
-    
-    pricePerNight = currentSelectedCurrency === "USDC"
-      ? (selectedRoom?.priceUSDC ?? stayData.priceUSDC)
-      : (selectedRoom?.priceUSDT ?? stayData.priceUSDT);
-  } else {
-    // No room selected, use default stay prices
-    pricePerNight = currentSelectedCurrency === "USDC" 
-      ? stayData.priceUSDC 
-      : stayData.priceUSDT;
-  }
-  
-  const total = pricePerNight * calculatedNights;
-  return total.toFixed(2);
-};
+  const calculateDiscountAmount = () => {
+    const original = parseFloat(calculateOriginalPrice());
+    const discountPercent = validatedCoupon?.discountPercent || 0;
+    return ((original * discountPercent) / 100).toFixed(2);
+  };
 
-const calculateDiscountAmount = () => {
-  const original = parseFloat(calculateOriginalPrice());
-  const discountPercent = validatedCoupon?.discountPercent || 0;
-  return ((original * discountPercent) / 100).toFixed(2);
-};
-
-const calculateFinalPrice = () => {
-  const original = parseFloat(calculateOriginalPrice());
-  const discount = parseFloat(calculateDiscountAmount());
-  return (original - discount).toFixed(2);
-};
+  const calculateFinalPrice = () => {
+    const original = parseFloat(calculateOriginalPrice());
+    const discount = parseFloat(calculateDiscountAmount());
+    return (original - discount).toFixed(2);
+  };
   // keep nights updated when dates change
   useEffect(() => {
     if (checkInDate && checkOutDate) {
@@ -448,67 +454,68 @@ const calculateFinalPrice = () => {
     return isNaN(total) || total === 0 ? "0.00" : total.toFixed(2);
   };
 
- const onSubmit: SubmitHandler<ApplyFormInputs> = async (data) => {
-  if (sessionStatus !== "authenticated") {
-    setApiError("Please sign in to apply for this stay.");
-    return;
-  }
-
-  if (!isConnected || !address) {
-    setApiError(
-      "Please connect your wallet to complete your application. This is required for payment processing."
-    );
-    return;
-  }
-
-  if (!stayId || stayId === "undefined") {
-    setApiError("Invalid stay ID. Please check the URL and try again.");
-    return;
-  }
-
-  if (calculatedNights <= 0) {
-    setApiError("Please select valid check-in and check-out dates.");
-    return;
-  }
-
-  setApiError(null);
-
-  try {
-    const response = await fetch(`/api/stays/${stayId}/apply`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...data,
-        walletAddress: address,
-        selectedCurrency: data.selectedRoomId ? data.selectedCurrency : null,
-        numberOfNights: calculatedNights,
-        referralCode: couponApplied && validatedCoupon ? validatedCoupon.code : null, // ✅ Added
-      }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      if (response.status === 409) {
-        throw new Error(
-          "You have already applied for this stay. Check your dashboard for status."
-        );
-      }
-      throw new Error(result.error || "Failed to submit application");
+  const onSubmit: SubmitHandler<ApplyFormInputs> = async (data) => {
+    if (sessionStatus !== "authenticated") {
+      setApiError("Please sign in to apply for this stay.");
+      return;
     }
+
+    if (!isConnected || !address) {
+      setApiError(
+        "Please connect your wallet to complete your application. This is required for payment processing."
+      );
+      return;
+    }
+
+    if (!stayId || stayId === "undefined") {
+      setApiError("Invalid stay ID. Please check the URL and try again.");
+      return;
+    }
+
+    if (calculatedNights <= 0) {
+      setApiError("Please select valid check-in and check-out dates.");
+      return;
+    }
+
+    setApiError(null);
 
     try {
-      clearPersistence();
-    } catch (err) {
-      console.warn("Failed to clear persistence", err);
-    }
+      const response = await fetch(`/api/stays/${stayId}/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          walletAddress: address,
+          selectedCurrency: data.selectedRoomId ? data.selectedCurrency : null,
+          numberOfNights: calculatedNights,
+          referralCode:
+            couponApplied && validatedCoupon ? validatedCoupon.code : null, // ✅ Added
+        }),
+      });
 
-    setIsSuccess(true);
-  } catch (error: any) {
-    console.error("Application error:", error);
-    setApiError(error.message);
-  }
-};
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          throw new Error(
+            "You have already applied for this stay. Check your dashboard for status."
+          );
+        }
+        throw new Error(result.error || "Failed to submit application");
+      }
+
+      try {
+        clearPersistence();
+      } catch (err) {
+        console.warn("Failed to clear persistence", err);
+      }
+
+      setIsSuccess(true);
+    } catch (error: any) {
+      console.error("Application error:", error);
+      setApiError(error.message);
+    }
+  };
 
   /* ---------- Render states ---------- */
   if (!stayId) {
@@ -972,165 +979,208 @@ const calculateFinalPrice = () => {
                   </p>
                 </div>
               </div>
-{/* Coupon/Referral Code Section */}
-<div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-2xl p-6">
-  <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
-    <DollarSign size={20} />
-    Promo Code (Optional)
-  </label>
-  
-  <div className="flex gap-3 mb-4">
-    <input
-      type="text"
-      value={couponCode}
-      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-      placeholder="Enter referral or loyalty code"
-      className="flex-1 px-5 py-4 text-lg border-2 border-gray-300 rounded-xl focus:border-[#172a46] focus:outline-none transition-colors uppercase"
-      disabled={couponValidating || couponApplied}
-    />
-    <button
-      type="button"
-      onClick={validateCoupon}
-      disabled={!couponCode || couponValidating || couponApplied}
-      className={`px-6 py-4 rounded-xl font-semibold transition-all ${
-        couponApplied
-          ? 'bg-green-100 text-green-700 cursor-not-allowed'
-          : couponValidating
-          ? 'bg-gray-100 text-gray-500 cursor-wait'
-          : 'bg-[#172a46] text-white hover:bg-[#1a3254]'
-      }`}
-    >
-      {couponValidating ? (
-        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-      ) : couponApplied ? (
-        <Check size={20} />
-      ) : (
-        'Apply'
-      )}
-    </button>
-  </div>
+              {/* Coupon/Referral Code Section */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6">
+                <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
+                  Promo Code (Optional)
+                </label>
 
-  {couponError && (
-    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2 mb-3">
-      <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={16} />
-      <p className="text-sm text-red-700">{couponError}</p>
-    </div>
-  )}
+                <div className="flex gap-3 mb-4">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) =>
+                      setCouponCode(e.target.value.toUpperCase())
+                    }
+                    placeholder="Enter referral or loyalty code"
+                    className="flex-1 px-5 py-4 text-lg border-2 border-gray-300 rounded-xl focus:border-[#172a46] focus:outline-none transition-colors uppercase"
+                    disabled={couponValidating || couponApplied}
+                  />
+                  <button
+                    type="button"
+                    onClick={validateCoupon}
+                    disabled={!couponCode || couponValidating || couponApplied}
+                    className={`px-6 py-4 rounded-xl font-semibold transition-all ${
+                      couponApplied
+                        ? "bg-green-100 text-green-700 cursor-not-allowed"
+                        : couponValidating
+                        ? "bg-gray-100 text-gray-500 cursor-wait"
+                        : "bg-[#172a46] text-white hover:bg-[#1a3254]"
+                    }`}
+                  >
+                    {couponValidating ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : couponApplied ? (
+                      <Check size={20} />
+                    ) : (
+                      "Apply"
+                    )}
+                  </button>
+                </div>
 
-  {couponApplied && validatedCoupon && (
-    <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Check className="text-green-600" size={20} />
-          <span className="font-bold text-green-800">
-            {validatedCoupon.discountPercent}% Discount Applied!
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={removeCoupon}
-          className="text-red-600 hover:text-red-700 text-sm font-semibold"
-        >
-          Remove
-        </button>
-      </div>
-      <p className="text-sm text-green-700">
-        {validatedCoupon.communityName 
-          ? `Community: ${validatedCoupon.communityName}`
-          : 'Loyalty Reward'}
-      </p>
-      
-      {/* Show discount calculation */}
-   {/* Show discount calculation */}
-{calculatedNights > 0 && (currentSelectedRoomId || (stayData && currentSelectedCurrency)) && (
-  <div className="mt-3 pt-3 border-t border-green-200 space-y-1 text-sm">
-    <div className="flex justify-between text-gray-700">
-      <span>Original Price:</span>
-      <span className="line-through">
-        ${calculateOriginalPrice()} {currentSelectedCurrency || 'USDC'}
-      </span>
-    </div>
-    <div className="flex justify-between text-green-700 font-bold">
-      <span>Discount ({validatedCoupon.discountPercent}%):</span>
-      <span>-${calculateDiscountAmount()}</span>
-    </div>
-    <div className="flex justify-between text-lg font-bold text-green-800 pt-2 border-t border-green-300">
-      <span>Final Price:</span>
-      <span>${calculateFinalPrice()} {currentSelectedCurrency || 'USDC'}</span>
-    </div>
-  </div>
-)}
-    </div>
-  )}
-<div className="text-sm text-gray-600 mt-3 space-y-1">
-  <p>
-    💡 <strong>Community Referrals:</strong> Get 10% off with a referral code
-  </p>
-  <p>
-    🎉 <strong>Loyalty Reward:</strong> Returning guests get 20% off automatically
-  </p>
-  {loyaltyDiscount?.isEligible && (
-    <p className="text-amber-700 font-semibold mt-2">
-      ⚠️ You have a {loyaltyDiscount.discountPercent}% loyalty discount available. 
-      Referral codes cannot be combined with loyalty discounts - the higher discount will be applied.
-    </p>
-  )}
-</div>
-</div>
-{/* Loyalty Discount Banner - Show if eligible and no coupon applied */}
-{loyaltyDiscount?.isEligible && !couponApplied && calculatedNights > 0 && (
-  <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-2xl p-6">
-    <div className="flex items-start gap-3 mb-3">
-      <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
-        <span className="text-2xl">🎉</span>
-      </div>
-      <div className="flex-1">
-        <h3 className="text-lg font-bold text-amber-900 mb-1">
-          Welcome Back! Loyalty Discount Available
-        </h3>
-        <p className="text-sm text-amber-800">
-          You've earned a <strong>{loyaltyDiscount.discountPercent}% discount</strong> as a returning guest!
-          {loyaltyDiscount.previousBookingsCount > 0 && (
-            <span className="ml-1">
-              ({loyaltyDiscount.previousBookingsCount} previous booking{loyaltyDiscount.previousBookingsCount !== 1 ? 's' : ''})
-            </span>
-          )}
-        </p>
-      </div>
-    </div>
-    
-    {currentSelectedRoomId && currentSelectedCurrency && (
-      <div className="bg-white rounded-xl p-4 border border-amber-200">
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between text-gray-700">
-            <span>Original Price:</span>
-            <span className="line-through">
-              ${calculateOriginalPrice()} {currentSelectedCurrency}
-            </span>
-          </div>
-          <div className="flex justify-between text-amber-700 font-bold">
-            <span>Loyalty Discount ({loyaltyDiscount.discountPercent}%):</span>
-            <span>
-              -${((parseFloat(calculateOriginalPrice()) * loyaltyDiscount.discountPercent) / 100).toFixed(2)}
-            </span>
-          </div>
-          <div className="flex justify-between text-lg font-bold text-amber-900 pt-2 border-t border-amber-200">
-            <span>Your Price:</span>
-            <span>
-              ${(parseFloat(calculateOriginalPrice()) - 
-                 (parseFloat(calculateOriginalPrice()) * loyaltyDiscount.discountPercent) / 100).toFixed(2)} {currentSelectedCurrency}
-            </span>
-          </div>
-        </div>
-      </div>
-    )}
-    
-    <p className="text-xs text-amber-700 mt-3">
-      💡 Your loyalty discount will be automatically applied at checkout. 
-      {loyaltyDiscount.discountPercent < 20 && " (Referral codes cannot be combined with loyalty discounts)"}
-    </p>
-  </div>
-)}
+                {couponError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2 mb-3">
+                    <AlertCircle
+                      className="text-red-600 flex-shrink-0 mt-0.5"
+                      size={16}
+                    />
+                    <p className="text-sm text-red-700">{couponError}</p>
+                  </div>
+                )}
+
+                {couponApplied && validatedCoupon && (
+                  <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Check className="text-green-600" size={20} />
+                        <span className="font-bold text-green-800">
+                          {validatedCoupon.discountPercent}% Discount Applied!
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removeCoupon}
+                        className="text-red-600 hover:text-red-700 text-sm font-semibold"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <p className="text-sm text-green-700">
+                      {validatedCoupon.communityName
+                        ? `Community: ${validatedCoupon.communityName}`
+                        : "Loyalty Reward"}
+                    </p>
+
+                    {/* Show discount calculation */}
+                    {/* Show discount calculation */}
+                    {calculatedNights > 0 &&
+                      (currentSelectedRoomId ||
+                        (stayData && currentSelectedCurrency)) && (
+                        <div className="mt-3 pt-3 border-t border-green-200 space-y-1 text-sm">
+                          <div className="flex justify-between text-gray-700">
+                            <span>Original Price:</span>
+                            <span className="line-through">
+                              ${calculateOriginalPrice()}{" "}
+                              {currentSelectedCurrency || "USDC"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-green-700 font-bold">
+                            <span>
+                              Discount ({validatedCoupon.discountPercent}%):
+                            </span>
+                            <span>-${calculateDiscountAmount()}</span>
+                          </div>
+                          <div className="flex justify-between text-lg font-bold text-green-800 pt-2 border-t border-green-300">
+                            <span>Final Price:</span>
+                            <span>
+                              ${calculateFinalPrice()}{" "}
+                              {currentSelectedCurrency || "USDC"}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                )}
+                <div className="text-sm text-gray-600 mt-3 space-y-1">
+                  <p>
+                    <strong>Community Referrals:</strong> Get 10% off with a
+                    referral code
+                  </p>
+                  <p>
+                    <strong>Loyalty Reward:</strong> Returning guests get 20%
+                    off automatically
+                  </p>
+                  {loyaltyDiscount?.isEligible && (
+                    <p className="text-amber-700 font-semibold mt-2">
+                      ⚠️ You have a {loyaltyDiscount.discountPercent}% loyalty
+                      discount available. Referral codes cannot be combined with
+                      loyalty discounts - the higher discount will be applied.
+                    </p>
+                  )}
+                </div>
+              </div>
+              {/* Loyalty Discount Banner - Show if eligible and no coupon applied */}
+              {loyaltyDiscount?.isEligible &&
+                !couponApplied &&
+                calculatedNights > 0 && (
+                  <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-2xl p-6">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">🎉</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold text-amber-900 mb-1">
+                          Welcome Back! Loyalty Discount Available
+                        </h3>
+                        <p className="text-sm text-amber-800">
+                          You've earned a{" "}
+                          <strong>
+                            {loyaltyDiscount.discountPercent}% discount
+                          </strong>{" "}
+                          as a returning guest!
+                          {loyaltyDiscount.previousBookingsCount > 0 && (
+                            <span className="ml-1">
+                              ({loyaltyDiscount.previousBookingsCount} previous
+                              booking
+                              {loyaltyDiscount.previousBookingsCount !== 1
+                                ? "s"
+                                : ""}
+                              )
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {currentSelectedRoomId && currentSelectedCurrency && (
+                      <div className="bg-white rounded-xl p-4 border border-amber-200">
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between text-gray-700">
+                            <span>Original Price:</span>
+                            <span className="line-through">
+                              ${calculateOriginalPrice()}{" "}
+                              {currentSelectedCurrency}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-amber-700 font-bold">
+                            <span>
+                              Loyalty Discount (
+                              {loyaltyDiscount.discountPercent}%):
+                            </span>
+                            <span>
+                              -$
+                              {(
+                                (parseFloat(calculateOriginalPrice()) *
+                                  loyaltyDiscount.discountPercent) /
+                                100
+                              ).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-lg font-bold text-amber-900 pt-2 border-t border-amber-200">
+                            <span>Your Price:</span>
+                            <span>
+                              $
+                              {(
+                                parseFloat(calculateOriginalPrice()) -
+                                (parseFloat(calculateOriginalPrice()) *
+                                  loyaltyDiscount.discountPercent) /
+                                  100
+                              ).toFixed(2)}{" "}
+                              {currentSelectedCurrency}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-amber-700 mt-3">
+                      💡 Your loyalty discount will be automatically applied at
+                      checkout.
+                      {loyaltyDiscount.discountPercent < 20 &&
+                        " (Referral codes cannot be combined with loyalty discounts)"}
+                    </p>
+                  </div>
+                )}
               {/* Room selection */}
               {stayData &&
                 stayData.rooms &&

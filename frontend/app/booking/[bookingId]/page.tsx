@@ -147,127 +147,127 @@ export default function PaymentPage() {
     return () => clearInterval(interval);
   }, [status, bookingId]);
 
-const handlePay = async () => {
-  if (!booking || !address || !isConnected) return;
+  const handlePay = async () => {
+    if (!booking || !address || !isConnected) return;
 
-  setError(null);
-  setStatus("sending");
+    setError(null);
+    setStatus("sending");
 
-  try {
-    const amount =
-      selectedToken === "USDC"
-        ? booking.selectedRoomPriceUSDC || booking.stay.priceUSDC
-        : booking.selectedRoomPriceUSDT || booking.stay.priceUSDT;
+    try {
+      const amount =
+        selectedToken === "USDC"
+          ? booking.selectedRoomPriceUSDC || booking.stay.priceUSDC
+          : booking.selectedRoomPriceUSDT || booking.stay.priceUSDT;
 
-    const chain = chainConfig[selectedChain];
-    if (!chain) {
-      throw new Error("Selected chain not supported");
-    }
+      const chain = chainConfig[selectedChain];
+      if (!chain) {
+        throw new Error("Selected chain not supported");
+      }
 
-    const tokenInfo = chain.tokens[selectedToken];
-    if (!tokenInfo) {
-      throw new Error(`${selectedToken} not supported on ${chain.name}`);
-    }
+      const tokenInfo = chain.tokens[selectedToken];
+      if (!tokenInfo) {
+        throw new Error(`${selectedToken} not supported on ${chain.name}`);
+      }
 
-    // ✅ FIXED: Validate treasury address format
-    console.log("Treasury address:", treasuryAddress);
-    if (!treasuryAddress || !/^0x[a-fA-F0-9]{40}$/i.test(treasuryAddress)) {
-      throw new Error("Invalid treasury address configuration");
-    }
+      // ✅ FIXED: Validate treasury address format
+      console.log("Treasury address:", treasuryAddress);
+      if (!treasuryAddress || !/^0x[a-fA-F0-9]{40}$/i.test(treasuryAddress)) {
+        throw new Error("Invalid treasury address configuration");
+      }
 
-    // 🔒 CRITICAL STEP: Lock the selected payment details in the database
-    console.log("Locking payment details in database...");
-    const lockRes = await fetch("/api/bookings/lock-payment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bookingId: booking.bookingId,
-        paymentToken: selectedToken,
-        paymentAmount: amount,
-        chainId: selectedChain,
-      }),
-    });
-    
-    if (!lockRes.ok) {
-      const { error } = await lockRes.json();
-      throw new Error(
-        error || "Failed to lock payment details. Please refresh."
+      // 🔒 CRITICAL STEP: Lock the selected payment details in the database
+      console.log("Locking payment details in database...");
+      const lockRes = await fetch("/api/bookings/lock-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: booking.bookingId,
+          paymentToken: selectedToken,
+          paymentAmount: amount,
+          chainId: selectedChain,
+        }),
+      });
+
+      if (!lockRes.ok) {
+        const { error } = await lockRes.json();
+        throw new Error(
+          error || "Failed to lock payment details. Please refresh."
+        );
+      }
+
+      console.log("Payment details locked successfully.");
+
+      // Optimistically update the booking state with the locked details
+      setBooking((prev) =>
+        prev
+          ? {
+              ...prev,
+              paymentToken: selectedToken,
+              paymentAmount: amount,
+              chainId: selectedChain,
+            }
+          : null
       );
+
+      // Switch network if needed
+      if (walletChainId !== selectedChain) {
+        console.log(`Switching to chain ${selectedChain}...`);
+        await switchChain({ chainId: selectedChain });
+        // Wait for network switch
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+
+      const amountBaseUnits = parseUnits(amount.toString(), tokenInfo.decimals);
+
+      console.log("Payment details:", {
+        token: tokenInfo.address,
+        to: treasuryAddress,
+        amount: amountBaseUnits.toString(),
+        decimals: tokenInfo.decimals,
+      });
+
+      // Encode transfer function with correct treasury address
+      const data = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: "transfer",
+        args: [treasuryAddress as `0x${string}`, amountBaseUnits],
+      });
+
+      console.log("Transaction data:", data);
+
+      // Send transaction
+      const tx = await sendTransactionAsync({
+        to: tokenInfo.address as `0x${string}`,
+        data: data,
+      });
+
+      console.log("Transaction sent:", tx);
+
+      // Submit for verification
+      setStatus("verifying");
+      const res = await fetch("/api/payments/submit-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: booking.bookingId,
+          txHash: tx,
+          chainId: selectedChain,
+          paymentToken: selectedToken,
+        }),
+      });
+
+      if (!res.ok) {
+        const { error } = await res.json();
+        throw new Error(error || "Failed to submit transaction");
+      }
+
+      console.log("Transaction submitted for verification");
+    } catch (err: any) {
+      console.error("Payment error:", err);
+      setError(err.message || "Payment failed");
+      setStatus("ready");
     }
-    
-    console.log("Payment details locked successfully.");
-
-    // Optimistically update the booking state with the locked details
-    setBooking((prev) =>
-      prev
-        ? {
-            ...prev,
-            paymentToken: selectedToken,
-            paymentAmount: amount,
-            chainId: selectedChain,
-          }
-        : null
-    );
-
-    // Switch network if needed
-    if (walletChainId !== selectedChain) {
-      console.log(`Switching to chain ${selectedChain}...`);
-      await switchChain({ chainId: selectedChain });
-      // Wait for network switch
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-
-    const amountBaseUnits = parseUnits(amount.toString(), tokenInfo.decimals);
-
-    console.log("Payment details:", {
-      token: tokenInfo.address,
-      to: treasuryAddress,
-      amount: amountBaseUnits.toString(),
-      decimals: tokenInfo.decimals,
-    });
-
-    // Encode transfer function with correct treasury address
-    const data = encodeFunctionData({
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [treasuryAddress as `0x${string}`, amountBaseUnits],
-    });
-
-    console.log("Transaction data:", data);
-
-    // Send transaction
-    const tx = await sendTransactionAsync({
-      to: tokenInfo.address as `0x${string}`,
-      data: data,
-    });
-
-    console.log("Transaction sent:", tx);
-
-    // Submit for verification
-    setStatus("verifying");
-    const res = await fetch("/api/payments/submit-payment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bookingId: booking.bookingId,
-        txHash: tx,
-        chainId: selectedChain,
-        paymentToken: selectedToken,
-      }),
-    });
-
-    if (!res.ok) {
-      const { error } = await res.json();
-      throw new Error(error || "Failed to submit transaction");
-    }
-
-    console.log("Transaction submitted for verification");
-  } catch (err: any) {
-    console.error("Payment error:", err);
-    setError(err.message || "Payment failed");
-    setStatus("ready");
-  }
-};
+  };
 
   if (status === "loading") {
     return (
@@ -309,16 +309,15 @@ const handlePay = async () => {
 
   if (status === "confirmed") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className=" flex items-center justify-center py-20 bg-[#E7E4DF]">
         <div className="bg-white p-10 rounded-xl shadow-xl text-center max-w-md w-full">
-          <div className="text-6xl mb-4">✅</div>
-          <h2 className="text-3xl font-bold text-green-600 mb-2">
+          <h2 className="text-3xl font-bold text-[#102E4A] mb-2">
             Payment Confirmed!
           </h2>
 
           <p className="text-gray-600 mb-6">
             Your spot for{" "}
-            <strong className="font-semibold text-gray-800">
+            <strong className="font-semibold text-[#102E4A]">
               {booking.stay.title}
             </strong>{" "}
             is confirmed.
@@ -337,7 +336,7 @@ const handlePay = async () => {
 
           <a
             href="/dashboard"
-            className="block mt-6 bg-green-500 text-white font-semibold py-3 px-6 rounded-lg hover:bg-green-600 transition duration-150"
+            className="block mt-6 bg-[#102E4A] text-white font-semibold py-3 px-6 rounded-lg hover:bg-[#102E4A]/80 transition duration-150"
           >
             Back to Dashboard
           </a>
@@ -356,6 +355,11 @@ const handlePay = async () => {
   const isPaymentLocked = !!booking.paymentToken;
   const supportedTokens = getSupportedTokens(selectedChain);
   const isWrongNetwork = walletChainId !== selectedChain;
+
+  const formattedAmount = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(Number(displayAmount));
 
   return (
     <div className="font-sans max-w-xl mx-auto  mb-20">
@@ -455,7 +459,7 @@ ${
           </div>
 
           <div className="text-5xl font-extrabold text-[#172a46] text-center">
-            ${displayAmount} <span className="text-3xl">{selectedToken}</span>
+            ${formattedAmount} <span className="text-3xl">{selectedToken}</span>
           </div>
 
           <div className="text-sm text-gray-500 mt-1">
@@ -493,7 +497,7 @@ w-full py-4 text-xl font-semibold rounded-xl transition duration-200 shadow-lg
  `}
           >
             {status === "sending" && "💼 Check your wallet..."}
-            {status === "verifying" && "🔍 Verifying payment..."}
+            {status === "verifying" && " Verifying payment..."}
 
             {status === "ready" && `Pay $${displayAmount} ${selectedToken}`}
           </button>
