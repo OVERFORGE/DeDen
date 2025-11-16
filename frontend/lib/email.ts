@@ -15,25 +15,25 @@ const supportEmail = "bookings@deden.space";
 // ✅ FIXED: Get base URL with proper environment handling
 function getBaseUrl(): string {
   // Production: Use NEXT_PUBLIC_APP_URL or Vercel URL
-  if (process.env.NODE_ENV === 'production') {
-    const url = 
+  if (process.env.NODE_ENV === "production") {
+    const url =
       process.env.NEXT_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-      'https://deden.space'; // Final production fallback
-    
-    const cleanUrl = url.replace(/\/$/, '');
-    console.log('[EmailLib] Using PRODUCTION base URL:', cleanUrl);
+      "https://deden.space"; // Final production fallback
+
+    const cleanUrl = url.replace(/\/$/, "");
+    console.log("[EmailLib] Using PRODUCTION base URL:", cleanUrl);
     return cleanUrl;
   }
-  
+
   // Development: Use localhost or NEXTAUTH_URL
-  const url = 
+  const url =
     process.env.NEXTAUTH_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    'http://localhost:3000'; // Development fallback
-  
-  const cleanUrl = url.replace(/\/$/, '');
-  console.log('[EmailLib] Using DEVELOPMENT base URL:', cleanUrl);
+    "http://localhost:3000"; // Development fallback
+
+  const cleanUrl = url.replace(/\/$/, "");
+  console.log("[EmailLib] Using DEVELOPMENT base URL:", cleanUrl);
   return cleanUrl;
 }
 
@@ -125,11 +125,16 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
   if (paymentUrl.startsWith("http")) {
     fullPaymentUrl = paymentUrl;
   } else {
-    const cleanPath = paymentUrl.startsWith("/") ? paymentUrl : `/${paymentUrl}`;
+    const cleanPath = paymentUrl.startsWith("/")
+      ? paymentUrl
+      : `/${paymentUrl}`;
     fullPaymentUrl = `${baseUrl}${cleanPath}`;
   }
 
-  console.log("🔗 [EmailLib] Approval Email - Final Payment URL:", fullPaymentUrl);
+  console.log(
+    "🔗 [EmailLib] Approval Email - Final Payment URL:",
+    fullPaymentUrl
+  );
 
   const htmlBody = `
 <!DOCTYPE html>
@@ -439,240 +444,208 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
 
   // ✅ FIXED: Use baseUrl for dashboard link
   const dashboardUrl = `${baseUrl}/dashboard`;
-  
-  console.log('[EmailLib] Confirmation Email - Dashboard URL:', dashboardUrl);
+
+  console.log("[EmailLib] Confirmation Email - Dashboard URL:", dashboardUrl);
 
   const htmlBody = `
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
-    .container {
-      background-color: #172A46;
-      padding: 20px;
-      min-height: 100vh;
-    }
-    .card {
-      background-color: #1F3A61;
-      max-width: 600px;
-      margin: 0 auto;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 1px solid #3a5b8a;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    }
-    .header {
-      padding: 32px 24px;
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      color: white;
-      text-align: center;
-    }
-    .header h2 {
-      margin: 0 0 8px 0;
-      font-size: 28px;
-    }
-    .emoji {
-      font-size: 64px;
-      margin-bottom: 16px;
-    }
-    .content {
-      padding: 32px 24px;
-      line-height: 1.6;
-      color: #FFFFFF;
-    }
-    .content p {
-      margin-bottom: 16px;
-    }
-    .success-box {
-      background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-      padding: 20px;
-      border-radius: 8px;
-      text-align: center;
-      margin: 24px 0;
-      color: #065f46;
-    }
-    .success-box strong {
-      display: block;
-      font-size: 18px;
-      margin-bottom: 8px;
-    }
-    .details-box {
-      background-color: #0f1f35;
-      padding: 20px;
-      border-radius: 8px;
-      border: 1px solid #3a5b8a;
-      margin: 24px 0;
-    }
-    .detail-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 12px 0;
-      border-bottom: 1px solid #2d3748;
-    }
-    .detail-row:last-child {
-      border-bottom: none;
-    }
-    .detail-label {
-      color: #a0aec0;
-      font-size: 14px;
-    }
-    .detail-value {
-      color: #e2e8f0;
-      font-weight: 600;
-      text-align: right;
-      word-break: break-all;
-      max-width: 60%;
-    }
-    .tx-link {
-      color: #58a6ff;
-      text-decoration: none;
-      font-family: monospace;
-      font-size: 12px;
-    }
-    .next-steps {
-      background-color: #0f1f35;
-      padding: 20px;
-      border-radius: 8px;
-      border-left: 4px solid #58a6ff;
-      margin: 24px 0;
-    }
-    .next-steps h3 {
-      color: #58a6ff;
-      margin-top: 0;
-    }
-    .next-steps ul {
-      color: #e2e8f0;
-      padding-left: 20px;
-    }
-    .next-steps li {
-      margin-bottom: 8px;
-    }
-    .cta-button {
-      display: inline-block;
-      background: linear-gradient(135deg, #0070f3 0%, #0051cc 100%);
-      color: white;
-      padding: 14px 28px;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 16px;
-      text-align: center;
-    }
-    .footer {
-      padding: 24px;
-      font-size: 12px;
-      color: #a0aec0;
-      text-align: center;
-      background-color: #0f1f35;
-    }
-    .footer p {
-      margin: 4px 0;
-    }
-    .footer a {
-      color: #58a6ff;
-      text-decoration: none;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="card">
-      <div class="header">
-        <div class="emoji">✅</div>
-        <h2>Payment Confirmed!</h2>
-        <p style="margin: 0; font-size: 16px; opacity: 0.9;">Your spot is secured</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #e7e4df;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        padding: 32px 16px;
+      }
+
+      .card {
+        max-width: 600px;
+        margin: auto;
+        background: #1f3a61;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid #2b4a78;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      }
+
+      /* HEADER */
+      .header {
+        padding: 40px 28px 28px;
+        text-align: center;
+        color: #ffffff;
+      }
+      .header h2 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 600;
+      }
+      .header p {
+        margin: 8px 0 0;
+        opacity: 0.85;
+        font-size: 15px;
+      }
+
+      /* CONTENT */
+      .content {
+        padding: 32px 28px;
+        color: #ffffff;
+        line-height: 1.6;
+      }
+      .content p {
+        margin-bottom: 18px;
+        opacity: 0.92;
+        font-size: 15px;
+      }
+
+      /* CONFIRMATION BOX */
+      .success-box {
+        background: #162945;
+        border: 1px solid #2b4a78;
+        padding: 24px;
+        border-radius: 10px;
+        margin: 28px 0;
+        text-align: center;
+      }
+      .success-box strong {
+        display: block;
+        color: #e7e4df;
+        font-size: 18px;
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+
+      /* DETAILS */
+      .details-box {
+        background: #162945;
+        border: 1px solid #2b4a78;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 24px 0;
+      }
+      .details-row {
+        margin-bottom: 12px;
+      }
+      .details-row:last-child {
+        margin: 0;
+      }
+      .label {
+        font-size: 13px;
+        opacity: 0.65;
+        margin-bottom: 2px;
+      }
+      .value {
+        font-size: 15px;
+        font-weight: 600;
+        color: #e7e4df;
+      }
+
+      /* CTA */
+      .cta-button {
+        display: inline-block;
+        background: #e7e4df;
+        color: #1f3a61;
+        padding: 14px 32px;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        font-size: 17px;
+        margin: 24px auto 32px;
+      }
+
+      /* FOOTER */
+      .footer {
+        max-width: 600px;
+        margin: 24px auto 0;
+        text-align: center;
+        font-size: 12px;
+        color: #1f3a61;
+        opacity: 0.7;
+        line-height: 1.5;
+      }
+      .footer a {
+        color: #1f3a61;
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="card">
+        <!-- HEADER -->
+        <div class="header">
+          <h2>Payment Confirmed</h2>
+          <p>Your booking is now secured.</p>
+        </div>
+
+        <!-- CONTENT -->
+        <div class="content">
+          <p>Hi ${recipientName},</p>
+          <p>
+            We've successfully received your payment for
+            <strong>${stayTitle}</strong>. Your stay is now fully confirmed.
+          </p>
+
+          <div class="success-box">
+            <strong>Booking Confirmed</strong>
+            You're all set for your upcoming stay.
+          </div>
+
+          <div class="details-box">
+            <div class="details-row">
+              <div class="label">Stay</div>
+              <div class="value">${stayTitle}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Location</div>
+              <div class="value">${stayLocation}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Dates</div>
+              <div class="value">${dateRange}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Booking ID</div>
+              <div class="value">${bookingId}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Amount Paid</div>
+              <div class="value">$${paidAmount} ${paidToken}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Transaction</div>
+              <div class="value">
+                <a href="${explorerUrl}" style="color:#e7e4df; text-decoration:none;">
+                  ${txHash.slice(0, 10)}...${txHash.slice(-8)}
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align:center;">
+            <a href="${dashboardUrl}" class="cta-button">View Dashboard</a>
+          </div>
+        </div>
       </div>
-      
-      <div class="content">
-        <p>Hi ${recipientName},</p>
-        
-        <div class="success-box">
-          <strong>🎉 You're all set!</strong>
-          Your spot for ${stayTitle} is confirmed.
-        </div>
-        
-        <p>We've successfully received your payment. Get ready for an amazing experience in <strong>${stayLocation}</strong>!</p>
-        
-        <h3 style="color: #e2e8f0; margin-top: 32px;">Booking Details</h3>
-        <div class="details-box">
-          <div class="detail-row">
-            <span class="detail-label">Stay</span>
-            <span class="detail-value">${stayTitle}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Location</span>
-            <span class="detail-value">${stayLocation}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Dates</span>
-            <span class="detail-value">${dateRange}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Booking ID</span>
-            <span class="detail-value">${bookingId}</span>
-          </div>
-        </div>
 
-        <h3 style="color: #e2e8f0; margin-top: 32px;">Payment Details</h3>
-        <div class="details-box">
-          <div class="detail-row">
-            <span class="detail-label">Amount Paid</span>
-            <span class="detail-value">$${paidAmount} ${paidToken}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Network</span>
-            <span class="detail-value">${chainName}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Transaction</span>
-            <span class="detail-value">
-              <a href="${explorerUrl}" class="tx-link" target="_blank">
-                ${txHash.substring(0, 10)}...${txHash.substring(
-    txHash.length - 8
-  )}
-              </a>
-            </span>
-          </div>
-        </div>
-
-        <div class="next-steps">
-          <h3>📋 What's Next?</h3>
-          <ul>
-            <li>You'll receive check-in instructions 48 hours before your arrival</li>
-            <li>Join our community chat to connect with other guests</li>
-            <li>Review the packing list and house rules in your dashboard</li>
-            <li>Let us know if you have any dietary restrictions or special requirements</li>
-          </ul>
-        </div>
-
-        <p style="text-align: center; margin: 32px 0;">
-          <a href="${dashboardUrl}" class="cta-button">
-            View Dashboard
-          </a>
-        </p>
-
-        <p style="color: #a0aec0; font-size: 14px; margin-top: 32px;">
-          We're looking forward to hosting you! If you have any questions before your stay, don't hesitate to reach out.
-        </p>
+      <div class="footer">
+        <p>Need help? Contact us at <a href="mailto:${supportEmail}">${supportEmail}</a></p>
+        <p>© ${new Date().getFullYear()} Decentralized Den</p>
       </div>
     </div>
-    
-    <div class="footer">
-      <p>Need help? Contact us at <a href="mailto:${supportEmail}">${supportEmail}</a></p>
-      <p style="margin-top: 16px; opacity: 0.7;">© ${new Date().getFullYear()} Decentralized Den. All rights reserved.</p>
-    </div>
-  </div>
-</body>
+  </body>
 </html>
-  `;
+`;
 
   try {
     const response = await resend.emails.send({
@@ -732,75 +705,125 @@ export async function sendPaymentFailedEmail(props: PaymentFailedEmailProps) {
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <style>
     body {
       margin: 0;
       padding: 0;
-      font-family: Arial, sans-serif;
+      background: #e7e4df;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial,
+        sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
+
     .container {
-      background-color: #172A46;
-      padding: 20px;
+      padding: 32px 16px;
     }
+
     .card {
-      background-color: #1F3A61;
       max-width: 600px;
-      margin: 0 auto;
-      border-radius: 12px;
+      margin: auto;
+      background: #1f3a61;
+      border-radius: 14px;
       overflow: hidden;
-      border: 1px solid #3a5b8a;
+      border: 1px solid #2b4a78;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     }
+
     .header {
-      padding: 32px 24px;
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      padding: 40px 28px 28px;
+      text-align: center;
       color: white;
-      text-align: center;
     }
+
+    .header h2 {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 600;
+    }
+
+    .header p {
+      margin-top: 6px;
+      font-size: 14px;
+      opacity: 0.85;
+    }
+
     .content {
-      padding: 32px 24px;
-      color: #FFFFFF;
+      padding: 32px 28px;
+      color: #ffffff;
+      line-height: 1.6;
     }
+
     .error-box {
-      background-color: #fff3cd;
-      border-left: 4px solid #ffc107;
-      padding: 16px;
-      border-radius: 6px;
+      background: #162945;
+      border-left: 4px solid #eab308;
+      border-radius: 8px;
+      padding: 16px 20px;
       margin: 24px 0;
-      color: #856404;
+      color: #e7e4df;
+      font-size: 14px;
     }
+
     .footer {
-      padding: 24px;
       text-align: center;
-      color: #a0aec0;
+      margin-top: 24px;
+      color: #1f3a61;
+      opacity: 0.7;
       font-size: 12px;
+    }
+
+    .footer a {
+      color: #1f3a61;
+      text-decoration: underline;
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <div class="card">
+
       <div class="header">
-        <h2>⚠️ Payment Issue Detected</h2>
+        <h2>Payment Unsuccessful</h2>
+        <p>There was an issue with your transaction.</p>
       </div>
+
       <div class="content">
         <p>Hi ${recipientName},</p>
-        <p>We encountered an issue processing your payment for <strong>${stayTitle}</strong>.</p>
-        
+
+        <p>
+          Your payment attempt for <strong>${stayTitle}</strong> was not completed.
+          Please review the details below.
+        </p>
+
         <div class="error-box">
           <strong>Reason:</strong> ${reason}
         </div>
-        
-        <p>Please contact support at <a href="mailto:${supportEmail}" style="color: #58a6ff;">${supportEmail}</a> with your booking ID: <strong>${bookingId}</strong></p>
+
+        <p>
+          If the issue persists, contact our support team with your booking ID:
+          <strong>${bookingId}</strong>.
+        </p>
+
+        <p>
+          Email: 
+          <a href="mailto:${supportEmail}" style="color:#e7e4df;">
+            ${supportEmail}
+          </a>
+        </p>
       </div>
-      <div class="footer">
-        <p>Decentralized Den Support Team</p>
-      </div>
+
+    </div>
+
+    <div class="footer">
+      <p>© ${new Date().getFullYear()} Decentralized Den</p>
     </div>
   </div>
 </body>
 </html>
-  `;
+`;
 
   try {
     const response = await resend.emails.send({
