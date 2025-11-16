@@ -2,11 +2,12 @@ import NextAuth, { type NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import type { Adapter } from "next-auth/adapters"; // ✅ ADD THIS IMPORT
 import { SiweMessage } from "siwe";
 import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma) as Adapter, 
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -26,7 +27,6 @@ export const authOptions: NextAuthOptions = {
           }
 
           const siwe = new SiweMessage(JSON.parse(credentials.message || "{}"));
-
           const nonce = siwe.nonce;
 
           if (!nonce) {
@@ -36,11 +36,10 @@ export const authOptions: NextAuthOptions = {
 
           const nextAuthUrl = new URL(process.env.NEXTAUTH_URL!);
 
-          // Verify the signature
           const result = await siwe.verify({
             signature: credentials.signature || "",
             domain: nextAuthUrl.host,
-            nonce: nonce, 
+            nonce: nonce,
           });
 
           if (!result.success) {
@@ -50,7 +49,6 @@ export const authOptions: NextAuthOptions = {
 
           const walletAddress = siwe.address;
 
-          // Check if wallet is already linked to a user
           const account = await prisma.account.findUnique({
             where: {
               provider_providerAccountId: {
@@ -61,26 +59,16 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (account) {
-            // Found account, return the associated user
             const user = await prisma.user.findUnique({
               where: { id: account.userId },
             });
-            return user;
+            return user; // ✅ This user object will include `userRole`
           }
 
-          // --- ⬇️ THIS IS THE FIX ⬇️ ---
-          //
-          // If no account is found, we return null.
-          // This stops the wallet-based "signup" and forces
-          // users to create an account with Google first.
-          //
           console.warn(
             `Wallet login failed: Wallet ${walletAddress} is not linked to any existing user account.`
           );
           return null;
-          //
-          // --- ⬆️ END OF FIX ⬆️ ---
-
         } catch (e) {
           console.error("Authorize error:", e);
           return null;
@@ -94,37 +82,50 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
+    /**
+     * ✅ UPDATED: This callback adds the userRole to the JWT.
+     * This is essential for the middleware to be able to check permissions.
+     */
+    async jwt({ token, user }) {
+      if (user) {
+        // On initial sign in, `user` object is available
+        token.sub = user.id;
+        token.userRole = user.userRole; // Add the role to the token
+      }
+      return token;
+    },
+
+    /**
+     * ✅ UPDATED: This callback adds the userRole to the session object.
+     * This is so you can access it on the client-side (e.g., in AdminLayout).
+     */
     async session({ session, token }) {
       if (session.user && token.sub) {
+        // 1. Add ID and Role directly from the token
         session.user.id = token.sub;
+        session.user.userRole = token.userRole;
 
-        const user = await prisma.user.findUnique({
+        // 2. Your existing logic to get other user details from the DB
+        const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
           select: {
-            id: true,
+            // Note: We don't need to re-fetch id or userRole
+            // They are already in the token.
             email: true,
             displayName: true,
             walletAddress: true,
             image: true,
-            // Add any other user fields you need in the session
-            // e.g., role, firstName, etc.
           },
         });
 
-        if (user) {
-          (session.user as any).walletAddress = user.walletAddress;
-          session.user.name = user.displayName;
-          session.user.email = user.email;
-          session.user.image = user.image;
+        if (dbUser) {
+          (session.user as any).walletAddress = dbUser.walletAddress;
+          session.user.name = dbUser.displayName;
+          session.user.email = dbUser.email;
+          session.user.image = dbUser.image;
         }
       }
       return session;
-    },
-    async jwt({ token, user }) {
-      if (user) {
-        token.sub = user.id;
-      }
-      return token;
     },
   },
 
