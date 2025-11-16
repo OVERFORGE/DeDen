@@ -36,7 +36,7 @@ const Footer = () => {
                 height={50}
                 className=" w-auto -mb-2"
               />
-              <div className="flex gap-3 w-9/12  justify-end invert">
+              <div className="flex gap-3 md:w-9/12  md:justify-end invert">
                 <a
                   href="https://www.instagram.com/decentralizedden/"
                   target="_blank"
