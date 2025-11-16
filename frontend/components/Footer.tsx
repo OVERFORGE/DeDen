@@ -27,15 +27,51 @@ const Footer = () => {
       <div className=" w-full mx-6 md:mx-30 px-6 z-10 relative">
         {/* Footer content */}
         <div className=" grid md:grid-cols-5 gap-12 mb-16">
-          <div className="col-span-2 md:col-span-1">
-            <div className="mb-6">
+          <div className=" col-span-2 md:col-span-1">
+            <div className="mb-2">
               <Image
                 src="/images/logo-no-bg.png"
                 alt="DEDEN Logo"
                 width={140}
                 height={50}
-                className=" w-auto"
+                className=" w-auto -mb-2"
               />
+              <div className="flex gap-3 w-9/12  justify-end invert">
+                <a
+                  href="https://www.instagram.com/decentralizedden/"
+                  target="_blank"
+                >
+                  <Image
+                    src="/insta_icon.png"
+                    alt="DEDEN Logo"
+                    width={140}
+                    height={50}
+                    className=" w-[40px] cursor-pointer"
+                  />
+                </a>
+                <a
+                  href="https://chat.whatsapp.com/IXzTVWE40zGDrKxoDTVHv5"
+                  target="_blank"
+                >
+                  <Image
+                    src="/wp_icon.png"
+                    alt="DEDEN Logo"
+                    width={140}
+                    height={50}
+                    className=" w-[40px] cursor-pointer"
+                  />
+                </a>
+
+                <a href="https://x.com/TheDeDenn" target="_blank">
+                  <Image
+                    src="/x_icon.png"
+                    alt="DEDEN Logo"
+                    width={140}
+                    height={50}
+                    className=" w-[40px] cursor-pointer"
+                  />
+                </a>
+              </div>
             </div>
           </div>
           <div className="col-span-2 md:col-span-1"></div>
