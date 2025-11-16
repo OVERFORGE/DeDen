@@ -1,5 +1,5 @@
 // File: app/api/stays/[stayId]/apply/route.ts
-// ✅ UPDATED: Now accepts custom numberOfNights from user selection
+// ✅ UPDATED: Now saves checkInDate and checkOutDate to database
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
@@ -8,7 +8,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"; 
 
 /**
- * Apply for a stay (join waitlist) - WITH USER-SELECTED NIGHTS
+ * Apply for a stay (join waitlist) - WITH USER-SELECTED DATES & NIGHTS
  * POST /api/stays/[stayId]/apply
  */
 export async function POST(
@@ -38,7 +38,9 @@ export async function POST(
 			age,
 			mobileNumber,
 			selectedRoomId,
-			numberOfNights, // ✅ NEW: User-selected nights
+			numberOfNights, // User-selected nights
+			checkInDate,    // ✅ NEW: User-selected check-in date
+			checkOutDate,   // ✅ NEW: User-selected check-out date
 			socialTwitter,
 			socialTelegram,
 			socialLinkedin,
@@ -66,10 +68,17 @@ export async function POST(
 			);
 		}
 
-		// ✅ NEW: Validate numberOfNights
+		// ✅ NEW: Validate numberOfNights and dates
 		if (!numberOfNights || numberOfNights < 1) {
 			return NextResponse.json(
 				{ error: 'Please select at least 1 night' },
+				{ status: 400 }
+			);
+		}
+
+		if (!checkInDate || !checkOutDate) {
+			return NextResponse.json(
+				{ error: 'Please select check-in and check-out dates' },
 				{ status: 400 }
 			);
 		}
@@ -93,7 +102,7 @@ export async function POST(
 			);
 		}
 
-		// ✅ NEW: Validate that selected nights don't exceed stay duration
+		// ✅ Validate that selected nights don't exceed stay duration
 		const stayDuration = stay.duration || Math.ceil(
 			(new Date(stay.endDate).getTime() - new Date(stay.startDate).getTime()) / (1000 * 60 * 60 * 24)
 		);
@@ -105,10 +114,10 @@ export async function POST(
 			);
 		}
 
-		console.log(`[Apply] User selected ${numberOfNights} nights (Stay has ${stayDuration} nights total)`);
+		console.log(`[Apply] User selected ${numberOfNights} nights from ${checkInDate} to ${checkOutDate}`);
 
 		// ============================================
-		// ✅ UPDATED: Find selected room & calculate price based on USER-SELECTED nights
+		// ✅ Find selected room & calculate price based on USER-SELECTED nights
 		// ============================================
 		let pricePerNightUSDC: number | null = null;
 		let pricePerNightUSDT: number | null = null;
@@ -122,17 +131,17 @@ export async function POST(
 			
 			if (selectedRoom) {
 				// Room prices are PER NIGHT
-			pricePerNightUSDC = selectedRoom.priceUSDC ?? stay.priceUSDC;
-                        pricePerNightUSDT = selectedRoom.priceUSDT ?? stay.priceUSDT;
+				pricePerNightUSDC = selectedRoom.priceUSDC ?? stay.priceUSDC;
+				pricePerNightUSDT = selectedRoom.priceUSDT ?? stay.priceUSDT;
 				
-			if (typeof pricePerNightUSDC !== 'number' || typeof pricePerNightUSDT !== 'number') {
-                            console.error(`[Apply] Invalid price for room ${selectedRoomId}.`);
-                            return NextResponse.json({ error: "Could not determine price for selected room" }, { status: 500 });
-                        }
-                        
-                        // ✅ Calculate TOTAL using USER-SELECTED nights (NOW SAFE)
-                        totalPriceUSDC = pricePerNightUSDC * numberOfNights;
-                        totalPriceUSDT = pricePerNightUSDT * numberOfNights;
+				if (typeof pricePerNightUSDC !== 'number' || typeof pricePerNightUSDT !== 'number') {
+					console.error(`[Apply] Invalid price for room ${selectedRoomId}.`);
+					return NextResponse.json({ error: "Could not determine price for selected room" }, { status: 500 });
+				}
+				
+				// ✅ Calculate TOTAL using USER-SELECTED nights
+				totalPriceUSDC = pricePerNightUSDC * numberOfNights;
+				totalPriceUSDT = pricePerNightUSDT * numberOfNights;
 				roomName = selectedRoom.name;
 
 				console.log(`[Apply] Room: ${roomName}`);
@@ -183,7 +192,6 @@ export async function POST(
 			},
 		});
 		
-		
 		// 6. Check for existing booking
 		const existingBooking = await db.booking.findFirst({
 			where: {
@@ -212,11 +220,13 @@ export async function POST(
 						status: BookingStatus.WAITLISTED,
 						preferredRoomId: selectedRoomId || null,
 						selectedRoomId: selectedRoomId || null,
-						// ✅ UPDATED: Store user-selected nights
+						// ✅ UPDATED: Store user-selected dates and nights
 						numberOfNights: numberOfNights,
+						checkInDate: new Date(checkInDate),      // ✅ NEW
+						checkOutDate: new Date(checkOutDate),    // ✅ NEW
 						pricePerNightUSDC: pricePerNightUSDC,
 						pricePerNightUSDT: pricePerNightUSDT,
-						// ✅ UPDATED: Store calculated totals
+						// ✅ Store calculated totals
 						selectedRoomPriceUSDC: totalPriceUSDC,  
 						selectedRoomPriceUSDT: totalPriceUSDT,  
 						selectedRoomName: roomName,
@@ -245,6 +255,8 @@ export async function POST(
 							stayTitle: stay.title,
 							selectedRoomName: roomName,
 							numberOfNights: numberOfNights,
+							checkInDate: checkInDate,
+							checkOutDate: checkOutDate,
 							pricePerNightUSDC: pricePerNightUSDC,
 							pricePerNightUSDT: pricePerNightUSDT,
 							totalPriceUSDC: totalPriceUSDC,
@@ -266,7 +278,6 @@ export async function POST(
 			}
 		}
 
-
 		// 7. Create NEW Booking
 		const randomId = `${stayId}-${Date.now()}`;
 
@@ -283,11 +294,13 @@ export async function POST(
 				guestMobile: mobileNumber,
 				preferredRoomId: selectedRoomId || null,
 				selectedRoomId: selectedRoomId || null,
-				// ✅ UPDATED: Store user-selected nights
+				// ✅ UPDATED: Store user-selected dates and nights
 				numberOfNights: numberOfNights,
+				checkInDate: new Date(checkInDate),      // ✅ NEW
+				checkOutDate: new Date(checkOutDate),    // ✅ NEW
 				pricePerNightUSDC: pricePerNightUSDC,
 				pricePerNightUSDT: pricePerNightUSDT,
-				// ✅ UPDATED: Store calculated totals
+				// ✅ Store calculated totals
 				selectedRoomPriceUSDC: totalPriceUSDC, 
 				selectedRoomPriceUSDT: totalPriceUSDT, 
 				selectedRoomName: roomName,
@@ -316,7 +329,9 @@ export async function POST(
 					mobileNumber: mobileNumber,
 					selectedRoomId: selectedRoomId,
 					selectedRoomName: roomName,
-					numberOfNights: numberOfNights, // ✅ Log selected nights
+					numberOfNights: numberOfNights,
+					checkInDate: checkInDate,
+					checkOutDate: checkOutDate,
 					pricePerNightUSDC: pricePerNightUSDC,
 					pricePerNightUSDT: pricePerNightUSDT,
 					totalPriceUSDC: totalPriceUSDC,
@@ -336,6 +351,8 @@ export async function POST(
 					stayTitle: stay.title,
 					selectedRoomName: roomName,
 					numberOfNights: numberOfNights,
+					checkInDate: checkInDate,
+					checkOutDate: checkOutDate,
 					pricePerNightUSDC: pricePerNightUSDC,
 					pricePerNightUSDT: pricePerNightUSDT,
 					totalPriceUSDC: totalPriceUSDC,

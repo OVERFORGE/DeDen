@@ -1,6 +1,6 @@
 // Decentralized Den - Production-Ready Prisma Schema
-// ✅ UPDATED: Nights-based pricing + Fixed walletAddress unique constraint
-// Version: 2.0 - MongoDB Optimized
+// ✅ UPDATED: Added checkInDate and checkOutDate to Booking model
+// Version: 2.1 - MongoDB Optimized
 
 generator client {
   provider = "prisma-client-js"
@@ -245,7 +245,7 @@ model Stay {
 
 // ============================================================================
 // BOOKING MODEL - Core transaction/reservation
-// ✅ UPDATED: Now includes nights-based pricing fields
+// ✅ UPDATED: Now includes check-in/out dates and nights-based pricing
 // ============================================================================
 
 model Booking {
@@ -270,8 +270,10 @@ model Booking {
   selectedRoomId  String?
   guestCount      Int           @default(1)
   
-  // ✅ NEW: Nights-Based Pricing Fields
+  // ✅ NEW: Nights-Based Pricing Fields with Check-In/Out Dates
   numberOfNights      Int?          // Number of nights for this booking
+  checkInDate         DateTime?     // ✅ NEW: User-selected check-in date
+  checkOutDate        DateTime?     // ✅ NEW: User-selected check-out date
   pricePerNightUSDC   Float?        // Room price PER NIGHT in USDC
   pricePerNightUSDT   Float?        // Room price PER NIGHT in USDT
   
@@ -351,6 +353,8 @@ model Booking {
   @@index([txHash])
   @@index([sessionToken])
   @@index([numberOfNights])
+  @@index([checkInDate])
+  @@index([checkOutDate])
 }
 
 // ============================================================================

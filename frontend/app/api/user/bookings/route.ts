@@ -1,5 +1,5 @@
 // File: app/api/user/bookings/route.ts
-// ✅ UPDATED: Now returns nights-based pricing fields
+// ✅ UPDATED: Now returns checkInDate, checkOutDate, and txHash
 
 import { db } from '@/lib/database';
 import { NextResponse } from 'next/server';
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     console.log('[API] Display Name:', user.displayName);
     console.log('[API] Email:', user.email);
 
-    // Fetch bookings with nights-based pricing fields
+    // Fetch bookings with all date fields and tx hash
     let bookings = await db.booking.findMany({
       where: {
         userId: user.id,
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
             location: true,
             startDate: true,
             endDate: true,
-            duration: true,        // ✅ NEW: Include duration (nights)
+            duration: true,
             priceUSDC: true,
             priceUSDT: true,
           },
@@ -111,7 +111,7 @@ export async function GET(request: Request) {
       console.log('[API] Manual filter found:', bookings.length, 'bookings');
     }
 
-    // ✅ Transform dates AND include nights-based pricing fields
+    // ✅ Transform dates AND include all new fields
     const serializedBookings = bookings.map(booking => ({
       bookingId: booking.bookingId,
       status: booking.status,
@@ -121,19 +121,27 @@ export async function GET(request: Request) {
       selectedRoomId: booking.selectedRoomId,
       roomType: booking.roomType,
       
-      // ✅ NEW: Nights-based pricing fields
+      // ✅ NEW: Date fields
       numberOfNights: booking.numberOfNights,
+      checkInDate: booking.checkInDate?.toISOString() || null,   // ✅ NEW
+      checkOutDate: booking.checkOutDate?.toISOString() || null, // ✅ NEW
+      
+      // Pricing fields
       pricePerNightUSDC: booking.pricePerNightUSDC,
       pricePerNightUSDT: booking.pricePerNightUSDT,
-      selectedRoomPriceUSDC: booking.selectedRoomPriceUSDC,  // Total USDC
-      selectedRoomPriceUSDT: booking.selectedRoomPriceUSDT,  // Total USDT
+      selectedRoomPriceUSDC: booking.selectedRoomPriceUSDC,
+      selectedRoomPriceUSDT: booking.selectedRoomPriceUSDT,
       selectedRoomName: booking.selectedRoomName,
       
-      // Legacy payment fields (for backward compatibility)
+      // Payment fields
       paymentAmount: booking.paymentAmount,
       paymentToken: booking.paymentToken,
-      txHash: booking.txHash,
+      txHash: booking.txHash,                                    // ✅ INCLUDED
+      chain: booking.chain,
+      chainId: booking.chainId,
+      blockNumber: booking.blockNumber,
       
+      // Session fields
       expiresAt: booking.expiresAt?.toISOString() || null,
       confirmedAt: booking.confirmedAt?.toISOString() || null,
       createdAt: booking.createdAt.toISOString(),
@@ -146,7 +154,7 @@ export async function GET(request: Request) {
         location: booking.stay.location,
         startDate: booking.stay.startDate.toISOString(),
         endDate: booking.stay.endDate.toISOString(),
-        duration: booking.stay.duration,  // ✅ NEW: Include nights
+        duration: booking.stay.duration,
         priceUSDC: booking.stay.priceUSDC,
         priceUSDT: booking.stay.priceUSDT,
       },
