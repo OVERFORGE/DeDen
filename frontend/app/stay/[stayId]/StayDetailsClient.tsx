@@ -346,10 +346,10 @@ export default function StayDetailsClient({ stay }: { stay: StayData }) {
                 <span className="text-2xl">💳</span>
                 What payment methods do you accept?
               </h4>
-              <p className="font-inter text-gray-200 leading-relaxed">
-                We accept USDC and USDT on BSC network. You'll need a crypto
-                wallet like MetaMask.
-              </p>
+           <p className="font-inter text-gray-200 leading-relaxed">
+  We accept USDC and USDT on the <strong>BNB, Base, and Arbitrum</strong> networks. You'll need a crypto
+  wallet like MetaMask.
+</p>
             </div>
 
             <div className="bg-white/5 backdrop-blur-sm border-2 border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all">

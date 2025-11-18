@@ -1,7 +1,8 @@
 "use client";
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, redirect } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react'; // Import useSession and signOut
 import { 
   LayoutDashboard, 
   Users, 
@@ -10,9 +11,20 @@ import {
   LogOut,
   Menu,
   X,
-  Gift, // For Referrals icon
+  Gift,
+  Loader2, // A good icon for loading
 } from 'lucide-react';
 import { useState } from 'react';
+
+// --- A simple loading component ---
+function AdminLoading() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+      <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+      <p className="mt-4 text-lg text-gray-700">Verifying access...</p>
+    </div>
+  );
+}
 
 export default function AdminLayout({
   children,
@@ -21,7 +33,34 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // --- 1. Get Session & Status ---
+  const { data: session, status } = useSession();
 
+  // --- 2. Handle Loading State ---
+  // While 'status' is "loading", show a spinner
+  if (status === "loading") {
+    return <AdminLoading />;
+  }
+
+  // --- 3. Handle Unauthenticated State ---
+  // If not logged in, redirect to sign-in page.
+  // Middleware should catch this first, but this is a good fallback.
+  if (status === "unauthenticated") {
+    redirect(`/auth/signin?callbackUrl=${encodeURIComponent(pathname)}`);
+    return <AdminLoading />; // Show loading while redirecting
+  }
+
+  // --- 4. Handle Authenticated but NOT Admin ---
+  // If the user is logged in but their role is not 'ADMIN', redirect them.
+  if (session?.user?.userRole !== "ADMIN") {
+    // Redirect to a 403 Forbidden page or the main dashboard
+    redirect('/?error=forbidden'); // Redirect to home page with an error
+    return <AdminLoading />; // Show loading while redirecting
+  }
+  
+  // --- 5. User is an ADMIN: Render the layout ---
+  // If status is "authenticated" AND userRole is "ADMIN", show the layout.
   const navigation = [
     { 
       name: 'Bookings', 
@@ -121,7 +160,11 @@ export default function AdminLayout({
 
           {/* Footer */}
           <div className="p-4 border-t border-gray-800">
-            <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-lg transition-colors">
+            {/* ✅ UPDATED: Added onClick to sign out */}
+            <button 
+              onClick={() => signOut({ callbackUrl: '/' })} // Sign out and redirect to home
+              className="w-full flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-lg transition-colors"
+            >
               <LogOut size={20} />
               <span>Sign Out</span>
             </button>
