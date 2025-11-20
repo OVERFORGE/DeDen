@@ -1,3 +1,6 @@
+// File: app/admin/bookings/page.tsx
+// ✅ UPDATED: Added RESERVED tab and reservation payment breakdown
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -12,7 +15,8 @@ import {
   Download,
   Search,
   ChevronDown,
-  X
+  X,
+  Calendar
 } from "lucide-react";
 
 // Types
@@ -33,6 +37,16 @@ type Booking = {
   numberOfNights?: number;
   pricePerNightUSDC?: number;
   pricePerNightUSDT?: number;
+  
+  // ✅ NEW: Reservation fields
+  requiresReservation?: boolean;
+  reservationAmount?: number;
+  reservationPaid?: boolean;
+  remainingAmount?: number;
+  remainingDueDate?: string;
+  checkInDate?: string;
+  checkOutDate?: string;
+  
   txHash?: string;
   chain?: string;
   chainId?: number;
@@ -65,9 +79,9 @@ type Booking = {
   };
 };
 
-type TabType = "WAITLISTED" | "PENDING" | "CONFIRMED" | "ALL";
+type TabType = "WAITLISTED" | "PENDING" | "RESERVED" | "CONFIRMED" | "ALL";
 
-// Helper function - defined before component to avoid hoisting issues
+// Helper function
 const getChainName = (chainId?: number): string => {
   const chains: Record<number, string> = {
     42161: 'Arbitrum',
@@ -84,15 +98,12 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("WAITLISTED");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStay, setSelectedStay] = useState<string>("ALL");
-  const [showFilters, setShowFilters] = useState(false);
 
-  // Fetch bookings - ALWAYS fetch ALL bookings for correct stats
   const fetchBookings = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Always fetch ALL bookings (no status filter)
       const res = await fetch('/api/admin/bookings');
       if (!res.ok) {
         throw new Error('Failed to fetch bookings');
@@ -109,13 +120,12 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchBookings();
-  }, []); // Only fetch once on mount
+  }, []);
 
   const handleApproved = () => {
-    fetchBookings(); // Refresh all bookings
+    fetchBookings();
   };
 
-  // Get unique stays for filter
   const uniqueStays = Array.from(
     new Set(bookings.map(b => b.stay.stayId))
   ).map(stayId => {
@@ -126,35 +136,31 @@ export default function AdminDashboard() {
     };
   });
 
-  // Filter bookings by tab, search, and stay
   const filteredBookings = bookings.filter(booking => {
-    // Filter by active tab
     const matchesTab = 
       activeTab === "ALL" || 
       booking.status === activeTab;
     
-    // Filter by search term
     const matchesSearch = 
       booking.guestName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.guestEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.bookingId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.user.walletAddress?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Filter by selected stay
     const matchesStay = selectedStay === "ALL" || booking.stay.stayId === selectedStay;
     
     return matchesTab && matchesSearch && matchesStay;
   });
 
-  // Calculate statistics
+  // ✅ UPDATED: Added RESERVED to stats
   const stats = {
     waitlisted: bookings.filter(b => b.status === 'WAITLISTED').length,
     pending: bookings.filter(b => b.status === 'PENDING').length,
+    reserved: bookings.filter(b => b.status === 'RESERVED').length, // ✅ NEW
     confirmed: bookings.filter(b => b.status === 'CONFIRMED').length,
     total: bookings.length,
   };
 
-  // Calculate revenue analytics
   const analytics = {
     totalUSDC: bookings
       .filter(b => b.status === 'CONFIRMED' && b.paymentToken === 'USDC')
@@ -178,10 +184,12 @@ export default function AdminDashboard() {
       }, {} as Record<string, { USDC: number; USDT: number }>),
   };
 
+  // ✅ UPDATED: Added RESERVED status
   const getStatusBadge = (status: string) => {
     const styles: Record<string, { bg: string; text: string; label: string }> = {
       WAITLISTED: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '⏳ Waitlisted' },
       PENDING: { bg: 'bg-blue-100', text: 'text-blue-800', label: '💳 Pending Payment' },
+      RESERVED: { bg: 'bg-purple-100', text: 'text-purple-800', label: '🎫 Reserved' }, // ✅ NEW
       CONFIRMED: { bg: 'bg-green-100', text: 'text-green-800', label: '✅ Confirmed' },
       CANCELLED: { bg: 'bg-red-100', text: 'text-red-800', label: '❌ Cancelled' },
       EXPIRED: { bg: 'bg-gray-100', text: 'text-gray-800', label: '⌛ Expired' },
@@ -263,7 +271,6 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Booking Management
@@ -284,7 +291,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
               <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -309,6 +316,19 @@ export default function AdminDashboard() {
             <p className="text-sm text-gray-600">Awaiting Payment</p>
           </div>
 
+          {/* ✅ NEW: RESERVED Stats Card */}
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <span className="text-purple-600 text-2xl">🎫</span>
+              </div>
+              <span className="text-3xl font-bold text-gray-900">
+                {stats.reserved}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Reserved (Awaiting Remaining)</p>
+          </div>
+
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -323,8 +343,8 @@ export default function AdminDashboard() {
 
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Users className="text-purple-600" size={24} />
+              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                <Users className="text-gray-600" size={24} />
               </div>
               <span className="text-3xl font-bold text-gray-900">
                 {stats.total}
@@ -380,7 +400,6 @@ export default function AdminDashboard() {
         {/* Filters and Search */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
           <div className="flex flex-col md:flex-row gap-4 mb-4">
-            {/* Search */}
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -402,7 +421,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Stay Filter */}
             <div className="relative">
               <select
                 value={selectedStay}
@@ -419,7 +437,6 @@ export default function AdminDashboard() {
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
             </div>
 
-            {/* Export Button */}
             <button
               onClick={exportToCSV}
               className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
@@ -429,9 +446,9 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {/* Tabs */}
+          {/* ✅ UPDATED: Added RESERVED tab */}
           <div className="flex gap-2 border-b border-gray-200">
-            {(['WAITLISTED', 'PENDING', 'CONFIRMED', 'ALL'] as TabType[]).map((tab) => (
+            {(['WAITLISTED', 'PENDING', 'RESERVED', 'CONFIRMED', 'ALL'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -452,7 +469,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Results Info */}
         <div className="mb-4 text-sm text-gray-600">
           Showing {filteredBookings.length} of {bookings.length} bookings
         </div>
@@ -513,6 +529,19 @@ export default function AdminDashboard() {
                           <p className="text-sm text-gray-600">
                             📍 {booking.stay.location}
                           </p>
+                          
+                          {/* ✅ NEW: Show check-in/out dates if available */}
+                          {booking.checkInDate && booking.checkOutDate && (
+                            <div className="text-xs text-gray-500 mt-2">
+                              <div className="flex items-center gap-1">
+                                <Calendar size={12} />
+                                <span>
+                                  {new Date(booking.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(booking.checkOutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                          
                           <p className="text-xs text-gray-500">
                             {new Date(booking.createdAt).toLocaleDateString()} at{' '}
                             {new Date(booking.createdAt).toLocaleTimeString()}
@@ -549,11 +578,6 @@ export default function AdminDashboard() {
                               🔐 {booking.user.walletAddress.slice(0, 6)}...{booking.user.walletAddress.slice(-4)}
                             </p>
                           )}
-                          {booking.user.socialTwitter && (
-                            <p className="text-xs text-blue-600">
-                              🐦 {booking.user.socialTwitter}
-                            </p>
-                          )}
                         </div>
                       </td>
 
@@ -575,11 +599,6 @@ export default function AdminDashboard() {
                                   ${booking.pricePerNightUSDC}/night USDC
                                 </p>
                               )}
-                              {booking.pricePerNightUSDT && (
-                                <p className="text-sm text-purple-600">
-                                  ${booking.pricePerNightUSDT}/night USDT
-                                </p>
-                              )}
                             </>
                           ) : (
                             <p className="text-sm text-gray-500">
@@ -589,13 +608,23 @@ export default function AdminDashboard() {
                         </div>
                       </td>
 
-                      {/* Payment Details */}
+                      {/* ✅ UPDATED: Payment Details with reservation breakdown */}
                       <td className="px-6 py-4">
                         {booking.status === 'CONFIRMED' && booking.paymentAmount ? (
                           <div className="space-y-1">
                             <p className="font-bold text-lg text-green-600">
                               ${booking.paymentAmount} {booking.paymentToken}
                             </p>
+                            
+                            {/* ✅ NEW: Show reservation breakdown if applicable */}
+                            {booking.requiresReservation && booking.reservationAmount && (
+                              <div className="text-xs text-gray-600 mt-2 space-y-1 bg-purple-50 p-2 rounded">
+                                <p className="font-semibold text-purple-700">Payment Breakdown:</p>
+                                <p>Reservation: ${booking.reservationAmount}</p>
+                                <p>Remaining: ${booking.remainingAmount}</p>
+                              </div>
+                            )}
+                            
                             {booking.chainId && (
                               <p className="text-xs text-gray-600">
                                 ⛓️ {getChainName(booking.chainId)}
@@ -612,9 +641,19 @@ export default function AdminDashboard() {
                                 {booking.txHash.slice(0, 8)}...{booking.txHash.slice(-6)}
                               </a>
                             )}
-                            {booking.blockNumber && (
+                          </div>
+                        ) : booking.status === 'RESERVED' ? (
+                          // ✅ NEW: RESERVED status payment display
+                          <div className="space-y-1">
+                            <p className="font-bold text-purple-600">
+                              Reservation Paid: ${booking.reservationAmount}
+                            </p>
+                            <p className="text-sm text-amber-700">
+                              Remaining: ${booking.remainingAmount} (due on check-in)
+                            </p>
+                            {booking.remainingDueDate && (
                               <p className="text-xs text-gray-500">
-                                Block: {booking.blockNumber}
+                                Due: {new Date(booking.remainingDueDate).toLocaleDateString()}
                               </p>
                             )}
                           </div>
@@ -664,6 +703,16 @@ export default function AdminDashboard() {
                                 Expires: {new Date(booking.expiresAt).toLocaleString()}
                               </p>
                             )}
+                          </div>
+                        ) : booking.status === 'RESERVED' ? (
+                          // ✅ NEW: Action for RESERVED status
+                          <div className="space-y-2">
+                            <span className="text-purple-600 font-semibold text-sm block">
+                              🎫 Reserved
+                            </span>
+                            <p className="text-xs text-gray-600">
+                              Awaiting remaining payment
+                            </p>
                           </div>
                         ) : booking.status === 'CONFIRMED' ? (
                           <span className="text-green-600 font-semibold text-sm">

@@ -1,5 +1,5 @@
 // File: app/api/stays/[stayId]/apply/route.ts
-// ✅ UPDATED: Now handles referral codes and loyalty discounts
+// ✅ UPDATED: Added reservation system for 2+ nights bookings
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
@@ -8,7 +8,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 /**
- * Apply for a stay with referral code and loyalty discount support
+ * Apply for a stay with referral code, loyalty discount, and reservation system support
  * POST /api/stays/[stayId]/apply
  */
 export async function POST(
@@ -43,7 +43,7 @@ export async function POST(
       socialTwitter,
       socialTelegram,
       socialLinkedin,
-      referralCode, // ✅ NEW: Referral code from form
+      referralCode,
     } = body;
 
     // 2. Validation
@@ -113,7 +113,15 @@ export async function POST(
       );
     }
 
-    // 4. ✅ CHECK LOYALTY DISCOUNT (20% for returning customers)
+    // ✅ NEW: Check if booking requires reservation (2+ nights)
+const requiresReservation = stay.requiresReservation && numberOfNights > 2;    const reservationAmount = requiresReservation ? (stay.reservationAmount || 30) : null;
+
+    console.log(`[Apply] Booking requires reservation: ${requiresReservation}`);
+    if (requiresReservation) {
+      console.log(`[Apply] Reservation amount: $${reservationAmount}`);
+    }
+
+    // 4. CHECK LOYALTY DISCOUNT (20% for returning customers)
     const previousBookings = await db.booking.count({
       where: {
         userId: userId,
@@ -127,7 +135,7 @@ export async function POST(
     console.log(`[Apply] User has ${previousBookings} previous confirmed bookings`);
     console.log(`[Apply] Loyalty discount: ${loyaltyDiscountPercent}%`);
 
-    // 5. ✅ VALIDATE REFERRAL CODE (10% discount)
+    // 5. VALIDATE REFERRAL CODE (10% discount)
     let validatedReferralCode = null;
     let referralDiscountPercent = 0;
 
@@ -141,7 +149,6 @@ export async function POST(
       });
 
       if (referral) {
-        // Check expiration
         if (referral.expiresAt && new Date(referral.expiresAt) < new Date()) {
           return NextResponse.json(
             { error: 'This referral code has expired' },
@@ -149,7 +156,6 @@ export async function POST(
           );
         }
 
-        // Check usage limit
         if (referral.maxUsage && referral.usageCount >= referral.maxUsage) {
           return NextResponse.json(
             { error: 'This referral code has reached its usage limit' },
@@ -168,15 +174,13 @@ export async function POST(
       }
     }
 
-    // 6. ✅ CALCULATE FINAL DISCOUNT
-    // Priority: Loyalty (20%) > Referral (10%)
-    // User gets the HIGHEST discount available
+    // 6. CALCULATE FINAL DISCOUNT (Loyalty 20% > Referral 10%)
     const finalDiscountPercent = Math.max(loyaltyDiscountPercent, referralDiscountPercent);
     const isLoyaltyDiscount = finalDiscountPercent === loyaltyDiscountPercent && loyaltyDiscountPercent > 0;
 
     console.log(`[Apply] Final discount applied: ${finalDiscountPercent}% (${isLoyaltyDiscount ? 'Loyalty' : 'Referral'})`);
 
-    // 7. ✅ CALCULATE PRICES WITH DISCOUNT
+    // 7. CALCULATE PRICES WITH DISCOUNT
     let pricePerNightUSDC: number | null = null;
     let pricePerNightUSDT: number | null = null;
     let originalTotalUSDC: number | null = null;
@@ -220,6 +224,18 @@ export async function POST(
     console.log(`[Apply] Original: $${originalTotalUSDC} USDC / $${originalTotalUSDT} USDT`);
     console.log(`[Apply] Discount: -$${discountAmountUSDC} USDC / -$${discountAmountUSDT} USDT (${finalDiscountPercent}%)`);
     console.log(`[Apply] Final: $${finalTotalUSDC} USDC / $${finalTotalUSDT} USDT`);
+
+    // ✅ NEW: Calculate remaining amount if reservation is required
+    let remainingAmountUSDC: number | null = null;
+    let remainingAmountUSDT: number | null = null;
+    
+    if (requiresReservation && reservationAmount) {
+      remainingAmountUSDC = finalTotalUSDC - reservationAmount;
+      remainingAmountUSDT = finalTotalUSDT - reservationAmount;
+      
+      console.log(`[Apply] Reservation: $${reservationAmount}`);
+      console.log(`[Apply] Remaining: $${remainingAmountUSDC} USDC / $${remainingAmountUSDT} USDT`);
+    }
 
     // 8. Get & Update Authenticated User
     const emailConflict = await db.user.findFirst({
@@ -275,7 +291,7 @@ export async function POST(
         existingBooking.status === BookingStatus.REFUNDED;
 
       if (isTerminalStatus) {
-        // Update old booking with new discount info
+        // Update old booking
         const updatedBooking = await db.booking.update({
           where: { id: existingBooking.id },
           data: {
@@ -287,7 +303,6 @@ export async function POST(
             checkOutDate: new Date(checkOutDate),
             pricePerNightUSDC,
             pricePerNightUSDT,
-            // ✅ Discount fields
             originalPrice: originalTotalUSDC,
             discountPercent: finalDiscountPercent,
             discountAmount: discountAmountUSDC,
@@ -295,16 +310,22 @@ export async function POST(
             isLoyaltyDiscount,
             referralCodeId: validatedReferralCode?.id || null,
             referralCodeUsed: validatedReferralCode?.code || null,
-            // Store both currency options
             selectedRoomPriceUSDC: finalTotalUSDC,
             selectedRoomPriceUSDT: finalTotalUSDT,
             selectedRoomName: roomName,
+            // ✅ NEW: Reservation fields
+            requiresReservation: requiresReservation,
+            reservationAmount: reservationAmount,
+            remainingAmount: remainingAmountUSDC,
+            reservationPaid: false,
+            remainingPaid: false,
+            remainingDueDate: requiresReservation ? new Date(checkInDate) : null,
+            // Reset payment fields
             guestName: user.displayName,
             guestEmail: user.email,
             guestGender: gender,
             guestAge: age,
             guestMobile: mobileNumber,
-            // Clear payment fields
             paymentToken: null,
             paymentAmount: null,
             txHash: null,
@@ -314,20 +335,19 @@ export async function POST(
           },
         });
 
-        // Update referral code usage
         if (validatedReferralCode) {
           await db.referralCode.update({
             where: { id: validatedReferralCode.id },
-            data: {
-              usageCount: { increment: 1 },
-            },
+            data: { usageCount: { increment: 1 } },
           });
         }
 
         return NextResponse.json(
           {
             success: true,
-            message: 'Application re-submitted with discount applied!',
+            message: finalDiscountPercent > 0 
+              ? `Application re-submitted with ${finalDiscountPercent}% discount!`
+              : 'Application re-submitted successfully!',
             booking: {
               bookingId: updatedBooking.bookingId,
               status: updatedBooking.status,
@@ -342,6 +362,9 @@ export async function POST(
               finalPriceUSDC: finalTotalUSDC,
               finalPriceUSDT: finalTotalUSDT,
               discountType: isLoyaltyDiscount ? 'Loyalty (20%)' : validatedReferralCode ? `Referral (${referralDiscountPercent}%)` : 'None',
+              requiresReservation,
+              reservationAmount,
+              remainingAmount: remainingAmountUSDC,
             },
           },
           { status: 201 }
@@ -358,7 +381,7 @@ export async function POST(
       }
     }
 
-    // 10. Create NEW Booking with discounts
+    // 10. Create NEW Booking
     const randomId = `${stayId}-${Date.now()}`;
 
     const newBooking = await db.booking.create({
@@ -379,7 +402,6 @@ export async function POST(
         checkOutDate: new Date(checkOutDate),
         pricePerNightUSDC,
         pricePerNightUSDT,
-        // ✅ Discount tracking
         originalPrice: originalTotalUSDC,
         discountPercent: finalDiscountPercent,
         discountAmount: discountAmountUSDC,
@@ -387,10 +409,16 @@ export async function POST(
         isLoyaltyDiscount,
         referralCodeId: validatedReferralCode?.id || null,
         referralCodeUsed: validatedReferralCode?.code || null,
-        // Store final prices in both currencies
         selectedRoomPriceUSDC: finalTotalUSDC,
         selectedRoomPriceUSDT: finalTotalUSDT,
         selectedRoomName: roomName,
+        // ✅ NEW: Reservation fields
+        requiresReservation: requiresReservation,
+        reservationAmount: reservationAmount,
+        remainingAmount: remainingAmountUSDC,
+        reservationPaid: false,
+        remainingPaid: false,
+        remainingDueDate: requiresReservation ? new Date(checkInDate) : null,
         guestCount: 1,
         optInGuestList: false,
         shareContactInfo: false,
@@ -399,13 +427,10 @@ export async function POST(
       },
     });
 
-    // Update referral code usage
     if (validatedReferralCode) {
       await db.referralCode.update({
         where: { id: validatedReferralCode.id },
-        data: {
-          usageCount: { increment: 1 },
-        },
+        data: { usageCount: { increment: 1 } },
       });
     }
 
@@ -432,17 +457,22 @@ export async function POST(
           finalPrice: finalTotalUSDC,
           discountType: isLoyaltyDiscount ? 'loyalty' : 'referral',
           referralCode: validatedReferralCode?.code,
+          requiresReservation,
+          reservationAmount,
+          remainingAmount: remainingAmountUSDC,
         },
       },
     });
 
     // 12. Return Success
+    const responseMessage = requiresReservation
+      ? `Application submitted! ${finalDiscountPercent > 0 ? `${finalDiscountPercent}% discount applied.` : ''} Reservation payment ($${reservationAmount}) required.`
+      : `Application submitted successfully! ${finalDiscountPercent > 0 ? `${finalDiscountPercent}% discount applied.` : ''}`;
+
     return NextResponse.json(
       {
         success: true,
-        message: finalDiscountPercent > 0 
-          ? `Application submitted with ${finalDiscountPercent}% discount!` 
-          : 'Application submitted successfully!',
+        message: responseMessage,
         booking: {
           bookingId: newBooking.bookingId,
           status: newBooking.status,
@@ -457,6 +487,9 @@ export async function POST(
           finalPriceUSDC: finalTotalUSDC,
           finalPriceUSDT: finalTotalUSDT,
           discountType: isLoyaltyDiscount ? 'Loyalty (20%)' : validatedReferralCode ? `Referral (${referralDiscountPercent}%)` : 'None',
+          requiresReservation,
+          reservationAmount,
+          remainingAmount: remainingAmountUSDC,
         },
       },
       { status: 201 }

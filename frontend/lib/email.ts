@@ -14,23 +14,21 @@ const supportEmail = "bookings@deden.space";
 
 // ✅ FIXED: Get base URL with proper environment handling
 function getBaseUrl(): string {
-  // Production: Use NEXT_PUBLIC_APP_URL or Vercel URL
   if (process.env.NODE_ENV === "production") {
     const url =
       process.env.NEXT_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-      "https://deden.space"; // Final production fallback
+      "https://deden.space";
 
     const cleanUrl = url.replace(/\/$/, "");
     console.log("[EmailLib] Using PRODUCTION base URL:", cleanUrl);
     return cleanUrl;
   }
 
-  // Development: Use localhost or NEXTAUTH_URL
   const url =
     process.env.NEXTAUTH_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000"; // Development fallback
+    "http://localhost:3000";
 
   const cleanUrl = url.replace(/\/$/, "");
   console.log("[EmailLib] Using DEVELOPMENT base URL:", cleanUrl);
@@ -90,6 +88,9 @@ interface ApprovalEmailProps {
   chainId?: number;
   paymentUrl: string;
   expiresAt: Date;
+  isReservation?: boolean; // ✅ NEW: Is this a reservation payment?
+  numberOfNights?: number; // ✅ NEW: Number of nights
+  fullAmount?: number; // ✅ NEW: Full booking amount (for reservation context)
 }
 
 export async function sendApprovalEmail(props: ApprovalEmailProps) {
@@ -103,9 +104,15 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
     chainId,
     paymentUrl,
     expiresAt,
+    isReservation,
+    numberOfNights,
+    fullAmount,
   } = props;
 
-  const subject = `🎉 Application Approved - ${stayTitle}`;
+  const subject = isReservation 
+    ? `🎉 Application Approved - Reservation Required - ${stayTitle}`
+    : `🎉 Application Approved - ${stayTitle}`;
+  
   const expiryString = expiresAt.toLocaleString("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -115,12 +122,10 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
     ? getChainDisplayName(chainId)
     : "your preferred network";
 
-  // ✅ FIXED: Proper URL construction with validation
   if (!paymentUrl) {
     throw new Error("paymentUrl is missing when sending approval email");
   }
 
-  // If already absolute → do NOT prefix baseURL
   let fullPaymentUrl: string;
   if (paymentUrl.startsWith("http")) {
     fullPaymentUrl = paymentUrl;
@@ -135,6 +140,15 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
     "🔗 [EmailLib] Approval Email - Final Payment URL:",
     fullPaymentUrl
   );
+
+  // ✅ NEW: Different email content for reservation vs full payment
+  const paymentTypeText = isReservation
+    ? `<strong style="color: #172a46;">$${paymentAmount} Reservation Payment</strong>`
+    : `<strong style="color: #172a46;">Full Payment</strong>`;
+
+  const explanationText = isReservation
+    ? `Since your booking is for <strong>${numberOfNights} nights</strong>, we require a <strong>$${paymentAmount} reservation payment</strong> to secure your spot. The remaining <strong>$${(fullAmount || 0) - paymentAmount}</strong> will be due on your check-in day.`
+    : `Please complete your full payment to secure your booking.`;
 
   const htmlBody = `
 <!DOCTYPE html>
@@ -167,7 +181,6 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
       }
 
-      /* HEADER */
       .header {
         padding: 40px 28px 28px;
         text-align: center;
@@ -184,7 +197,6 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         font-size: 15px;
       }
 
-      /* CONTENT */
       .content {
         padding: 32px 28px;
         color: #ffffff;
@@ -197,7 +209,6 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         opacity: 0.92;
       }
 
-      /* PAYMENT BOX */
       .payment-box {
         background: #162945;
         border: 1px solid #2b4a78;
@@ -222,7 +233,20 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         opacity: 0.7;
       }
 
-      /* CTA BUTTON */
+      ${isReservation ? `
+      .info-box {
+        background: #fef3c7;
+        border: 2px solid #f59e0b;
+        border-radius: 10px;
+        padding: 16px 20px;
+        margin: 24px 0;
+        color: #92400e;
+      }
+      .info-box strong {
+        color: #78350f;
+      }
+      ` : ''}
+
       .cta-button {
         display: inline-block;
         background: #e7e4df;
@@ -239,7 +263,6 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         opacity: 0.85;
       }
 
-      /* NEXT STEPS */
       .section-title {
         margin-top: 32px;
         margin-bottom: 12px;
@@ -261,7 +284,6 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         opacity: 0.9;
       }
 
-      /* LINK BOX */
       .url-box {
         background: #162945;
         border: 1px solid #2b4a78;
@@ -277,7 +299,6 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         text-decoration: none;
       }
 
-      /* FOOTER */
       .footer {
         max-width: 600px;
         margin: 24px auto 0;
@@ -297,49 +318,58 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
   <body>
     <div class="container">
       <div class="card">
-        <!-- HEADER -->
         <div class="header">
           <h2>You're In, ${recipientName}!</h2>
           <p>Your stay application has been approved.</p>
         </div>
 
-        <!-- CONTENT -->
         <div class="content">
           <p>
-            We're excited to welcome you to <strong>${stayTitle}</strong>. To
-            secure your spot, please complete your payment before
-            <strong>${expiryString}</strong>.
+            We're excited to welcome you to <strong>${stayTitle}</strong>. 
+            ${explanationText}
           </p>
 
-          <!-- PAYMENT -->
+          ${isReservation ? `
+          <div class="info-box">
+            <strong>📋 Reservation System</strong><br/>
+            <small>Your ${numberOfNights}-night booking requires a two-step payment:</small><br/>
+            <strong>1. $${paymentAmount} Reservation (Now)</strong> - Secures your spot<br/>
+            <strong>2. $${(fullAmount || 0) - paymentAmount} Remaining (Check-in)</strong> - Due on arrival<br/>
+            <small style="margin-top: 8px; display: block;">We'll remind you before your check-in date!</small>
+          </div>
+          ` : ''}
+
           <div class="payment-box">
-            <div class="label">Amount Due</div>
-            <div class="amount">${paymentAmount} ${paymentToken}</div>
+            <div class="label">${isReservation ? 'Reservation' : 'Total'} Amount Due</div>
+            <div class="amount">$${paymentAmount} ${paymentToken}</div>
             <div class="network">Pay on ${chainName}</div>
           </div>
 
-          <!-- CTA -->
           <div style="text-align: center">
             <a href="${fullPaymentUrl}" class="cta-button">
-              Complete Payment
+              ${isReservation ? 'Pay Reservation' : 'Complete Payment'}
             </a>
           </div>
 
-          <!-- NEXT STEPS -->
           <div class="section-title">What happens next?</div>
           <ul class="next-steps">
+            ${isReservation ? `
+            <li>Complete your $${paymentAmount} reservation payment now</li>
+            <li>Your spot will be confirmed once payment succeeds</li>
+            <li>Pay the remaining $${(fullAmount || 0) - paymentAmount} on your check-in day</li>
+            <li>We'll send you a reminder before check-in</li>
+            ` : `
             <li>Tap the button above to process your payment</li>
             <li>Your booking is confirmed once payment succeeds</li>
             <li>You'll receive your check-in details closer to arrival</li>
+            `}
           </ul>
 
-          <!-- SAFETY NOTE -->
           <p style="margin-top: 28px; opacity: 0.7; font-size: 13px">
-            Your reservation will be released if payment is not completed by
+            Your ${isReservation ? 'reservation' : 'booking'} will be released if payment is not completed by
             <strong>${expiryString}</strong>.
           </p>
 
-          <!-- LINK BOX -->
           <div class="url-box">
             <strong>Payment Link:</strong><br />
             <a href="${fullPaymentUrl}">${fullPaymentUrl}</a>
@@ -347,7 +377,6 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         </div>
       </div>
 
-      <!-- FOOTER -->
       <div class="footer">
         <p><strong>Booking ID:</strong> ${bookingId}</p>
         <p>
@@ -379,6 +408,8 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
         bookingId,
         chainId,
         paymentUrl: fullPaymentUrl,
+        isReservation,
+        reservationAmount: isReservation ? paymentAmount : null,
         apiResponse: response,
         resendId: response.data?.id,
       }
@@ -399,7 +430,555 @@ export async function sendApprovalEmail(props: ApprovalEmailProps) {
   }
 }
 
-// --- Email Template: Payment Confirmed ---
+// ✅ NEW: Reservation Confirmed Email
+interface ReservationConfirmedEmailProps {
+  recipientEmail: string;
+  recipientName: string;
+  bookingId: string;
+  stayTitle: string;
+  stayLocation: string;
+  startDate: Date;
+  endDate: Date;
+  reservationAmount: number;
+  reservationToken: PaymentToken;
+  remainingAmount: number;
+  txHash: string;
+  chainId: number;
+  numberOfNights: number;
+}
+
+export async function sendReservationConfirmedEmail(
+  props: ReservationConfirmedEmailProps
+) {
+  const {
+    recipientEmail,
+    recipientName,
+    stayTitle,
+    stayLocation,
+    startDate,
+    endDate,
+    bookingId,
+    reservationAmount,
+    reservationToken,
+    remainingAmount,
+    txHash,
+    chainId,
+    numberOfNights,
+  } = props;
+
+  const subject = `✅ Reservation Confirmed - ${stayTitle}`;
+  const explorerUrl = getExplorerUrl(chainId, txHash);
+  const chainName = getChainDisplayName(chainId);
+
+  const dateRange = `${startDate.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+  })} - ${endDate.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+
+  const dashboardUrl = `${baseUrl}/dashboard`;
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #e7e4df;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        padding: 32px 16px;
+      }
+
+      .card {
+        max-width: 600px;
+        margin: auto;
+        background: #1f3a61;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid #2b4a78;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      }
+
+      .header {
+        padding: 40px 28px 28px;
+        text-align: center;
+        color: #ffffff;
+      }
+      .header h2 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 600;
+      }
+      .header p {
+        margin: 8px 0 0;
+        opacity: 0.85;
+        font-size: 15px;
+      }
+
+      .content {
+        padding: 32px 28px;
+        color: #ffffff;
+        line-height: 1.6;
+      }
+      .content p {
+        margin-bottom: 18px;
+        opacity: 0.92;
+        font-size: 15px;
+      }
+
+      .success-box {
+        background: #162945;
+        border: 1px solid #2b4a78;
+        padding: 24px;
+        border-radius: 10px;
+        margin: 28px 0;
+        text-align: center;
+      }
+      .success-box strong {
+        display: block;
+        color: #e7e4df;
+        font-size: 18px;
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+
+      .warning-box {
+        background: #fef3c7;
+        border: 2px solid #f59e0b;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 24px 0;
+        color: #92400e;
+      }
+      .warning-box strong {
+        color: #78350f;
+        font-size: 18px;
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .details-box {
+        background: #162945;
+        border: 1px solid #2b4a78;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 24px 0;
+      }
+      .details-row {
+        margin-bottom: 12px;
+      }
+      .details-row:last-child {
+        margin: 0;
+      }
+      .label {
+        font-size: 13px;
+        opacity: 0.65;
+        margin-bottom: 2px;
+      }
+      .value {
+        font-size: 15px;
+        font-weight: 600;
+        color: #e7e4df;
+      }
+
+      .cta-button {
+        display: inline-block;
+        background: #e7e4df;
+        color: #1f3a61;
+        padding: 14px 32px;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        font-size: 17px;
+        margin: 24px auto 32px;
+      }
+
+      .footer {
+        max-width: 600px;
+        margin: 24px auto 0;
+        text-align: center;
+        font-size: 12px;
+        color: #1f3a61;
+        opacity: 0.7;
+        line-height: 1.5;
+      }
+      .footer a {
+        color: #1f3a61;
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="card">
+        <div class="header">
+          <h2>🎉 Reservation Confirmed!</h2>
+          <p>Your spot is secured.</p>
+        </div>
+
+        <div class="content">
+          <p>Hi ${recipientName},</p>
+          <p>
+            We've successfully received your <strong>$${reservationAmount} ${reservationToken}</strong> reservation payment for
+            <strong>${stayTitle}</strong>. Your spot is now secured!
+          </p>
+
+          <div class="success-box">
+            <strong>✅ Reservation Paid</strong>
+            You're all set for your ${numberOfNights}-night stay.
+          </div>
+
+          <div class="warning-box">
+            <strong>💰 Remaining Payment Required</strong>
+            <p style="margin: 8px 0 0; font-size: 15px;">
+              You'll need to pay the remaining <strong>$${remainingAmount}</strong> on your check-in day 
+              (${startDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}).
+            </p>
+            <p style="margin: 12px 0 0; font-size: 13px; opacity: 0.8;">
+              📧 We'll send you a reminder email before your check-in date with a payment link.
+            </p>
+          </div>
+
+          <div class="details-box">
+            <div class="details-row">
+              <div class="label">Stay</div>
+              <div class="value">${stayTitle}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Location</div>
+              <div class="value">${stayLocation}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Dates</div>
+              <div class="value">${dateRange}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Duration</div>
+              <div class="value">${numberOfNights} nights</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Booking ID</div>
+              <div class="value">${bookingId}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Reservation Paid</div>
+              <div class="value">$${reservationAmount} ${reservationToken}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Remaining Due</div>
+              <div class="value">$${remainingAmount}</div>
+            </div>
+            <div class="details-row">
+              <div class="label">Transaction</div>
+              <div class="value">
+                <a href="${explorerUrl}" style="color:#e7e4df; text-decoration:none;">
+                  ${txHash.slice(0, 10)}...${txHash.slice(-8)}
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align:center;">
+            <a href="${dashboardUrl}" class="cta-button">View Dashboard</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>Need help? Contact us at <a href="mailto:${supportEmail}">${supportEmail}</a></p>
+        <p>© ${new Date().getFullYear()} Decentralized Den</p>
+      </div>
+    </div>
+  </body>
+</html>
+`;
+
+  try {
+    const response = await resend.emails.send({
+      from: fromEmail,
+      to: recipientEmail,
+      subject: subject,
+      html: htmlBody,
+    });
+
+    console.log("[EmailLib] Reservation confirmation email sent:", response);
+
+    await logEmailToDb(
+      recipientEmail,
+      subject,
+      response.data
+        ? "reservation_confirmed"
+        : "reservation_confirmed_failed",
+      {
+        bookingId,
+        reservationAmount,
+        remainingAmount,
+        txHash,
+        chainId,
+        apiResponse: response,
+        resendId: response.data?.id,
+      }
+    );
+
+    if (response.error) {
+      throw response.error;
+    }
+
+    return true;
+  } catch (error: any) {
+    console.error(
+      "[EmailLib] Failed to send reservation confirmation email:",
+      error
+    );
+    await logEmailToDb(
+      recipientEmail,
+      subject,
+      "reservation_confirmed_failed",
+      {
+        bookingId,
+        error: error?.message || error,
+      }
+    );
+    throw error;
+  }
+}
+
+// ✅ NEW: Remaining Payment Reminder Email
+interface RemainingPaymentReminderProps {
+  recipientEmail: string;
+  recipientName: string;
+  bookingId: string;
+  stayTitle: string;
+  checkInDate: Date;
+  remainingAmount: number;
+  paymentUrl: string;
+}
+
+export async function sendRemainingPaymentReminder(
+  props: RemainingPaymentReminderProps
+) {
+  const {
+    recipientEmail,
+    recipientName,
+    bookingId,
+    stayTitle,
+    checkInDate,
+    remainingAmount,
+    paymentUrl,
+  } = props;
+
+  const subject = `⏰ Remaining Payment Due - ${stayTitle}`;
+
+  let fullPaymentUrl: string;
+  if (paymentUrl.startsWith("http")) {
+    fullPaymentUrl = paymentUrl;
+  } else {
+    const cleanPath = paymentUrl.startsWith("/")
+      ? paymentUrl
+      : `/${paymentUrl}`;
+    fullPaymentUrl = `${baseUrl}${cleanPath}`;
+  }
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #e7e4df;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        padding: 32px 16px;
+      }
+
+      .card {
+        max-width: 600px;
+        margin: auto;
+        background: #1f3a61;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid #2b4a78;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      }
+
+      .header {
+        padding: 40px 28px 28px;
+        text-align: center;
+        color: #ffffff;
+      }
+      .header h2 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 600;
+      }
+
+      .content {
+        padding: 32px 28px;
+        color: #ffffff;
+        line-height: 1.6;
+      }
+
+      .payment-box {
+        background: #fef3c7;
+        border: 2px solid #f59e0b;
+        padding: 24px;
+        border-radius: 10px;
+        text-align: center;
+        margin: 28px 0;
+        color: #78350f;
+      }
+      .payment-box .amount {
+        font-size: 32px;
+        font-weight: 700;
+        margin: 12px 0;
+        color: #92400e;
+      }
+
+      .cta-button {
+        display: inline-block;
+        background: #e7e4df;
+        color: #1f3a61;
+        padding: 14px 32px;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        font-size: 17px;
+        margin: 24px auto 32px;
+      }
+
+      .footer {
+        max-width: 600px;
+        margin: 24px auto 0;
+        text-align: center;
+        font-size: 12px;
+        color: #1f3a61;
+        opacity: 0.7;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="card">
+        <div class="header">
+          <h2>⏰ Time to Complete Your Payment</h2>
+        </div>
+
+        <div class="content">
+          <p>Hi ${recipientName},</p>
+          <p>
+            Your check-in date for <strong>${stayTitle}</strong> is 
+            <strong>${checkInDate.toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}</strong>.
+          </p>
+
+          <div class="payment-box">
+            <strong>💰 Remaining Payment Due</strong>
+            <div class="amount">$${remainingAmount}</div>
+            <p style="margin: 8px 0 0; font-size: 14px;">
+              Please complete this payment to finalize your booking.
+            </p>
+          </div>
+
+          <div style="text-align: center">
+            <a href="${fullPaymentUrl}" class="cta-button">
+              Pay Remaining Amount
+            </a>
+          </div>
+
+          <p style="margin-top: 24px; opacity: 0.8; font-size: 14px;">
+            🔒 Your reservation is already secured. This payment completes your booking.
+          </p>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p><strong>Booking ID:</strong> ${bookingId}</p>
+        <p>Need help? Contact us at <a href="mailto:${supportEmail}">${supportEmail}</a></p>
+        <p>© ${new Date().getFullYear()} Decentralized Den</p>
+      </div>
+    </div>
+  </body>
+</html>
+`;
+
+  try {
+    const response = await resend.emails.send({
+      from: fromEmail,
+      to: recipientEmail,
+      subject,
+      html: htmlBody,
+    });
+
+    console.log("[EmailLib] Remaining payment reminder sent:", response);
+
+    await logEmailToDb(
+      recipientEmail,
+      subject,
+      response.data
+        ? "remaining_payment_reminder"
+        : "remaining_payment_reminder_failed",
+      {
+        bookingId,
+        remainingAmount,
+        checkInDate: checkInDate.toISOString(),
+        paymentUrl: fullPaymentUrl,
+        apiResponse: response,
+        resendId: response.data?.id,
+      }
+    );
+
+    if (response.error) {
+      throw response.error;
+    }
+
+    return true;
+  } catch (error: any) {
+    console.error(
+      "[EmailLib] Failed to send remaining payment reminder:",
+      error
+    );
+    await logEmailToDb(
+      recipientEmail,
+      subject,
+      "remaining_payment_reminder_failed",
+      {
+        bookingId,
+        error: error?.message || error,
+      }
+    );
+    throw error;
+  }
+}
+
+// --- Email Template: Payment Confirmed (FULL PAYMENT - existing template) ---
 interface ConfirmationEmailProps {
   recipientEmail: string;
   recipientName: string;
@@ -442,7 +1021,6 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
     year: "numeric",
   })}`;
 
-  // ✅ FIXED: Use baseUrl for dashboard link
   const dashboardUrl = `${baseUrl}/dashboard`;
 
   console.log("[EmailLib] Confirmation Email - Dashboard URL:", dashboardUrl);
@@ -478,7 +1056,6 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
       }
 
-      /* HEADER */
       .header {
         padding: 40px 28px 28px;
         text-align: center;
@@ -495,7 +1072,6 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
         font-size: 15px;
       }
 
-      /* CONTENT */
       .content {
         padding: 32px 28px;
         color: #ffffff;
@@ -507,7 +1083,6 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
         font-size: 15px;
       }
 
-      /* CONFIRMATION BOX */
       .success-box {
         background: #162945;
         border: 1px solid #2b4a78;
@@ -524,7 +1099,6 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
         font-weight: 600;
       }
 
-      /* DETAILS */
       .details-box {
         background: #162945;
         border: 1px solid #2b4a78;
@@ -549,7 +1123,6 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
         color: #e7e4df;
       }
 
-      /* CTA */
       .cta-button {
         display: inline-block;
         background: #e7e4df;
@@ -562,7 +1135,6 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
         margin: 24px auto 32px;
       }
 
-      /* FOOTER */
       .footer {
         max-width: 600px;
         margin: 24px auto 0;
@@ -582,13 +1154,11 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
   <body>
     <div class="container">
       <div class="card">
-        <!-- HEADER -->
         <div class="header">
           <h2>Payment Confirmed</h2>
           <p>Your booking is now secured.</p>
         </div>
 
-        <!-- CONTENT -->
         <div class="content">
           <p>Hi ${recipientName},</p>
           <p>
