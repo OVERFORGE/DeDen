@@ -104,6 +104,16 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
+                <a
+                  href="https://drive.google.com/drive/folders/1TcaTYpXnxF_1QUmIzUA3Db6May78WTX4?usp=sharing"
+                  target="_blank"
+                  className="hover:text-white transition-colors"
+                >
+                  Brand Assets
+                </a>
+              </li>
+
+              <li>
                 <Link
                   href="/contact"
                   className="hover:text-white transition-colors"
