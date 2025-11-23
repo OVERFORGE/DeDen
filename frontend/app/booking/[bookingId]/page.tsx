@@ -1,4 +1,6 @@
-// File: PaymentPage.tsx (Design reverted, logic preserved)
+// File: app/booking/[bookingId]/page.tsx
+// ✅ UPDATED: Added reservation and remaining payment support
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -15,17 +17,26 @@ import {
   SUPPORTED_CHAINS,
 } from "@/lib/config";
 
-// --- Type Definitions (Updated) ---
+// ✅ UPDATED: Added reservation fields
 type BookingDetails = {
   bookingId: string;
-  status: "PENDING" | "CONFIRMED" | "EXPIRED" | "FAILED" | "WAITLISTED";
+  status: "PENDING" | "CONFIRMED" | "RESERVED" | "EXPIRED" | "FAILED" | "WAITLISTED";
   expiresAt: string;
   txHash: string | null;
   paymentToken: "USDC" | "USDT" | null;
   paymentAmount: number | null;
-  chainId: number | null; // Fields added for room pricing
+  chainId: number | null;
   selectedRoomPriceUSDC: number | null;
   selectedRoomPriceUSDT: number | null;
+  
+  // ✅ NEW: Reservation fields
+  requiresReservation: boolean;
+  reservationAmount: number | null;
+  reservationPaid: boolean;
+  remainingAmount: number | null;
+  remainingPaid: boolean;
+  numberOfNights: number | null;
+  
   stay: {
     title: string;
     priceUSDC: number;
@@ -50,10 +61,10 @@ export default function PaymentPage() {
   const { switchChain } = useSwitchChain();
 
   const [booking, setBooking] = useState<BookingDetails | null>(null);
-  const [selectedChain, setSelectedChain] = useState<number>(42161); // Default Arbitrum
+  const [selectedChain, setSelectedChain] = useState<number>(42161);
   const [selectedToken, setSelectedToken] = useState<"USDC" | "USDT">("USDC");
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<PaymentStatus>("loading"); // Fetch booking details
+  const [status, setStatus] = useState<PaymentStatus>("loading");
 
   useEffect(() => {
     if (!bookingId) return;
@@ -71,34 +82,29 @@ export default function PaymentPage() {
         const data: BookingDetails = await res.json();
         setBooking(data);
 
-        // Handle FAILED/EXPIRED status from initial fetch
         if (data.status === "FAILED" || data.status === "EXPIRED") {
           setError(`Payment ${data.status.toLowerCase()}. Please retry.`);
           setStatus("ready");
-          // Treat payment as unlocked for retry flow on front-end
           data.paymentToken = null;
           data.paymentAmount = null;
-        } // Only apply chain default on initial load
+        }
 
         if (data.chainId) setSelectedChain(data.chainId);
 
         if (data.status === "CONFIRMED") {
-          // Payment is complete, use confirmed values
           if (data.paymentToken) setSelectedToken(data.paymentToken);
           setStatus("confirmed");
+        } else if (data.status === "RESERVED") {
+          // ✅ NEW: Handle RESERVED status (reservation paid, awaiting remaining)
+          setStatus("ready");
         } else if (data.status === "PENDING") {
-          // Payment is locked ONLY if paymentToken is set in DB
           if (data.paymentToken) {
-            // Payment details are locked in DB, enforce them
             setSelectedToken(data.paymentToken);
           } else {
-            // Payment NOT locked yet - user is free to choose
-            // Just ensure the currently selected token is supported on the selected chain
             const supported = getSupportedTokens(data.chainId || selectedChain);
             if (!supported.includes(selectedToken)) {
-              // Current selection not supported on this chain, pick first available
               setSelectedToken(supported[0] as "USDC" | "USDT");
-            } // Otherwise, keep user's current selection
+            }
           }
           setStatus("ready");
         } else {
@@ -112,7 +118,7 @@ export default function PaymentPage() {
     }
 
     fetchBooking();
-  }, [bookingId]); // Poll for status updates (CRITICAL LOGIC PRESERVED)
+  }, [bookingId]);
 
   useEffect(() => {
     if (status !== "verifying" || !bookingId) return;
@@ -121,12 +127,12 @@ export default function PaymentPage() {
       try {
         const res = await fetch(`/api/bookings/status/${bookingId}`);
         const data = await res.json();
-        if (data.status === "CONFIRMED") {
+        if (data.status === "CONFIRMED" || data.status === "RESERVED") {
           setStatus("confirmed");
           clearInterval(interval);
         } else if (data.status === "FAILED" || data.status === "EXPIRED") {
           setStatus("ready");
-          setError(`Payment ${data.status.toLowerCase()}. Please retry.`); // CRITICAL FIX: Unlock payment options in state after failure
+          setError(`Payment ${data.status.toLowerCase()}. Please retry.`);
           setBooking((prev) =>
             prev
               ? {
@@ -154,10 +160,21 @@ export default function PaymentPage() {
     setStatus("sending");
 
     try {
-      const amount =
-        selectedToken === "USDC"
-          ? booking.selectedRoomPriceUSDC || booking.stay.priceUSDC
-          : booking.selectedRoomPriceUSDT || booking.stay.priceUSDT;
+      // ✅ NEW: Determine if this is reservation or remaining payment
+      const isReservationPayment = booking.requiresReservation && !booking.reservationPaid;
+      const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
+
+      const amount = isReservationPayment
+        ? booking.reservationAmount
+        : isRemainingPayment
+        ? booking.remainingAmount
+        : selectedToken === "USDC"
+        ? booking.selectedRoomPriceUSDC || booking.stay.priceUSDC
+        : booking.selectedRoomPriceUSDT || booking.stay.priceUSDT;
+
+      if (!amount) {
+        throw new Error("Payment amount not available");
+      }
 
       const chain = chainConfig[selectedChain];
       if (!chain) {
@@ -169,13 +186,11 @@ export default function PaymentPage() {
         throw new Error(`${selectedToken} not supported on ${chain.name}`);
       }
 
-      // ✅ FIXED: Validate treasury address format
-      console.log("Treasury address:", treasuryAddress);
       if (!treasuryAddress || !/^0x[a-fA-F0-9]{40}$/i.test(treasuryAddress)) {
         throw new Error("Invalid treasury address configuration");
       }
 
-      // 🔒 CRITICAL STEP: Lock the selected payment details in the database
+      // Lock payment details
       console.log("Locking payment details in database...");
       const lockRes = await fetch("/api/bookings/lock-payment", {
         method: "POST",
@@ -195,9 +210,6 @@ export default function PaymentPage() {
         );
       }
 
-      console.log("Payment details locked successfully.");
-
-      // Optimistically update the booking state with the locked details
       setBooking((prev) =>
         prev
           ? {
@@ -209,33 +221,20 @@ export default function PaymentPage() {
           : null
       );
 
-      // Switch network if needed
       if (walletChainId !== selectedChain) {
         console.log(`Switching to chain ${selectedChain}...`);
         await switchChain({ chainId: selectedChain });
-        // Wait for network switch
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
 
       const amountBaseUnits = parseUnits(amount.toString(), tokenInfo.decimals);
 
-      console.log("Payment details:", {
-        token: tokenInfo.address,
-        to: treasuryAddress,
-        amount: amountBaseUnits.toString(),
-        decimals: tokenInfo.decimals,
-      });
-
-      // Encode transfer function with correct treasury address
       const data = encodeFunctionData({
         abi: erc20Abi,
         functionName: "transfer",
         args: [treasuryAddress as `0x${string}`, amountBaseUnits],
       });
 
-      console.log("Transaction data:", data);
-
-      // Send transaction
       const tx = await sendTransactionAsync({
         to: tokenInfo.address as `0x${string}`,
         data: data,
@@ -243,7 +242,7 @@ export default function PaymentPage() {
 
       console.log("Transaction sent:", tx);
 
-      // Submit for verification
+      // ✅ NEW: Pass isRemainingPayment flag
       setStatus("verifying");
       const res = await fetch("/api/payments/submit-payment", {
         method: "POST",
@@ -253,6 +252,7 @@ export default function PaymentPage() {
           txHash: tx,
           chainId: selectedChain,
           paymentToken: selectedToken,
+          isRemainingPayment: isRemainingPayment, // ✅ NEW
         }),
       });
 
@@ -278,7 +278,7 @@ export default function PaymentPage() {
         </div>
       </div>
     );
-  } // Reverted design for Error state
+  }
 
   if (status === "error") {
     return (
@@ -287,11 +287,9 @@ export default function PaymentPage() {
           <h2 className="text-3xl font-bold text-red-600 mb-4">
             ⚠️ Payment Error
           </h2>
-
           <p className="text-gray-700 mb-6">
             {error || "An unknown error occurred."}
           </p>
-
           <a
             href="/dashboard"
             className="inline-block bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition duration-150"
@@ -305,22 +303,38 @@ export default function PaymentPage() {
 
   if (!booking) {
     return <div className="text-center p-8">Booking not found.</div>;
-  } // Reverted design for Confirmed state
+  }
 
   if (status === "confirmed") {
+    // ✅ UPDATED: Show different message for reservation vs full confirmation
+    const isReservationConfirmed = booking.status === "RESERVED";
+    
     return (
-      <div className=" flex items-center justify-center py-20 bg-[#E7E4DF]">
+      <div className="flex items-center justify-center py-20 bg-[#E7E4DF]">
         <div className="bg-white p-10 rounded-xl shadow-xl text-center max-w-md w-full">
           <h2 className="text-3xl font-bold text-[#102E4A] mb-2">
-            Payment Confirmed!
+            {isReservationConfirmed ? "🎫 Reservation Confirmed!" : "✅ Payment Confirmed!"}
           </h2>
 
           <p className="text-gray-600 mb-6">
-            Your spot for{" "}
-            <strong className="font-semibold text-[#102E4A]">
-              {booking.stay.title}
-            </strong>{" "}
-            is confirmed.
+            {isReservationConfirmed ? (
+              <>
+                Your <strong className="font-semibold text-[#102E4A]">${booking.reservationAmount}</strong> reservation 
+                for <strong className="font-semibold text-[#102E4A]">{booking.stay.title}</strong> is confirmed!
+                <br /><br />
+                <span className="text-amber-700">
+                  💰 Remaining payment of <strong>${booking.remainingAmount}</strong> is due on your check-in day.
+                </span>
+              </>
+            ) : (
+              <>
+                Your spot for{" "}
+                <strong className="font-semibold text-[#102E4A]">
+                  {booking.stay.title}
+                </strong>{" "}
+                is confirmed.
+              </>
+            )}
           </p>
 
           {booking.txHash && (
@@ -343,14 +357,19 @@ export default function PaymentPage() {
         </div>
       </div>
     );
-  } // Use the locked amount/token if available, otherwise use user selection
+  }
 
-  const displayAmount = booking.paymentAmount
-    ? booking.paymentAmount
-    : // If not locked, dynamically calculate amount based on user selection AND room price
-    selectedToken === "USDC"
+  // ✅ NEW: Determine payment type and calculate display amount
+  const isReservationPayment = booking.requiresReservation && !booking.reservationPaid;
+  const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
+
+  const displayAmount = isReservationPayment
+    ? booking.reservationAmount
+    : isRemainingPayment
+    ? booking.remainingAmount
+    : selectedToken === "USDC"
     ? booking.selectedRoomPriceUSDC || booking.stay.priceUSDC
-    : booking.selectedRoomPriceUSDT || booking.stay.priceUSDT; // If the payment details are already locked, don't allow changing the token
+    : booking.selectedRoomPriceUSDT || booking.stay.priceUSDT;
 
   const isPaymentLocked = !!booking.paymentToken;
   const supportedTokens = getSupportedTokens(selectedChain);
@@ -362,37 +381,64 @@ export default function PaymentPage() {
   }).format(Number(displayAmount));
 
   return (
-    <div className="font-sans max-w-xl mx-auto  mb-20">
-      <div className="bg-white p-4 rounded-2xl shadow-xl border border-gray-100 mx-6 ">
+    <div className="font-sans max-w-xl mx-auto mb-20">
+      <div className="bg-white p-4 rounded-2xl shadow-xl border border-gray-100 mx-6">
         <h2 className="text-3xl font-extrabold text-[#172a46] text-center mb-2">
-          Complete Your Payment
+          {isReservationPayment ? "🎫 Pay Reservation" : isRemainingPayment ? "💰 Pay Remaining Amount" : "Complete Your Payment"}
         </h2>
         <p className="text-lg text-gray-600 mb-10 text-center">
           Booking for{" "}
           <strong className="font-semibold">{booking.stay.title}</strong>
         </p>
+
+        {/* ✅ NEW: Reservation info banner */}
+        {booking.requiresReservation && (
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 mb-6">
+            <h3 className="text-lg font-bold text-blue-900 mb-2">
+              📋 Two-Step Payment Required
+            </h3>
+            <p className="text-sm text-blue-800 mb-3">
+              Your {booking.numberOfNights}-night booking requires:
+            </p>
+            <div className="space-y-2 text-sm">
+              <div className={`flex justify-between p-2 rounded ${!booking.reservationPaid ? 'bg-white border-2 border-blue-400' : 'bg-green-50'}`}>
+                <span>1. Reservation Payment</span>
+                <span className="font-bold">
+                  {booking.reservationPaid ? '✅ Paid' : `$${booking.reservationAmount} (Now)`}
+                </span>
+              </div>
+              <div className={`flex justify-between p-2 rounded ${booking.reservationPaid && !booking.remainingPaid ? 'bg-white border-2 border-blue-400' : 'bg-gray-50'}`}>
+                <span>2. Remaining Payment</span>
+                <span className="font-bold">
+                  ${booking.remainingAmount} (Check-in)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {booking.expiresAt && (
-          <div className=" p-3 bg-[#172a46]/80  border border-[#172a46] text-white  text-sm rounded-lg mb-10 text-center">
-            Payment expires:
+          <div className="p-3 bg-[#172a46]/80 border border-[#172a46] text-white text-sm rounded-lg mb-10 text-center">
+            Payment expires:{" "}
             <strong className="font-semibold">
               {new Date(booking.expiresAt).toLocaleString()}
             </strong>
           </div>
         )}
-        <div className="px-4 py-4 bg-blue-50 rounded-lg  text-xs border border-bg-[#172a46] mb-10">
-          <div className="text-[#172a46]  font-semibold mb-2 text-md ">
+
+        <div className="px-4 py-4 bg-blue-50 rounded-lg text-xs border border-bg-[#172a46] mb-10">
+          <div className="text-[#172a46] font-semibold mb-2 text-md">
             Payment Destination:
           </div>
-
           <div className="font-mono text-gray-700 break-all">
             {treasuryAddress}
           </div>
         </div>
+
         <div className="mx-2 mb-6">
           <label className="block text-sm font-semibold text-gray-700 mb-4">
             Select Network
           </label>
-
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {SUPPORTED_CHAINS.map((chainId) => (
               <button
@@ -404,19 +450,19 @@ export default function PaymentPage() {
                     setSelectedToken(tokens[0] as "USDC" | "USDT");
                   }
                 }}
-                className={`
- p-3 rounded-xl border-2 font-medium text-sm transition duration-150
- ${
-   selectedChain === chainId
-     ? "border-[#172a46] bg-blue-50 text-[#172a46] shadow-sm"
-     : "border-gray-200 bg-white text-gray-800 hover:border-gray-400"
- }`}
+                className={`p-3 rounded-xl border-2 font-medium text-sm transition duration-150
+                  ${
+                    selectedChain === chainId
+                      ? "border-[#172a46] bg-blue-50 text-[#172a46] shadow-sm"
+                      : "border-gray-200 bg-white text-gray-800 hover:border-gray-400"
+                  }`}
               >
                 {getChainName(chainId)}
               </button>
             ))}
           </div>
         </div>
+
         <div className="mx-2 mb-10">
           <label className="block text-sm font-semibold text-gray-700 mb-4">
             Select Token
@@ -427,19 +473,17 @@ export default function PaymentPage() {
                 key={token}
                 onClick={() => setSelectedToken(token as "USDC" | "USDT")}
                 disabled={isPaymentLocked && selectedToken !== token}
-                className={`
-p-3 rounded-xl border-2 font-medium text-sm transition duration-150
-${
-  selectedToken === token
-    ? "border-[#172a46] bg-blue-50 text-[#172a46]shadow-sm"
-    : "border-gray-200 bg-white text-gray-800 hover:border-gray-400"
-}
-${
-  isPaymentLocked && selectedToken !== token
-    ? "opacity-50 cursor-not-allowed"
-    : ""
-}
-`}
+                className={`p-3 rounded-xl border-2 font-medium text-sm transition duration-150
+                  ${
+                    selectedToken === token
+                      ? "border-[#172a46] bg-blue-50 text-[#172a46] shadow-sm"
+                      : "border-gray-200 bg-white text-gray-800 hover:border-gray-400"
+                  }
+                  ${
+                    isPaymentLocked && selectedToken !== token
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
+                  }`}
               >
                 {token}
               </button>
@@ -452,18 +496,16 @@ ${
             </div>
           )}
         </div>
-        {/* Amount Display */}
-        <div className="text-center  bg-blue-50 rounded-xl mb-6 border border-blue-200 py-4">
-          <div className="font-berlin text-md text-[#172a46] uppercase tracking-widest mb-1">
-            Total Amount
-          </div>
 
+        <div className="text-center bg-blue-50 rounded-xl mb-6 border border-blue-200 py-4">
+          <div className="font-berlin text-md text-[#172a46] uppercase tracking-widest mb-1">
+            {isReservationPayment ? "Reservation Amount" : isRemainingPayment ? "Remaining Amount" : "Total Amount"}
+          </div>
           <div className="text-5xl font-extrabold text-[#172a46] text-center">
             ${formattedAmount} <span className="text-3xl">{selectedToken}</span>
           </div>
-
           <div className="text-sm text-gray-500 mt-1">
-            on {getChainName(selectedChain)}{" "}
+            on {getChainName(selectedChain)}
           </div>
         </div>
 
@@ -487,19 +529,22 @@ ${
             disabled={
               status === "sending" || status === "verifying" || !selectedToken
             }
-            className={` font-berlin
-w-full py-4 text-xl font-semibold rounded-xl transition duration-200 shadow-lg
- ${
-   status === "sending" || status === "verifying"
-     ? "bg-gray-400 text-gray-700 cursor-not-allowed"
-     : "bg-[#172a46] text-white hover:bg-[#172a46]/80"
- }
- `}
+            className={`font-berlin w-full py-4 text-xl font-semibold rounded-xl transition duration-200 shadow-lg
+              ${
+                status === "sending" || status === "verifying"
+                  ? "bg-gray-400 text-gray-700 cursor-not-allowed"
+                  : "bg-[#172a46] text-white hover:bg-[#172a46]/80"
+              }`}
           >
             {status === "sending" && "💼 Check your wallet..."}
-            {status === "verifying" && " Verifying payment..."}
-
-            {status === "ready" && `Pay $${displayAmount} ${selectedToken}`}
+            {status === "verifying" && "🔍 Verifying payment..."}
+            {status === "ready" && (
+              isReservationPayment
+                ? `Pay $${displayAmount} Reservation`
+                : isRemainingPayment
+                ? `Pay $${displayAmount} Remaining`
+                : `Pay $${displayAmount} ${selectedToken}`
+            )}
           </button>
         )}
 

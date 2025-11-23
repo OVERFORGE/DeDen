@@ -1,6 +1,6 @@
 // Decentralized Den - Production-Ready Prisma Schema
-// ✅ UPDATED: Added Community Referral & Loyalty Discount System
-// Version: 3.0 - MongoDB Optimized
+// ✅ UPDATED: Added Reservation System for 2+ nights bookings
+// Version: 4.0 - MongoDB Optimized
 
 generator client {
   provider = "prisma-client-js"
@@ -62,6 +62,7 @@ enum BookingStatus {
   PENDING
   CONFIRMED
   WAITLISTED
+  RESERVED      // ✅ NEW: After $30 reservation paid, awaiting remaining payment
   CANCELLED
   REFUNDED
   EXPIRED
@@ -185,6 +186,11 @@ model Stay {
   currency        String    @default("USD")
   depositAmount   Float?
   
+  // ✅ NEW: Reservation Configuration
+  requiresReservation Boolean   @default(false)  // Enable reservation system
+  reservationAmount   Float     @default(30)     // Default $30 reservation
+  minNightsForReservation Int   @default(2)      // Minimum nights to require reservation
+  
   // Media & Gallery
   heroImage       String?
   galleryImages   String[]  @default([])
@@ -227,8 +233,6 @@ model Stay {
   reviews         Review[]
   waitlistEntries WaitlistEntry[]
   addons          Addon[]
-  
-  // ✅ NEW: Referral Codes for this stay
   referralCodes   ReferralCode[]
   
   // Metadata
@@ -244,7 +248,7 @@ model Stay {
 }
 
 // ============================================================================
-// ✅ NEW: REFERRAL CODE MODEL - Community Referral System
+// REFERRAL CODE MODEL - Community Referral System
 // ============================================================================
 
 model ReferralCode {
@@ -259,11 +263,11 @@ model ReferralCode {
   stayId          String    @db.ObjectId
   
   // Discount Configuration
-  discountPercent Int       @default(10) // 10% discount
+  discountPercent Int       @default(10)
   
   // Usage Tracking
   usageCount      Int       @default(0)
-  maxUsage        Int?      // Optional usage limit
+  maxUsage        Int?
   
   // Status
   isActive        Boolean   @default(true)
@@ -274,7 +278,7 @@ model ReferralCode {
   
   // Metadata
   notes           String?
-  createdBy       String?   // Admin who created it
+  createdBy       String?
   
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -286,7 +290,7 @@ model ReferralCode {
 
 // ============================================================================
 // BOOKING MODEL - Core transaction/reservation
-// ✅ UPDATED: Added referral and loyalty discount fields
+// ✅ UPDATED: Added reservation payment fields and RESERVED status
 // ============================================================================
 
 model Booking {
@@ -328,19 +332,38 @@ model Booking {
   guestEmail      String?
   guestPhone      String?
   
-  // ✅ NEW: Referral Code & Discount Tracking
+  // Referral Code & Discount Tracking
   referralCode     ReferralCode?  @relation(fields: [referralCodeId], references: [id])
   referralCodeId   String?        @db.ObjectId
-  referralCodeUsed String?        // Store the actual code string for reference
+  referralCodeUsed String?
   
-  discountPercent  Int?           // Percentage discount applied (10% or 20%)
-  discountAmount   Float?         // Dollar amount discounted
-  originalPrice    Float?         // Price before discount
-  finalPrice       Float?         // Price after discount (what user actually pays)
+  discountPercent  Int?
+  discountAmount   Float?
+  originalPrice    Float?
+  finalPrice       Float?
   
-  isLoyaltyDiscount Boolean       @default(false) // TRUE if 20% loyalty discount applied
+  isLoyaltyDiscount Boolean       @default(false)
   
-  // Payment Information
+  // ✅ NEW: Reservation Payment Fields (for 2+ nights stays)
+  requiresReservation    Boolean   @default(false)  // Does this booking need reservation?
+  reservationAmount      Float?                     // Amount for reservation ($30)
+  reservationPaid        Boolean   @default(false)  // Has reservation been paid?
+  reservationTxHash      String?                    // Transaction hash for reservation
+  reservationPaidAt      DateTime?                  // When reservation was paid
+  reservationChainId     Int?                       // Chain used for reservation
+  reservationToken       String?                    // Token used for reservation (USDC/USDT)
+  
+  remainingAmount        Float?                     // Amount remaining after reservation
+  remainingPaid          Boolean   @default(false)  // Has remaining been paid?
+  remainingTxHash        String?                    // Transaction hash for remaining
+  remainingPaidAt        DateTime?                  // When remaining was paid
+  remainingChainId       Int?                       // Chain used for remaining
+  remainingToken         String?                    // Token used for remaining
+  
+  remainingDueDate       DateTime?                  // When remaining payment is due (check-in date)
+  remainingPaymentSent   Boolean   @default(false)  // Email reminder sent for remaining?
+  
+  // Original Payment Information (kept for backward compatibility)
   paymentToken    PaymentToken?
   paymentAmount   Float?
   amountBaseUnits String?
@@ -409,6 +432,9 @@ model Booking {
   @@index([checkInDate])
   @@index([checkOutDate])
   @@index([referralCodeId])
+  @@index([requiresReservation])
+  @@index([reservationPaid])
+  @@index([remainingDueDate])
 }
 
 // ============================================================================

@@ -1,4 +1,3 @@
-// app/stay/[stayId]/apply/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -26,8 +25,10 @@ import {
   Users as UsersIcon,
   DollarSign,
   Calendar,
+  // ✅ NEW: Icon for the marketing banner
+  Sparkles,
 } from "lucide-react";
-import useFormPersistence from "@/lib/hooks/useFormPersistence"; // adjust path if needed
+import useFormPersistence from "@/lib/hooks/useFormPersistence"; 
 
 /* --------------------- validation schema --------------------- */
 const applySchema = z
@@ -86,7 +87,7 @@ const applySchema = z
 type ApplyFormInputs = z.infer<typeof applySchema>;
 
 type StayData = {
-  id: string; // ✅ ADD THIS <-- Your comment, but this field is the problem  stayId: string;
+  id: string; 
   stayId: string;
   title: string;
   location: string;
@@ -97,6 +98,7 @@ type StayData = {
   priceUSDT: number;
   rooms: any[];
 };
+
 /* --------------------- date helpers --------------------- */
 const formatDateForInput = (date: Date | string | null | undefined): string => {
   try {
@@ -168,6 +170,7 @@ export default function ApplyPage() {
   const [stayData, setStayData] = useState<StayData | null>(null);
   const [calculatedNights, setCalculatedNights] = useState<number>(0);
   const [stayDuration, setStayDuration] = useState<number>(0);
+  
   // Coupon/Referral State
   const [couponCode, setCouponCode] = useState("");
   const [couponValidating, setCouponValidating] = useState(false);
@@ -184,6 +187,7 @@ export default function ApplyPage() {
     discountPercent: number;
     previousBookingsCount: number;
   } | null>(null);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [isSuccess]);
@@ -211,7 +215,6 @@ export default function ApplyPage() {
   const checkInDate = watch("checkInDate");
   const checkOutDate = watch("checkOutDate");
 
-  // Persist form - key includes stayId + user email (or anon)
   const persistenceKey = `apply:${stayId}:${
     (session?.user as any)?.email ?? "anon"
   }`;
@@ -221,13 +224,13 @@ export default function ApplyPage() {
       watch,
       reset,
       handleSubmit: (fn: any) => (e?: unknown) => fn(e),
-    } as any /* cast because useFormPersistence expects UseFormReturn; we pass minimal shape */,
+    } as any,
     {
       debounceMs: 300,
       restore: true,
     }
   );
-  // Check loyalty discount on component mount
+
   useEffect(() => {
     const checkLoyalty = async () => {
       if (sessionStatus === "authenticated") {
@@ -236,40 +239,29 @@ export default function ApplyPage() {
           if (res.ok) {
             const data = await res.json();
             setLoyaltyDiscount(data);
-            if (data.isEligible) {
-              console.log(
-                `[Loyalty] ${data.discountPercent}% discount available`
-              );
-            }
           }
         } catch (error) {
           console.error("[Loyalty Check] Error:", error);
         }
       }
     };
-
     checkLoyalty();
   }, [sessionStatus]);
 
-  // Validate coupon code
   const validateCoupon = async () => {
     if (!couponCode.trim()) return;
-
     setCouponValidating(true);
     setCouponError(null);
-
     try {
       const res = await fetch("/api/bookings/validate-referral", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: couponCode.trim().toUpperCase(),
-          publicStayId: stayData?.stayId, // ✅ THIS IS THE FIX
+          publicStayId: stayData?.stayId,
         }),
       });
-
       const data = await res.json();
-
       if (data.valid) {
         setValidatedCoupon(data.referralCode);
         setCouponApplied(true);
@@ -281,13 +273,11 @@ export default function ApplyPage() {
       }
     } catch (error) {
       setCouponError("Failed to validate coupon code");
-      console.error("[Coupon Validation] Error:", error);
     } finally {
       setCouponValidating(false);
     }
   };
 
-  // Remove applied coupon
   const removeCoupon = () => {
     setCouponCode("");
     setCouponApplied(false);
@@ -295,32 +285,24 @@ export default function ApplyPage() {
     setCouponError(null);
   };
 
-  // Calculate prices with discount
-  // Calculate prices with discount
   const calculateOriginalPrice = () => {
     if (!stayData || calculatedNights <= 0) return "0.00";
-
     let pricePerNight = 0;
-
     if (currentSelectedRoomId) {
-      // Room is selected
       const rooms = (stayData.rooms as any[]) || [];
       const selectedRoom = rooms.find(
         (r: any) => r.id === currentSelectedRoomId
       );
-
       pricePerNight =
         currentSelectedCurrency === "USDC"
           ? selectedRoom?.priceUSDC ?? stayData.priceUSDC
           : selectedRoom?.priceUSDT ?? stayData.priceUSDT;
     } else {
-      // No room selected, use default stay prices
       pricePerNight =
         currentSelectedCurrency === "USDC"
           ? stayData.priceUSDC
           : stayData.priceUSDT;
     }
-
     const total = pricePerNight * calculatedNights;
     return total.toFixed(2);
   };
@@ -336,7 +318,7 @@ export default function ApplyPage() {
     const discount = parseFloat(calculateDiscountAmount());
     return (original - discount).toFixed(2);
   };
-  // keep nights updated when dates change
+
   useEffect(() => {
     if (checkInDate && checkOutDate) {
       setCalculatedNights(calculateNightsBetween(checkInDate, checkOutDate));
@@ -345,19 +327,14 @@ export default function ApplyPage() {
     }
   }, [checkInDate, checkOutDate, stayData]);
 
-  // fetch stay and prefill
   useEffect(() => {
     const fetchStayData = async () => {
       try {
         const res = await fetch(`/api/stays/${stayId}`);
-        if (!res.ok) {
-          console.error("Failed to fetch stay", await res.text());
-          return;
-        }
+        if (!res.ok) return;
         const data = await res.json();
         setStayData(data);
 
-        // compute stay duration
         let duration = 0;
         if (data.duration && !isNaN(data.duration)) {
           duration = Number(data.duration);
@@ -366,12 +343,9 @@ export default function ApplyPage() {
         }
         setStayDuration(duration);
 
-        // prefill dates if not present in storage (we restore via hook)
-        // But reset explicit default from stay only if form has no values:
         const currentCheckIn = formatDateForInput(data.startDate);
         const currentCheckOut = formatDateForInput(data.endDate);
 
-        // If the form already has values (due to persistence) we don't overwrite.
         const rawSaved = (() => {
           try {
             return localStorage.getItem(persistenceKey);
@@ -388,15 +362,11 @@ export default function ApplyPage() {
         console.error("Error fetching stay data:", err);
       }
     };
-
     if (stayId && stayId !== "undefined") fetchStayData();
   }, [stayId, setValue, persistenceKey]);
 
-  // prefill user fields when session loads (but don't overwrite persisted values)
   useEffect(() => {
     if (!session?.user) return;
-
-    // check if persisted data exists
     let persisted = null;
     try {
       persisted = localStorage.getItem(persistenceKey);
@@ -431,7 +401,6 @@ export default function ApplyPage() {
         checkOutDate: stayData ? formatDateForInput(stayData.endDate) : "",
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, stayData]);
 
   const handleRoomSelection = (
@@ -459,24 +428,20 @@ export default function ApplyPage() {
       setApiError("Please sign in to apply for this stay.");
       return;
     }
-
     if (!isConnected || !address) {
       setApiError(
         "Please connect your wallet to complete your application. This is required for payment processing."
       );
       return;
     }
-
     if (!stayId || stayId === "undefined") {
       setApiError("Invalid stay ID. Please check the URL and try again.");
       return;
     }
-
     if (calculatedNights <= 0) {
       setApiError("Please select valid check-in and check-out dates.");
       return;
     }
-
     setApiError(null);
 
     try {
@@ -489,12 +454,10 @@ export default function ApplyPage() {
           selectedCurrency: data.selectedRoomId ? data.selectedCurrency : null,
           numberOfNights: calculatedNights,
           referralCode:
-            couponApplied && validatedCoupon ? validatedCoupon.code : null, // ✅ Added
+            couponApplied && validatedCoupon ? validatedCoupon.code : null, 
         }),
       });
-
       const result = await response.json();
-
       if (!response.ok) {
         if (response.status === 409) {
           throw new Error(
@@ -503,13 +466,11 @@ export default function ApplyPage() {
         }
         throw new Error(result.error || "Failed to submit application");
       }
-
       try {
         clearPersistence();
       } catch (err) {
         console.warn("Failed to clear persistence", err);
       }
-
       setIsSuccess(true);
     } catch (error: any) {
       console.error("Application error:", error);
@@ -563,6 +524,12 @@ export default function ApplyPage() {
                       {calculatedNights !== 1 ? "s" : ""}
                     </strong>
                   </p>
+                  {/* Show success message for flexible payment */}
+                  {calculatedNights > 2 && (
+                     <p className="text-xs text-green-700 mt-2 font-semibold">
+                       ✨ Flexible Payment Unlocked: Only $30 reservation needed upon approval!
+                     </p>
+                  )}
                 </div>
               )}
               <p className="text-gray-500 mb-8">
@@ -859,6 +826,28 @@ export default function ApplyPage() {
                           </div>
                         </div>
                       </div>
+
+                      {/* ✅ NEW: Marketing Banner for > 2 Nights */}
+                      {calculatedNights > 2 && (
+                         <div className="mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4 relative overflow-hidden">
+                           <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-purple-500 rounded-full opacity-10 blur-2xl"></div>
+                           <div className="flex items-start gap-3 relative z-10">
+                             <div className="bg-white p-2 rounded-full shadow-sm">
+                               <Sparkles className="text-purple-600" size={20} />
+                             </div>
+                             <div>
+                               <h4 className="font-bold text-purple-900 text-sm">
+                                 ✨ Flexible Payment Unlocked!
+                               </h4>
+                               <p className="text-xs text-purple-700 mt-1 leading-relaxed">
+                                 Since you're booking for <strong>{calculatedNights} nights</strong>, you don't need to pay the full amount upfront.
+                                 <br/>
+                                 After approval, just pay a <strong>$30 reservation fee</strong> to secure your spot. The rest is due on your check-in day!
+                               </p>
+                             </div>
+                           </div>
+                         </div>
+                      )}
                     </div>
                   ) : (
                     <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-4 text-center">
