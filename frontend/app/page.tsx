@@ -112,8 +112,8 @@ export default function HomePage() {
               </div>
             </div>
             <p className="w-full text-center md:text-start   font-berlin text-md md:text-2xl text-[#102E4A] mt-4  font-bold md:w-[90%]">
-              Decentralized Den is a luxury stay experience curated for the
-              biggest Web3 events.
+              Decentralized Den is a luxury pop-up stay experience curated for
+              the biggest Web3 events.
             </p>
             <p className="w-full text-center md:text-start  font-berlin  text-md md:text-2xl text-[#102E4A]  font-bold md:w-[90%]">
               Network. Unwind. Buidl IRL.
