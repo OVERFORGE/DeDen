@@ -403,9 +403,11 @@ export default function PaymentPage() {
             <div className="space-y-2 text-sm">
               <div className={`flex justify-between p-2 rounded ${!booking.reservationPaid ? 'bg-white border-2 border-blue-400' : 'bg-green-50'}`}>
                 <span>1. Reservation Payment</span>
-                <span className="font-bold">
-                  {booking.reservationPaid ? '✅ Paid' : `$${booking.reservationAmount} (Now)`}
-                </span>
+               <span className="font-bold">
+  {booking.reservationPaid 
+    ? '✅ Paid' 
+    : `$${Number(booking.reservationAmount).toString()} (Now)`} 
+</span>
               </div>
               <div className={`flex justify-between p-2 rounded ${booking.reservationPaid && !booking.remainingPaid ? 'bg-white border-2 border-blue-400' : 'bg-gray-50'}`}>
                 <span>2. Remaining Payment</span>

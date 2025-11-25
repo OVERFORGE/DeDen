@@ -1415,3 +1415,168 @@ export async function sendPaymentFailedEmail(props: PaymentFailedEmailProps) {
     return false;
   }
 }
+
+
+// File: lib/email.ts
+// ✅ NEW: Add payment expiry email function
+
+export async function sendPaymentExpiryEmail(props: {
+  recipientEmail: string;
+  recipientName: string;
+  bookingId: string;
+  stayTitle: string;
+  wasReservation: boolean;
+}) {
+  const { recipientEmail, recipientName, bookingId, stayTitle, wasReservation } = props;
+
+  const subject = `⌛ Payment Expired - ${stayTitle}`;
+  const reapplyUrl = `${baseUrl}/stay/${bookingId.split('-')[0]}/apply`;
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #e7e4df;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .container { padding: 32px 16px; }
+      .card {
+        max-width: 600px;
+        margin: auto;
+        background: #1f3a61;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid #2b4a78;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      }
+      .header {
+        padding: 40px 28px 28px;
+        text-align: center;
+        color: #ffffff;
+      }
+      .header h2 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 600;
+      }
+      .content {
+        padding: 32px 28px;
+        color: #ffffff;
+        line-height: 1.6;
+      }
+      .warning-box {
+        background: #fef3c7;
+        border: 2px solid #f59e0b;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 24px 0;
+        color: #92400e;
+      }
+      .cta-button {
+        display: inline-block;
+        background: #e7e4df;
+        color: #1f3a61;
+        padding: 14px 32px;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        font-size: 17px;
+        margin: 24px auto 32px;
+      }
+      .footer {
+        max-width: 600px;
+        margin: 24px auto 0;
+        text-align: center;
+        font-size: 12px;
+        color: #1f3a61;
+        opacity: 0.7;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <div class="header">
+          <h2>⌛ Payment Window Expired</h2>
+        </div>
+        <div class="content">
+          <p>Hi ${recipientName},</p>
+          <p>
+            Your ${wasReservation ? 'reservation' : 'payment'} window for 
+            <strong>${stayTitle}</strong> has expired.
+          </p>
+          <div class="warning-box">
+            <strong>⚠️ Your Spot Was Released</strong>
+            <p style="margin: 8px 0 0; font-size: 14px;">
+              Since we didn't receive payment within the time limit, your booking has been canceled 
+              and the spot has been released for other guests.
+            </p>
+          </div>
+          <p>
+            <strong>Want to try again?</strong><br/>
+            If you're still interested in attending this event, you can submit a new application:
+          </p>
+          <div style="text-align: center">
+            <a href="${reapplyUrl}" class="cta-button">
+              Reapply for This Stay
+            </a>
+          </div>
+          <p style="font-size: 13px; opacity: 0.8; margin-top: 24px;">
+            💡 Tip: Make sure to complete payment within the time window after approval to secure your spot.
+          </p>
+        </div>
+      </div>
+      <div class="footer">
+        <p><strong>Booking ID:</strong> ${bookingId}</p>
+        <p>Need help? Contact us at <a href="mailto:${supportEmail}">${supportEmail}</a></p>
+        <p>© ${new Date().getFullYear()} Decentralized Den</p>
+      </div>
+    </div>
+  </body>
+</html>
+`;
+
+  try {
+    const response = await resend.emails.send({
+      from: fromEmail,
+      to: recipientEmail,
+      subject,
+      html: htmlBody,
+    });
+
+    console.log("[EmailLib] Payment expiry email sent:", response);
+
+    await logEmailToDb(
+      recipientEmail,
+      subject,
+      response.data ? "payment_expired" : "payment_expired_failed",
+      {
+        bookingId,
+        wasReservation,
+        apiResponse: response,
+        resendId: response.data?.id,
+      }
+    );
+
+    if (response.error) {
+      throw response.error;
+    }
+
+    return true;
+  } catch (error: any) {
+    console.error("[EmailLib] Failed to send payment expiry email:", error);
+    await logEmailToDb(recipientEmail, subject, "payment_expired_failed", {
+      bookingId,
+      error: error?.message || error,
+    });
+    throw error;
+  }
+}

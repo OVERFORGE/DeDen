@@ -1,5 +1,5 @@
 // File: app/admin/stays/[id]/page.tsx
-// ✅ UPDATED: Now shows nights/duration prominently and prices are labeled "per night"
+// ✅ FIXED: Added reservation system controls for admin
 
 "use client";
 
@@ -8,14 +8,13 @@ import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Plus, X, Trash2, Edit, Check, DollarSign, Users, Calendar } from 'lucide-react';
 
-// Room type with PER NIGHT pricing
 type Room = {
     id?: string;
     name: string;
     description: string;
     capacity: number;
-    priceUSDC: number; // PER NIGHT
-    priceUSDT: number; // PER NIGHT
+    priceUSDC: number;
+    priceUSDT: number;
     images: string[];
     amenities: string[];
 };
@@ -29,9 +28,9 @@ type Stay = {
     description: string;
     startDate: string;
     endDate: string;
-    duration: number; // Number of nights
-    priceUSDC: number; // PER NIGHT
-    priceUSDT: number; // PER NIGHT
+    duration: number;
+    priceUSDC: number;
+    priceUSDT: number;
     slotsTotal: number;
     slotsAvailable: number;
     isPublished: boolean;
@@ -41,6 +40,10 @@ type Stay = {
     amenities: string[];
     highlights: string[];
     rooms: Room[];
+    // ✅ NEW: Reservation fields
+    requiresReservation: boolean;
+    reservationAmount: number;
+    minNightsForReservation: number;
 };
 
 export default function EditStayPage() {
@@ -51,14 +54,17 @@ export default function EditStayPage() {
     const [stay, setStay] = useState<Stay | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'basic' | 'images' | 'rooms' | 'amenities'>('basic');
+    const [activeTab, setActiveTab] = useState<'basic' | 'images' | 'rooms' | 'amenities' | 'reservation'>('basic');
     
     const [newImage, setNewImage] = useState('');
     const [newAmenity, setNewAmenity] = useState('');
     const [newHighlight, setNewHighlight] = useState('');
     const [editingRoom, setEditingRoom] = useState<Room | null>(null);
 
-    const { register, handleSubmit, reset } = useForm();
+    const { register, handleSubmit, reset, watch, setValue } = useForm();
+
+    // ✅ NEW: Watch reservation fields
+    const requiresReservation = watch('requiresReservation');
 
     useEffect(() => {
         if (stayId && typeof stayId === 'string' && stayId.length > 0) {
@@ -155,7 +161,7 @@ export default function EditStayPage() {
             name: '',
             description: '',
             capacity: 2,
-            priceUSDC: stay?.priceUSDC || 100, // Default per-night price
+            priceUSDC: stay?.priceUSDC || 100,
             priceUSDT: stay?.priceUSDT || 100, 
             images: [],
             amenities: [],
@@ -197,7 +203,6 @@ export default function EditStayPage() {
                 </button>
             </div>
 
-            {/* ✅ NEW: Nights Info Banner */}
             {stay.duration && (
                 <div className="bg-blue-100 border-2 border-blue-300 rounded-xl p-4 mb-8 flex items-center gap-4">
                     <Calendar className="text-blue-700" size={32} />
@@ -212,9 +217,9 @@ export default function EditStayPage() {
                 </div>
             )}
 
-            {/* Tabs */}
+            {/* ✅ UPDATED: Added 'reservation' tab */}
             <div className="flex gap-2 mb-8 border-b-2 border-gray-200">
-                {(['basic', 'images', 'rooms', 'amenities'] as const).map(tab => (
+                {(['basic', 'images', 'rooms', 'amenities', 'reservation'] as const).map(tab => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -271,7 +276,6 @@ export default function EditStayPage() {
                             </div>
                         </div>
 
-                        {/* ✅ UPDATED: Clearly labeled PER NIGHT */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -461,6 +465,140 @@ export default function EditStayPage() {
                     </div>
                 )}
 
+                {/* ✅ NEW: Reservation Tab */}
+                {activeTab === 'reservation' && (
+                    <div className="bg-white p-6 rounded-xl shadow-lg mb-6 space-y-6">
+                        <div className="border-b pb-3 mb-4">
+                            <h3 className="text-2xl font-bold text-gray-800">Reservation System Settings</h3>
+                            <p className="text-sm text-gray-600 mt-2">
+                                Control how payment works for multi-night bookings
+                            </p>
+                        </div>
+
+                        {/* Enable/Disable Toggle */}
+                        <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6">
+                            <label className="flex items-start gap-4 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    {...register('requiresReservation')}
+                                    className="mt-1 h-5 w-5 text-blue-600 border-gray-300 rounded"
+                                />
+                                <div className="flex-1">
+                                    <div className="font-bold text-lg text-gray-900">
+                                        Enable Two-Step Payment System
+                                    </div>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        When enabled, bookings above the minimum nights threshold will require an upfront reservation payment, with the remaining amount due on check-in day.
+                                    </p>
+                                    <div className="mt-3 bg-white border border-blue-300 rounded-lg p-3">
+                                        <div className="text-xs text-gray-700">
+                                            <strong>How it works:</strong>
+                                            <ol className="list-decimal ml-4 mt-2 space-y-1">
+                                                <li>Guest applies for stay</li>
+                                                <li>Admin approves application</li>
+                                                <li>Guest pays reservation amount to secure spot</li>
+                                                <li>Remaining amount is due on check-in day</li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+
+                        {/* Settings (shown when enabled) */}
+                        {requiresReservation && (
+                            <div className="space-y-6 animate-fadeIn">
+                                {/* Minimum Nights Threshold */}
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                                        Minimum Nights for Reservation System
+                                    </label>
+                                    <p className="text-xs text-gray-600 mb-3">
+                                        Bookings with this many nights or more will require a reservation payment. Shorter stays pay in full.
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            {...register('minNightsForReservation', { valueAsNumber: true })}
+                                            min="2"
+                                            max="30"
+                                            className="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-lg font-semibold"
+                                        />
+                                        <span className="absolute right-3 top-3 text-gray-500">nights</span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        💡 Example: Set to 3 means bookings of 3+ nights require reservation
+                                    </p>
+                                </div>
+
+                              {/* Reservation Amount */}
+<div>
+    <label className="block text-sm font-bold text-gray-700 mb-2">
+        Reservation Amount (USD)
+    </label>
+    <p className="text-xs text-gray-600 mb-3">
+        The upfront amount guests must pay to secure their booking. They'll pay the rest on check-in day.
+    </p>
+    <div className="relative">
+        <span className="absolute left-3 top-3 text-gray-500 text-lg font-bold">$</span>
+        <input
+            type="number"
+            {...register('reservationAmount', { valueAsNumber: true })}
+            min="0"
+            max="100000"
+            // ✅ FIXED: Changed from "5" to "0.001" to allow decimals
+            step="0.001" 
+            className="w-full pl-8 p-3 border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-lg font-semibold"
+        />
+    </div>
+    <p className="text-xs text-gray-500 mt-2">
+        💡 Common amounts: $0.01, $30, $50
+    </p>
+</div>
+
+                                {/* Preview Example */}
+                                <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4">
+                                    <h4 className="font-bold text-purple-900 mb-3">
+                                        📋 Example Booking Flow
+                                    </h4>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-purple-600 font-bold">Guest:</span>
+                                            <span className="text-purple-900">
+                                                Books {stay.duration} nights at ${stay.priceUSDC}/night = ${(stay.duration * stay.priceUSDC).toFixed(2)} total
+                                            </span>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-purple-600 font-bold">Step 1:</span>
+                                            <span className="text-purple-900">
+                                                Pays ${watch('reservationAmount') || 30} reservation (now)
+                                            </span>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-purple-600 font-bold">Step 2:</span>
+                                            <span className="text-purple-900">
+                                                Pays ${((stay.duration * stay.priceUSDC) - (watch('reservationAmount') || 30)).toFixed(2)} remaining (check-in day)
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Disabled State Info */}
+                        {!requiresReservation && (
+                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                                <p className="text-gray-600">
+                                    <strong>Current Mode:</strong> Full payment required upfront
+                                </p>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Enable reservation system above to split payments
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="mt-8 flex justify-end">
                     <button type="submit" disabled={saving} className={`px-8 py-3 text-xl font-semibold rounded-lg transition duration-200 shadow-xl 
                         ${saving 
@@ -485,7 +623,7 @@ export default function EditStayPage() {
     );
 }
 
-// Room Editor Modal with nights calculation
+// Room Editor Modal (unchanged, keeping your existing code)
 function RoomEditorModal({
     room,
     onSave,
@@ -616,7 +754,6 @@ function RoomEditorModal({
                     </div>
                 </div>
 
-                {/* ✅ NEW: Show total calculation */}
                 {stayDuration && (
                     <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
                         <p className="text-sm text-blue-900">
@@ -625,7 +762,6 @@ function RoomEditorModal({
                     </div>
                 )}
 
-                {/* Room Images */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Room Images</label>
                     <div className="flex gap-3 mb-4">
@@ -656,7 +792,6 @@ function RoomEditorModal({
                     </div>
                 </div>
 
-                {/* Room Amenities */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Room Amenities</label>
                     <div className="flex gap-3 mb-4">

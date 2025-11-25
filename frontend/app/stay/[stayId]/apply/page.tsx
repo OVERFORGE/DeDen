@@ -25,7 +25,6 @@ import {
   Users as UsersIcon,
   DollarSign,
   Calendar,
-  // ✅ NEW: Icon for the marketing banner
   Sparkles,
 } from "lucide-react";
 import useFormPersistence from "@/lib/hooks/useFormPersistence"; 
@@ -86,6 +85,7 @@ const applySchema = z
 
 type ApplyFormInputs = z.infer<typeof applySchema>;
 
+// ✅ FIXED: Added optional reservation fields to type definition
 type StayData = {
   id: string; 
   stayId: string;
@@ -97,6 +97,9 @@ type StayData = {
   priceUSDC: number;
   priceUSDT: number;
   rooms: any[];
+  requiresReservation?: boolean;
+  reservationAmount?: number;
+  minNightsForReservation?: number;
 };
 
 /* --------------------- date helpers --------------------- */
@@ -524,12 +527,14 @@ export default function ApplyPage() {
                       {calculatedNights !== 1 ? "s" : ""}
                     </strong>
                   </p>
-                  {/* Show success message for flexible payment */}
-                  {calculatedNights > 2 && (
-                     <p className="text-xs text-green-700 mt-2 font-semibold">
-                       ✨ Flexible Payment Unlocked: Only $30 reservation needed upon approval!
-                     </p>
+
+                  {/* ✅ FIXED: Updated logic to check 'requiresReservation' AND use dynamic price */}
+                  {stayData?.requiresReservation && calculatedNights >= (stayData?.minNightsForReservation || 2) && (
+                    <p className="text-xs text-green-700 mt-2 font-semibold">
+                       ✨ Flexible Payment Unlocked: Only ${stayData.reservationAmount ?? 30} reservation needed upon approval!
+                    </p>
                   )}
+
                 </div>
               )}
               <p className="text-gray-500 mb-8">
@@ -827,26 +832,27 @@ export default function ApplyPage() {
                         </div>
                       </div>
 
-                      {/* ✅ NEW: Marketing Banner for > 2 Nights */}
-                      {calculatedNights > 2 && (
-                         <div className="mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4 relative overflow-hidden">
-                           <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-purple-500 rounded-full opacity-10 blur-2xl"></div>
-                           <div className="flex items-start gap-3 relative z-10">
-                             <div className="bg-white p-2 rounded-full shadow-sm">
-                               <Sparkles className="text-purple-600" size={20} />
-                             </div>
-                             <div>
-                               <h4 className="font-bold text-purple-900 text-sm">
-                                 ✨ Flexible Payment Unlocked!
-                               </h4>
-                               <p className="text-xs text-purple-700 mt-1 leading-relaxed">
-                                 Since you're booking for <strong>{calculatedNights} nights</strong>, you don't need to pay the full amount upfront.
-                                 <br/>
-                                 After approval, just pay a <strong>$30 reservation fee</strong> to secure your spot. The rest is due on your check-in day or before as said by the organizers!
-                               </p>
-                             </div>
-                           </div>
-                         </div>
+                      {/* ✅ FIXED: Logic to check both requiresReservation AND min nights */}
+                      {stayData?.requiresReservation && calculatedNights >= (stayData?.minNightsForReservation || 2) && (
+                          <div className="mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-purple-500 rounded-full opacity-10 blur-2xl"></div>
+                            <div className="flex items-start gap-3 relative z-10">
+                              <div className="bg-white p-2 rounded-full shadow-sm">
+                                <Sparkles className="text-purple-600" size={20} />
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-purple-900 text-sm">
+                                  ✨ Flexible Payment Unlocked!
+                                </h4>
+                                <p className="text-xs text-purple-700 mt-1 leading-relaxed">
+                                  Since you're booking for <strong>{calculatedNights} nights</strong>, you don't need to pay the full amount upfront.
+                                  <br/>
+                                  {/* ✅ FIXED: Use dynamic price from API, fallback to 30 if not present */}
+                                  After approval, just pay a <strong>${stayData.reservationAmount ?? 30} reservation fee</strong> to secure your spot. The rest is due on your check-in day or before as said by the organizers!
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                       )}
                     </div>
                   ) : (

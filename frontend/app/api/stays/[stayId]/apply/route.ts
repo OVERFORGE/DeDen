@@ -114,8 +114,12 @@ export async function POST(
     }
 
     // ✅ NEW: Check if booking requires reservation (2+ nights)
-const requiresReservation = stay.requiresReservation && numberOfNights > 2;    const reservationAmount = requiresReservation ? (stay.reservationAmount || 30) : null;
-
+    const requiresReservation = stay.requiresReservation && 
+      numberOfNights >= (stay.minNightsForReservation || 2);
+    
+const reservationAmount = requiresReservation 
+  ? (stay.reservationAmount ?? 30) 
+  : null;
     console.log(`[Apply] Booking requires reservation: ${requiresReservation}`);
     if (requiresReservation) {
       console.log(`[Apply] Reservation amount: $${reservationAmount}`);
