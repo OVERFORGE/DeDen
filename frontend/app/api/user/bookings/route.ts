@@ -1,5 +1,5 @@
 // File: app/api/user/bookings/route.ts
-// ✅ UPDATED: Now returns checkInDate, checkOutDate, and txHash
+// ✅ UPDATED: Now returns NFT fields
 
 import { db } from '@/lib/database';
 import { NextResponse } from 'next/server';
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     console.log('[API] Display Name:', user.displayName);
     console.log('[API] Email:', user.email);
 
-    // Fetch bookings with all date fields and tx hash
+    // Fetch bookings with all date fields, tx hash, and NFT fields
     let bookings = await db.booking.findMany({
       where: {
         userId: user.id,
@@ -111,7 +111,7 @@ export async function GET(request: Request) {
       console.log('[API] Manual filter found:', bookings.length, 'bookings');
     }
 
-    // ✅ Transform dates AND include all new fields
+    // ✅ Transform dates AND include NFT fields
     const serializedBookings = bookings.map(booking => ({
       bookingId: booking.bookingId,
       status: booking.status,
@@ -121,10 +121,10 @@ export async function GET(request: Request) {
       selectedRoomId: booking.selectedRoomId,
       roomType: booking.roomType,
       
-      // ✅ NEW: Date fields
+      // Date fields
       numberOfNights: booking.numberOfNights,
-      checkInDate: booking.checkInDate?.toISOString() || null,   // ✅ NEW
-      checkOutDate: booking.checkOutDate?.toISOString() || null, // ✅ NEW
+      checkInDate: booking.checkInDate?.toISOString() || null,
+      checkOutDate: booking.checkOutDate?.toISOString() || null,
       
       // Pricing fields
       pricePerNightUSDC: booking.pricePerNightUSDC,
@@ -136,10 +136,16 @@ export async function GET(request: Request) {
       // Payment fields
       paymentAmount: booking.paymentAmount,
       paymentToken: booking.paymentToken,
-      txHash: booking.txHash,                                    // ✅ INCLUDED
+      txHash: booking.txHash,
       chain: booking.chain,
       chainId: booking.chainId,
       blockNumber: booking.blockNumber,
+      
+      // ✅ ✅ ✅ NFT FIELDS ✅ ✅ ✅
+      nftMinted: booking.nftMinted || false,
+      nftTokenId: booking.nftTokenId,
+      nftContractAddress: booking.nftContractAddress,
+      nftTxHash: booking.nftTxHash,
       
       // Session fields
       expiresAt: booking.expiresAt?.toISOString() || null,
@@ -161,6 +167,13 @@ export async function GET(request: Request) {
     }));
 
     console.log('[API] ✅ Returning', serializedBookings.length, 'bookings');
+    
+    // ✅ Log if any bookings have NFTs
+    const nftCount = serializedBookings.filter(b => b.nftMinted).length;
+    if (nftCount > 0) {
+      console.log(`[API] 🎫 ${nftCount} booking(s) have NFT tickets minted`);
+    }
+    
     console.log('[API] ========================================');
 
     return NextResponse.json(serializedBookings);

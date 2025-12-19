@@ -8,18 +8,19 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { ConnectKitButton } from "connectkit";
 import Link from "next/link";
 import { AlertTriangle, Calendar, DollarSign, ExternalLink } from "lucide-react";
+import { BookingNFTCard } from "@/components/BookingNFTCard"; // ✅ NEW: Import NFT Card
 
-// ✅ UPDATED: Added check-in/out date fields
+// ✅ UPDATED: Added NFT fields
 type Booking = {
   bookingId: string;
   status: string;
   guestName: string;
   guestEmail: string;
   
-  // ✅ NEW: Date fields
+  // Date fields
   numberOfNights: number | null;
-  checkInDate: string | null;   // ✅ NEW
-  checkOutDate: string | null;  // ✅ NEW
+  checkInDate: string | null;
+  checkOutDate: string | null;
   
   // Pricing
   pricePerNightUSDC: number | null;
@@ -31,10 +32,16 @@ type Booking = {
   // Payment
   paymentAmount: number | null;
   paymentToken: string | null;
-  txHash: string | null;        // ✅ Transaction hash
+  txHash: string | null;
   chain: string | null;
   chainId: number | null;
   blockNumber: number | null;
+  
+  // ✅ NEW: NFT Fields
+  nftMinted: boolean;
+  nftTokenId: string | null;
+  nftContractAddress: string | null;
+  nftTxHash: string | null;
   
   expiresAt: string | null;
   confirmedAt: string | null;
@@ -80,7 +87,7 @@ export default function UserDashboard() {
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
   };
 
-  // ✅ Helper to get block explorer URL
+  // Helper to get block explorer URL
   const getExplorerUrl = (chainId: number | null, txHash: string) => {
     const explorers: Record<number, string> = {
       42161: 'https://arbiscan.io',
@@ -91,7 +98,7 @@ export default function UserDashboard() {
     return `${baseUrl}/tx/${txHash}`;
   };
 
-  // ✅ Helper to get chain name
+  // Helper to get chain name
   const getChainName = (chainId: number | null): string => {
     const chains: Record<number, string> = {
       42161: 'Arbitrum',
@@ -167,14 +174,12 @@ export default function UserDashboard() {
     setError(null);
 
     try {
-      // 1. Connect wallet if not connected
       let currentAddress = address;
       let currentChainId = chainId;
 
       if (!currentAddress) {
         await connectAsync({ connector: injected() });
 
-        // Wait for account state to update
         let attempts = 0;
         const maxAttempts = 10;
 
@@ -190,12 +195,10 @@ export default function UserDashboard() {
         throw new Error("Failed to connect wallet");
       }
 
-      // 2. Fetch CSRF token
       const csrfRes = await fetch("/api/auth/csrf");
       if (!csrfRes.ok) throw new Error("Failed to fetch nonce");
       const { csrfToken } = await csrfRes.json();
 
-      // 3. Create SIWE message
       const message = new SiweMessage({
         domain: window.location.host,
         address: currentAddress,
@@ -207,11 +210,8 @@ export default function UserDashboard() {
       });
 
       const messageToSign = message.prepareMessage();
-
-      // 4. Sign the message
       const signature = await signMessageAsync({ message: messageToSign });
 
-      // 5. Call the link wallet API
       const linkRes = await fetch("/api/user/link-wallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,8 +228,6 @@ export default function UserDashboard() {
       }
 
       setLinkMessage("✅ Wallet linked successfully!");
-
-      // Refresh session to get updated user data
       setTimeout(() => window.location.reload(), 1500);
     } catch (err: any) {
       console.error("Wallet linking error:", err);
@@ -590,7 +588,7 @@ export default function UserDashboard() {
                   📍 {booking.stay.location}
                 </p>
 
-                {/* ✅ NEW: Show Check-In/Out Dates */}
+                {/* Check-In/Out Dates */}
                 {checkInDate && checkOutDate && (
                   <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 my-4">
                     <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
@@ -671,15 +669,15 @@ export default function UserDashboard() {
                     </div>
                   )}
 
-                  {/* ✅ NEW: Transaction Hash (for confirmed bookings) */}
+                  {/* Transaction Hash (for confirmed bookings) */}
                   {booking.status === "CONFIRMED" && booking.txHash && (
                     <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mt-4">
                       <div className="flex justify-between items-start gap-2 mb-2">
                         <span className="text-sm font-semibold text-gray-700">
                           Transaction Hash:
                         </span>
-                        <a
-                          href={getExplorerUrl(booking.chainId, booking.txHash)}
+                        
+                         <a href={getExplorerUrl(booking.chainId, booking.txHash)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-mono hover:underline"
@@ -702,6 +700,20 @@ export default function UserDashboard() {
                       )}
                     </div>
                   )}
+
+                  {/* ✅ ✅ ✅ NFT CARD - SHOWS AUTOMATICALLY AFTER MINTING ✅ ✅ ✅ */}
+                  {booking.status === "CONFIRMED" && (
+                    <BookingNFTCard 
+                      booking={{
+                        bookingId: booking.bookingId,
+                        nftMinted: booking.nftMinted,
+                        nftTokenId: booking.nftTokenId || undefined,
+                        nftContractAddress: booking.nftContractAddress || undefined,
+                        chainId: booking.chainId || undefined,
+                        stayTitle: booking.stay.title,
+                      }}
+                    />
+                  )}
                 </div>
 
                 {/* Action Buttons */}
@@ -722,8 +734,6 @@ export default function UserDashboard() {
                     View Stay Details
                   </Link>
                 )}
-
-                {/* ✅ REMOVED: "View Booking Details" button - everything is shown here */}
               </div>
             );
           })}

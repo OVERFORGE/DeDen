@@ -307,7 +307,7 @@ model Booking {
   guestGender     String?
   guestAge        Int?
   guestMobile     String?
-  preferredRoomId String? 
+  preferredRoomId String?
   
   // Booking Details
   status          BookingStatus @default(PENDING)
@@ -322,7 +322,7 @@ model Booking {
   pricePerNightUSDC   Float?
   pricePerNightUSDT   Float?
   
-  // Total Prices (calculated: pricePerNight × numberOfNights)
+  // Total Prices
   selectedRoomPriceUSDC Float?
   selectedRoomPriceUSDT Float?
   selectedRoomName      String?
@@ -344,26 +344,26 @@ model Booking {
   
   isLoyaltyDiscount Boolean       @default(false)
   
-  // ✅ NEW: Reservation Payment Fields (for 2+ nights stays)
-  requiresReservation    Boolean   @default(false)  // Does this booking need reservation?
-  reservationAmount      Float?                     // Amount for reservation ($30)
-  reservationPaid        Boolean   @default(false)  // Has reservation been paid?
-  reservationTxHash      String?                    // Transaction hash for reservation
-  reservationPaidAt      DateTime?                  // When reservation was paid
-  reservationChainId     Int?                       // Chain used for reservation
-  reservationToken       String?                    // Token used for reservation (USDC/USDT)
+  // Reservation Payment Fields
+  requiresReservation    Boolean   @default(false)
+  reservationAmount      Float?
+  reservationPaid        Boolean   @default(false)
+  reservationTxHash      String?
+  reservationPaidAt      DateTime?
+  reservationChainId     Int?
+  reservationToken       String?
   
-  remainingAmount        Float?                     // Amount remaining after reservation
-  remainingPaid          Boolean   @default(false)  // Has remaining been paid?
-  remainingTxHash        String?                    // Transaction hash for remaining
-  remainingPaidAt        DateTime?                  // When remaining was paid
-  remainingChainId       Int?                       // Chain used for remaining
-  remainingToken         String?                    // Token used for remaining
+  remainingAmount        Float?
+  remainingPaid          Boolean   @default(false)
+  remainingTxHash        String?
+  remainingPaidAt        DateTime?
+  remainingChainId       Int?
+  remainingToken         String?
   
-  remainingDueDate       DateTime?                  // When remaining payment is due (check-in date)
-  remainingPaymentSent   Boolean   @default(false)  // Email reminder sent for remaining?
+  remainingDueDate       DateTime?
+  remainingPaymentSent   Boolean   @default(false)
   
-  // Original Payment Information (kept for backward compatibility)
+  // Original Payment Information
   paymentToken    PaymentToken?
   paymentAmount   Float?
   amountBaseUnits String?
@@ -405,10 +405,12 @@ model Booking {
   adminNotes      String?
   internalTags    String[]      @default([])
   
-  // NFT Ticket
-  nftTokenId      String?
-  nftContractAddress String?
-  nftMinted       Boolean       @default(false)
+  // ✅ ✅ ✅ NFT TICKET FIELDS ✅ ✅ ✅
+  nftMinted          Boolean   @default(false)  // ✅ NOT nullable, default false
+  nftTokenId         String?                    // ✅ Nullable - will be set after minting
+  nftContractAddress String?                    // ✅ Nullable - will be set after minting
+  nftTxHash          String?                    // ✅ Optional - transaction hash of minting
+  nftMintedAt        DateTime?                  // ✅ ADDED: When NFT was minted
   
   // Relations
   refund          Refund?
@@ -435,6 +437,8 @@ model Booking {
   @@index([requiresReservation])
   @@index([reservationPaid])
   @@index([remainingDueDate])
+  @@index([nftMinted])           // ✅ ADDED: Index for querying NFT bookings
+  @@index([nftTokenId])          // ✅ ADDED: Index for looking up by token ID
 }
 
 // ============================================================================
