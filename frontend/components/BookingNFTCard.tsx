@@ -1,3 +1,5 @@
+// components/BookingNFTCard.tsx
+
 "use client";
 
 import { ExternalLink, Wallet, CheckCircle } from "lucide-react";
@@ -23,7 +25,7 @@ export function BookingNFTCard({ booking }: NFTCardProps) {
   }
 
   // ✅ Add NFT to MetaMask Wallet
-const handleAddToWallet = async () => {
+  const handleAddToWallet = async () => {
     if (!booking.nftContractAddress || !booking.nftTokenId) return;
 
     try {
@@ -38,7 +40,6 @@ const handleAddToWallet = async () => {
       // Request to add token to wallet
       const wasAdded = await window.ethereum.request({
         method: 'wallet_watchAsset',
-        // 🔴 FIX: Cast this object to 'any' to satisfy the TypeScript compiler
         params: {
           type: 'ERC721', 
           options: {
@@ -60,21 +61,37 @@ const handleAddToWallet = async () => {
     }
   };
 
+  // ✅ UPDATED: Added Mantle Sepolia support
   const getOpenSeaUrl = () => {
     const chainSlug = booking.chainId === 42161 ? 'arbitrum' : 
                       booking.chainId === 56 ? 'bnb' : 
-                      booking.chainId === 8453 ? 'base' : 'ethereum';
+                      booking.chainId === 8453 ? 'base' :
+                      booking.chainId === 5003 ? 'mantle' : // ✅ Added Mantle
+                      'ethereum';
     
     return `https://opensea.io/assets/${chainSlug}/${booking.nftContractAddress}/${booking.nftTokenId}`;
   };
 
+  // ✅ UPDATED: Added Mantle Sepolia block explorer
   const getBlockExplorerUrl = () => {
     const baseUrl = booking.chainId === 42161 ? 'https://arbiscan.io' :
                     booking.chainId === 56 ? 'https://bscscan.com' :
                     booking.chainId === 8453 ? 'https://basescan.org' : 
+                    booking.chainId === 5003 ? 'https://explorer.sepolia.mantle.xyz' : // ✅ Added Mantle Sepolia
                     'https://etherscan.io';
     
     return `${baseUrl}/token/${booking.nftContractAddress}?a=${booking.nftTokenId}`;
+  };
+
+  // ✅ NEW: Get chain name for display
+  const getChainName = () => {
+    const chains: Record<number, string> = {
+      42161: 'Arbitrum',
+      56: 'BNB Chain',
+      8453: 'Base',
+      5003: 'Mantle Sepolia', // ✅ Added
+    };
+    return booking.chainId ? (chains[booking.chainId] || `Chain ${booking.chainId}`) : 'Unknown';
   };
 
   return (
@@ -91,7 +108,7 @@ const handleAddToWallet = async () => {
             NFT Ticket Minted!
           </h4>
           <p className="text-sm text-gray-700 mb-3">
-            Your booking is now tokenized as an NFT. View it in your wallet or on OpenSea.
+            Your booking is now tokenized as an NFT on {getChainName()}. View it in your wallet or on OpenSea.
           </p>
           
           {/* Token Details */}
@@ -110,11 +127,19 @@ const handleAddToWallet = async () => {
                 </div>
               </div>
             </div>
+            {/* ✅ NEW: Show chain badge for testnets */}
+            {booking.chainId === 5003 && (
+              <div className="mt-2 pt-2 border-t border-[#172a46]/10">
+                <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded">
+                  TESTNET NFT
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            {/* ✅ ✅ ✅ ADD TO WALLET BUTTON ✅ ✅ ✅ */}
+            {/* Add to Wallet Button */}
             <button
               onClick={handleAddToWallet}
               disabled={isAddingToWallet || addedToWallet}

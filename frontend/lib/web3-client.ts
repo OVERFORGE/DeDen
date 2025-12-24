@@ -1,9 +1,35 @@
-// File: lib/web3-client.ts
-// ✅ FIXED: Type-safe Base network client configuration
+// lib/web3-client.ts - Fixed Mantle Sepolia definition
 
 import { createPublicClient, http, type PublicClient } from 'viem';
 import { arbitrum, bsc, base } from 'viem/chains';
 import type { Chain } from 'viem/chains';
+
+// ✅ FIXED: Define Mantle Sepolia chain without 'network' property
+const mantleSepolia: Chain = {
+  id: 5003,
+  name: 'Mantle Sepolia',
+  // ❌ REMOVED: network: 'mantle-sepolia', // This property doesn't exist in Chain type
+  nativeCurrency: {
+    name: 'MNT',
+    symbol: 'MNT',
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc.sepolia.mantle.xyz'],
+    },
+    public: {
+      http: ['https://rpc.sepolia.mantle.xyz'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Mantle Sepolia Explorer',
+      url: 'https://explorer.sepolia.mantle.xyz',
+    },
+  },
+  testnet: true,
+};
 
 // Get RPC URLs from environment variables
 const getRpcUrl = (chainId: number): string | undefined => {
@@ -16,12 +42,18 @@ const getRpcUrl = (chainId: number): string | undefined => {
     case 56: // BSC
       return process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BNB
         ? `https://bnb-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BNB}`
-        : 'https://bsc-dataseed.binance.org'; // Public RPC as fallback
+        : 'https://bsc-dataseed.binance.org';
     
     case 8453: // Base
       return process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BASE
         ? `https://base-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BASE}`
-        : 'https://mainnet.base.org'; // Public fallback
+        : 'https://mainnet.base.org';
+    
+    // ✅ NEW: Mantle Sepolia
+    case 5003:
+      return process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_MANTLE_TESTNET
+        ? `https://mantle-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_MANTLE_TESTNET}`
+        : 'https://rpc.sepolia.mantle.xyz';
     
     default:
       console.warn(`No RPC URL configured for chain ${chainId}`);
@@ -29,10 +61,8 @@ const getRpcUrl = (chainId: number): string | undefined => {
   }
 };
 
-// ✅ FIX: Use a union type that accommodates all chain types
 type ChainPublicClient = PublicClient<ReturnType<typeof http>, Chain>;
 
-// Create public clients for each chain
 const clients: Record<number, ChainPublicClient | null> = {};
 
 // Initialize Arbitrum client
@@ -65,36 +95,49 @@ if (bscRpc) {
   }
 }
 
-// ✅ FIX: Initialize Base client with proper typing
+// Initialize Base client
 const baseRpc = getRpcUrl(8453);
 if (baseRpc) {
   try {
-    // Create the Base client - viem will infer the correct type
     const baseClient = createPublicClient({
       chain: base,
       transport: http(baseRpc, {
-        timeout: 30_000, // 30 seconds
+        timeout: 30_000,
         retryCount: 3,
         retryDelay: 1000,
       }),
     });
     
-    // ✅ Store with type assertion to the union type
     clients[8453] = baseClient as ChainPublicClient;
-    
     console.log('[Web3Client] ✅ Base client initialized');
-    console.log('[Web3Client] Base RPC:', baseRpc.substring(0, 50) + '...');
   } catch (error) {
     console.error('[Web3Client] ❌ Failed to initialize Base client:', error);
     clients[8453] = null;
   }
 }
 
-/**
- * Get public client for a specific chain
- * @param chainId - The chain ID to get client for
- * @returns PublicClient or null if not configured
- */
+// ✅ Initialize Mantle Sepolia client
+const mantleSepoliaRpc = getRpcUrl(5003);
+if (mantleSepoliaRpc) {
+  try {
+    const mantleSepoliaClient = createPublicClient({
+      chain: mantleSepolia,
+      transport: http(mantleSepoliaRpc, {
+        timeout: 30_000,
+        retryCount: 3,
+        retryDelay: 1000,
+      }),
+    });
+    
+    clients[5003] = mantleSepoliaClient as ChainPublicClient;
+    console.log('[Web3Client] ✅ Mantle Sepolia client initialized');
+    console.log('[Web3Client] Mantle Sepolia RPC:', mantleSepoliaRpc.substring(0, 50) + '...');
+  } catch (error) {
+    console.error('[Web3Client] ❌ Failed to initialize Mantle Sepolia client:', error);
+    clients[5003] = null;
+  }
+}
+
 export function getPublicClient(chainId: number): ChainPublicClient | null {
   const client = clients[chainId];
   
@@ -107,30 +150,16 @@ export function getPublicClient(chainId: number): ChainPublicClient | null {
   return client;
 }
 
-/**
- * Get all configured chain IDs
- * @returns Array of chain IDs that have clients configured
- */
 export function getSupportedChainIds(): number[] {
   return Object.keys(clients)
     .map(Number)
     .filter(chainId => clients[chainId] !== null);
 }
 
-/**
- * Check if a chain is supported
- * @param chainId - The chain ID to check
- * @returns true if the chain has a client configured
- */
 export function isChainSupported(chainId: number): boolean {
   return clients[chainId] !== null;
 }
 
-/**
- * Test connection to a chain
- * @param chainId - The chain ID to test
- * @returns Promise<boolean> - true if connection works
- */
 export async function testChainConnection(chainId: number): Promise<boolean> {
   const client = getPublicClient(chainId);
   if (!client) {
@@ -147,7 +176,6 @@ export async function testChainConnection(chainId: number): Promise<boolean> {
   }
 }
 
-// Log initialization status
 console.log('\n[Web3Client] Initialization Summary:');
 console.log('=====================================');
 Object.entries(clients).forEach(([chainId, client]) => {
@@ -156,6 +184,5 @@ Object.entries(clients).forEach(([chainId, client]) => {
 });
 console.log('=====================================\n');
 
-// Export clients for direct use if needed
 export { clients };
 export type { ChainPublicClient };

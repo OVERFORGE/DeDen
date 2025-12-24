@@ -11,21 +11,20 @@ const NFT_CONTRACT_ABI = [
   'event BookingNFTMinted(address indexed recipient, uint256 indexed tokenId, string bookingId, string stayTitle)',
 ];
 
+// lib/nft-service.ts - Add Mantle Sepolia
+
 const NFT_CONTRACT_ADDRESSES: Record<number, string> = {
-  // Arbitrum One
   42161: process.env.NFT_CONTRACT_ARBITRUM || '0x1e792D4c34c3d04Bd127aFEf0c1696E912c755aa', 
-  
-  // BNB Smart Chain (Updated)
   56: process.env.NFT_CONTRACT_BNB || '0xF4Ec99707aBC065d87eb03B629B2743723Cd3cc0',
-  
-  // Base (Updated)
   8453: process.env.NFT_CONTRACT_BASE || '0x021D0f2212ec1869933F4D21ea76dCF9e127396B',
+  5003: process.env.NFT_CONTRACT_MANTLE_TESTNET || '0xF563d7a976313D363fFB0dF60DC82DF02CeD85cb', // ✅ NEW
 };
 
 const RPC_URLS: Record<number, string> = {
   42161: process.env.ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc',
   56: process.env.BNB_RPC_URL || 'https://bsc-dataseed.binance.org',
   8453: process.env.BASE_RPC_URL || 'https://mainnet.base.org',
+  5003: process.env.MANTLE_TESTNET_RPC_URL || 'https://rpc.sepolia.mantle.xyz', // ✅ NEW
 };
 
 interface MintNFTParams {

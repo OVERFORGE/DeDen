@@ -18,6 +18,7 @@ import {
 } from "@/lib/config";
 
 // ✅ UPDATED: Added reservation fields
+// Around line 16-45
 type BookingDetails = {
   bookingId: string;
   status: "PENDING" | "CONFIRMED" | "RESERVED" | "EXPIRED" | "FAILED" | "WAITLISTED";
@@ -29,7 +30,6 @@ type BookingDetails = {
   selectedRoomPriceUSDC: number | null;
   selectedRoomPriceUSDT: number | null;
   
-  // ✅ NEW: Reservation fields
   requiresReservation: boolean;
   reservationAmount: number | null;
   reservationPaid: boolean;
@@ -41,9 +41,9 @@ type BookingDetails = {
     title: string;
     priceUSDC: number;
     priceUSDT: number;
+    enabledChains: number[];  // ✅ ADD THIS LINE
   };
 };
-
 type PaymentStatus =
   | "loading"
   | "ready"
@@ -59,6 +59,7 @@ export default function PaymentPage() {
   const { address, isConnected, chainId: walletChainId } = useAccount();
   const { sendTransactionAsync } = useSendTransaction();
   const { switchChain } = useSwitchChain();
+const [allowedChains, setAllowedChains] = useState<number[]>(SUPPORTED_CHAINS); // ✅ ADD THIS LINE
 
   const [booking, setBooking] = useState<BookingDetails | null>(null);
   const [selectedChain, setSelectedChain] = useState<number>(42161);
@@ -69,53 +70,71 @@ export default function PaymentPage() {
   useEffect(() => {
     if (!bookingId) return;
 
-    async function fetchBooking() {
-      try {
-        setStatus("loading");
-        setError(null);
-        const res = await fetch(`/api/bookings/${bookingId}`);
-        if (!res.ok) {
-          const { error } = await res.json();
-          throw new Error(error || "Booking not found");
-        }
+// Around line 75, inside the fetchBooking function
+async function fetchBooking() {
+  try {
+    setStatus("loading");
+    setError(null);
+    const res = await fetch(`/api/bookings/${bookingId}`);
+    if (!res.ok) {
+      const { error } = await res.json();
+      throw new Error(error || "Booking not found");
+    }
 
-        const data: BookingDetails = await res.json();
-        setBooking(data);
+    const data: BookingDetails = await res.json();
+    setBooking(data);
 
-        if (data.status === "FAILED" || data.status === "EXPIRED") {
-          setError(`Payment ${data.status.toLowerCase()}. Please retry.`);
-          setStatus("ready");
-          data.paymentToken = null;
-          data.paymentAmount = null;
-        }
+    // ✅ ADD THIS: Filter chains based on stay configuration
+    const stayEnabledChains = data.stay.enabledChains;
+    const filteredChains = stayEnabledChains && stayEnabledChains.length > 0
+      ? SUPPORTED_CHAINS.filter(chainId => stayEnabledChains.includes(chainId))
+      : SUPPORTED_CHAINS; // Fallback to all chains if not configured
+    
+    setAllowedChains(filteredChains);
+    
+    // ✅ UPDATE: Set default chain to first allowed chain if current selection not allowed
+    if (filteredChains.length > 0 && !filteredChains.includes(selectedChain)) {
+      setSelectedChain(filteredChains[0]);
+    }
 
-        if (data.chainId) setSelectedChain(data.chainId);
+    if (data.status === "FAILED" || data.status === "EXPIRED") {
+      setError(`Payment ${data.status.toLowerCase()}. Please retry.`);
+      setStatus("ready");
+      data.paymentToken = null;
+      data.paymentAmount = null;
+    }
 
-        if (data.status === "CONFIRMED") {
-          if (data.paymentToken) setSelectedToken(data.paymentToken);
-          setStatus("confirmed");
-        } else if (data.status === "RESERVED") {
-          // ✅ NEW: Handle RESERVED status (reservation paid, awaiting remaining)
-          setStatus("ready");
-        } else if (data.status === "PENDING") {
-          if (data.paymentToken) {
-            setSelectedToken(data.paymentToken);
-          } else {
-            const supported = getSupportedTokens(data.chainId || selectedChain);
-            if (!supported.includes(selectedToken)) {
-              setSelectedToken(supported[0] as "USDC" | "USDT");
-            }
-          }
-          setStatus("ready");
-        } else {
-          setError(`This booking is not pending. Status: ${data.status}`);
-          setStatus("error");
-        }
-      } catch (err: any) {
-        setError(err.message);
-        setStatus("error");
+    if (data.chainId) {
+      // ✅ UPDATE: Only set chainId if it's in allowed chains
+      if (filteredChains.includes(data.chainId)) {
+        setSelectedChain(data.chainId);
       }
     }
+
+    if (data.status === "CONFIRMED") {
+      if (data.paymentToken) setSelectedToken(data.paymentToken);
+      setStatus("confirmed");
+    } else if (data.status === "RESERVED") {
+      setStatus("ready");
+    } else if (data.status === "PENDING") {
+      if (data.paymentToken) {
+        setSelectedToken(data.paymentToken);
+      } else {
+        const supported = getSupportedTokens(data.chainId || selectedChain);
+        if (!supported.includes(selectedToken)) {
+          setSelectedToken(supported[0] as "USDC" | "USDT");
+        }
+      }
+      setStatus("ready");
+    } else {
+      setError(`This booking is not pending. Status: ${data.status}`);
+      setStatus("error");
+    }
+  } catch (err: any) {
+    setError(err.message);
+    setStatus("error");
+  }
+}
 
     fetchBooking();
   }, [bookingId]);
@@ -437,33 +456,50 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        <div className="mx-2 mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-4">
-            Select Network
-          </label>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {SUPPORTED_CHAINS.map((chainId) => (
-              <button
-                key={chainId}
-                onClick={() => {
-                  setSelectedChain(chainId);
-                  const tokens = getSupportedTokens(chainId);
-                  if (!tokens.includes(selectedToken)) {
-                    setSelectedToken(tokens[0] as "USDC" | "USDT");
-                  }
-                }}
-                className={`p-3 rounded-xl border-2 font-medium text-sm transition duration-150
-                  ${
-                    selectedChain === chainId
-                      ? "border-[#172a46] bg-blue-50 text-[#172a46] shadow-sm"
-                      : "border-gray-200 bg-white text-gray-800 hover:border-gray-400"
-                  }`}
-              >
-                {getChainName(chainId)}
-              </button>
-            ))}
-          </div>
-        </div>
+     
+<div className="mx-2 mb-6">
+  <label className="block text-sm font-semibold text-gray-700 mb-4">
+    Select Network
+  </label>
+  
+  {/* ✅ ADD: Show info if chains are limited */}
+  {allowedChains.length < SUPPORTED_CHAINS.length && (
+    <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+      ℹ️ Only {allowedChains.length} network{allowedChains.length !== 1 ? 's' : ''} enabled for this stay
+    </div>
+  )}
+  
+  {/* ✅ CHANGE: Use allowedChains instead of SUPPORTED_CHAINS */}
+  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    {allowedChains.map((chainId) => (
+      <button
+        key={chainId}
+        onClick={() => {
+          setSelectedChain(chainId);
+          const tokens = getSupportedTokens(chainId);
+          if (!tokens.includes(selectedToken)) {
+            setSelectedToken(tokens[0] as "USDC" | "USDT");
+          }
+        }}
+        className={`p-3 rounded-xl border-2 font-medium text-sm transition duration-150
+          ${
+            selectedChain === chainId
+              ? "border-[#172a46] bg-blue-50 text-[#172a46] shadow-sm"
+              : "border-gray-200 bg-white text-gray-800 hover:border-gray-400"
+          }`}
+      >
+        {getChainName(chainId)}
+      </button>
+    ))}
+  </div>
+  
+  {/* ✅ ADD: Show warning if no chains available */}
+  {allowedChains.length === 0 && (
+    <div className="p-3 bg-red-50 border border-red-400 text-red-700 text-sm rounded-lg text-center">
+      ⚠️ No payment networks enabled for this stay. Please contact support.
+    </div>
+  )}
+</div>
 
         <div className="mx-2 mb-10">
           <label className="block text-sm font-semibold text-gray-700 mb-4">

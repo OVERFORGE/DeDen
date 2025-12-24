@@ -2,7 +2,7 @@
 // ✅ FIXED: Added reservation system controls for admin
 
 "use client";
-
+import { StayChainConfig } from '@/components/admin/StayChainConfig';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -40,10 +40,10 @@ type Stay = {
     amenities: string[];
     highlights: string[];
     rooms: Room[];
-    // ✅ NEW: Reservation fields
     requiresReservation: boolean;
     reservationAmount: number;
     minNightsForReservation: number;
+    enabledChains: number[];  // ✅ ADD THIS LINE
 };
 
 export default function EditStayPage() {
@@ -598,7 +598,7 @@ export default function EditStayPage() {
                         )}
                     </div>
                 )}
-
+ 
                 <div className="mt-8 flex justify-end">
                     <button type="submit" disabled={saving} className={`px-8 py-3 text-xl font-semibold rounded-lg transition duration-200 shadow-xl 
                         ${saving 
@@ -610,7 +610,11 @@ export default function EditStayPage() {
                     </button>
                 </div>
             </form>
-
+  <StayChainConfig
+                    stayId={stay.id}
+                    currentEnabledChains={stay.enabledChains || []}
+                    onUpdate={fetchStay}
+                />
             {editingRoom && (
                 <RoomEditorModal
                     room={editingRoom}

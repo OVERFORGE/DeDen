@@ -88,25 +88,27 @@ export default function UserDashboard() {
   };
 
   // Helper to get block explorer URL
-  const getExplorerUrl = (chainId: number | null, txHash: string) => {
-    const explorers: Record<number, string> = {
-      42161: 'https://arbiscan.io',
-      56: 'https://bscscan.com',
-      8453: 'https://basescan.org',
-    };
-    const baseUrl = chainId ? explorers[chainId] || 'https://etherscan.io' : 'https://etherscan.io';
-    return `${baseUrl}/tx/${txHash}`;
+const getExplorerUrl = (chainId: number | null, txHash: string) => {
+  const explorers: Record<number, string> = {
+    42161: 'https://arbiscan.io',
+    56: 'https://bscscan.com',
+    8453: 'https://basescan.org',
+    5003: 'https://explorer.sepolia.mantle.xyz', // ✅ ADD THIS LINE
   };
+  const baseUrl = chainId ? explorers[chainId] || 'https://etherscan.io' : 'https://etherscan.io';
+  return `${baseUrl}/tx/${txHash}`;
+};
 
   // Helper to get chain name
-  const getChainName = (chainId: number | null): string => {
-    const chains: Record<number, string> = {
-      42161: 'Arbitrum',
-      56: 'BNB Chain',
-      8453: 'Base',
-    };
-    return chainId ? (chains[chainId] || `Chain ${chainId}`) : 'Unknown';
+const getChainName = (chainId: number | null): string => {
+  const chains: Record<number, string> = {
+    42161: 'Arbitrum',
+    56: 'BNB Chain',
+    8453: 'Base',
+    5003: 'Mantle Sepolia', // ✅ ADD THIS LINE
   };
+  return chainId ? (chains[chainId] || `Chain ${chainId}`) : 'Unknown';
+};
 
   // Detects if a wallet is connected, but it's not the one linked to the session
   const isWalletMismatched =

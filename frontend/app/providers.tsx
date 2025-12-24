@@ -1,3 +1,4 @@
+// app/providers.tsx
 "use client";
 
 import { WagmiProvider, createConfig, http } from "wagmi";
@@ -6,11 +7,39 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConnectKitProvider, getDefaultConfig } from "connectkit";
 import React from "react";
 import { SessionProvider } from "next-auth/react";
+import type { Chain } from "wagmi/chains";
+
+// ✅ Define Mantle Sepolia chain
+const mantleSepolia: Chain = {
+  id: 5003,
+  name: 'Mantle Sepolia',
+  nativeCurrency: {
+    name: 'MNT',
+    symbol: 'MNT',
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc.sepolia.mantle.xyz'],
+    },
+    public: {
+      http: ['https://rpc.sepolia.mantle.xyz'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Mantle Sepolia Explorer',
+      url: 'https://explorer.sepolia.mantle.xyz',
+    },
+  },
+  testnet: true,
+};
 
 // Get environment variables
 const arbitrumKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_ARBITRUM;
 const bnbKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BNB;
 const baseKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BASE;
+const mantleSepoliaKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_MANTLE_TESTNET;
 const wcProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
 // Create React Query client
@@ -61,10 +90,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
         appUrl: appUrl,
         appIcon: appIcon,
 
-        // Configure all supported chains
-        chains: [arbitrum, bsc, base],
+        // ✅ Configure all supported chains INCLUDING Mantle Sepolia
+        chains: [arbitrum, bsc, base, mantleSepolia],
 
-        // RPC transports
+        // ✅ RPC transports including Mantle Sepolia
         transports: {
           [arbitrum.id]: http(
             `https://arb-mainnet.g.alchemy.com/v2/${arbitrumKey}`
@@ -74,6 +103,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
           ),
           [base.id]: http(
             `https://base-mainnet.g.alchemy.com/v2/${baseKey}`
+          ),
+          // ✅ Add Mantle Sepolia transport
+          [mantleSepolia.id]: http(
+            mantleSepoliaKey 
+              ? `https://mantle-sepolia.g.alchemy.com/v2/${mantleSepoliaKey}`
+              : 'https://rpc.sepolia.mantle.xyz' // Fallback to public RPC
           ),
         },
 

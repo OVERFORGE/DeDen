@@ -169,7 +169,7 @@ model Stay {
   shortDescription String?
   location        String
   venue           String?
-  
+  enabledChains   Int[]     @default([]) // e.g., [42161, 56, 8453, 5003]
   // Dates & Duration (NIGHTS)
   startDate       DateTime
   endDate         DateTime
