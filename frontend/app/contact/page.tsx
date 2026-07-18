@@ -7,14 +7,18 @@ export default function ContactPage() {
   const [loading, setLoading] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#172a46] text-white">
+    <div className="min-h-screen bg-[#f7eedb] text-[#2c331f] selection:bg-[#9db47d] selection:text-[#2c331f]">
       {/* Hero */}
-      <section className="pt-24 pb-16 bg-[#172a46]">
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <h1 className="text-5xl md:text-6xl font-bold mb-4 font-berlin">
-            Contact Us
+      <section className="pt-24 pb-12 bg-[#f7eedb] relative overflow-hidden">
+        {/* Background shapes */}
+        <div className="absolute top-10 right-10 w-64 h-64 bg-[#ede3c9] rounded-full opacity-50 z-0"></div>
+        
+        <div className="max-w-4xl mx-auto px-6 text-center relative z-10 flex flex-col items-center">
+          <p className="text-sm italic font-bold text-[#7e9154] tracking-wider mb-2 rotate-[-2deg]">always around ✦</p>
+          <h1 className="text-6xl md:text-[5rem] font-black mb-6 font-display leading-[0.9] tracking-tight">
+            Drop us a line
           </h1>
-          <p className="text-gray-300 text-lg max-w-2xl mx-auto">
+          <p className="text-[#2c331f]/80 text-sm md:text-base max-w-xl mx-auto font-medium leading-relaxed">
             Have a question about our stays, bookings, or partnerships? We’re
             here to help you 24/7.
           </p>
@@ -22,11 +26,15 @@ export default function ContactPage() {
       </section>
 
       {/* Form Section */}
-      <section className="bg-[#E7E4DF]">
-        <div className="max-w-3xl mx-auto px-6 py-20">
-          <div className="bg-white rounded-3xl shadow-2xl p-10 md:p-16 border-4 border-[#172a46]">
-            <h2 className="text-3xl font-bold text-[#172a46] mb-8 text-center">
-              Send Us a Message
+      <section className="pb-24 pt-6 bg-[#f7eedb]">
+        <div className="max-w-2xl mx-auto px-6 relative">
+          
+          <div className="bg-white rounded-2xl shadow-[8px_8px_0px_0px_#2c331f] p-8 md:p-12 border-2 border-[#2c331f]">
+            <h2 className="text-2xl font-black text-[#2c331f] mb-8 font-display tracking-wide flex items-center gap-3">
+              <span className="w-8 h-8 rounded-full bg-[#9db47d] border-2 border-[#2c331f] inline-flex items-center justify-center">
+                <MessageSquare size={14} className="text-[#2c331f]" strokeWidth={3} />
+              </span>
+              SEND A MESSAGE
             </h2>
 
             <form
@@ -35,46 +43,53 @@ export default function ContactPage() {
                 setLoading(true);
                 setTimeout(() => setLoading(false), 1200);
               }}
-              className="space-y-8"
+              className="space-y-6"
             >
               {/* Name */}
               <div>
-                <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
-                  <User size={20} />
+                <label className="flex items-center gap-2 text-xs font-bold text-[#2c331f] mb-2 uppercase tracking-widest">
                   Full Name
                 </label>
-                <input
-                  type="text"
-                  placeholder="Enter your name"
-                  className="w-full px-5 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors"
-                  required
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <User size={18} className="text-[#2c331f]/50" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="John Doe"
+                    className="w-full pl-12 pr-5 py-4 text-sm font-bold bg-[#f7eedb]/30 border-2 border-[#2c331f] rounded-xl focus:bg-white focus:shadow-[4px_4px_0px_0px_#2c331f] focus:outline-none transition-all placeholder:text-[#2c331f]/40 placeholder:font-normal"
+                    required
+                  />
+                </div>
               </div>
 
               {/* Email */}
               <div>
-                <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
-                  <Mail size={20} />
+                <label className="flex items-center gap-2 text-xs font-bold text-[#2c331f] mb-2 uppercase tracking-widest">
                   Email Address
                 </label>
-                <input
-                  type="email"
-                  placeholder="you@example.com"
-                  className="w-full px-5 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors"
-                  required
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Mail size={18} className="text-[#2c331f]/50" />
+                  </div>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    className="w-full pl-12 pr-5 py-4 text-sm font-bold bg-[#f7eedb]/30 border-2 border-[#2c331f] rounded-xl focus:bg-white focus:shadow-[4px_4px_0px_0px_#2c331f] focus:outline-none transition-all placeholder:text-[#2c331f]/40 placeholder:font-normal"
+                    required
+                  />
+                </div>
               </div>
 
               {/* Query / Message */}
               <div>
-                <label className="flex items-center gap-2 text-lg font-bold text-[#172a46] mb-3">
-                  <MessageSquare size={20} />
+                <label className="flex items-center gap-2 text-xs font-bold text-[#2c331f] mb-2 uppercase tracking-widest">
                   Your Message
                 </label>
                 <textarea
-                  placeholder="Write your query here..."
-                  rows={5}
-                  className="w-full px-5 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:border-[#172a46] focus:outline-none transition-colors resize-none"
+                  placeholder="What's on your mind?..."
+                  rows={4}
+                  className="w-full p-5 text-sm font-bold bg-[#f7eedb]/30 border-2 border-[#2c331f] rounded-xl focus:bg-white focus:shadow-[4px_4px_0px_0px_#2c331f] focus:outline-none transition-all resize-none placeholder:text-[#2c331f]/40 placeholder:font-normal"
                   required
                 />
               </div>
@@ -83,18 +98,18 @@ export default function ContactPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full text-lg font-semibold py-5 rounded-full inline-flex items-center justify-center gap-3 transition-all shadow-xl
+                className={`w-full mt-4 text-sm font-black uppercase tracking-widest py-4 rounded-xl border-2 border-[#2c331f] inline-flex items-center justify-center gap-3 transition-all
                   ${
                     loading
-                      ? "bg-gray-400 text-gray-700 cursor-not-allowed"
-                      : "bg-[#172a46] text-white hover:scale-[1.03]"
+                      ? "bg-[#e8c37b]/50 text-[#2c331f]/50 cursor-wait shadow-[0px_0px_0px_0px_#2c331f] translate-y-1 translate-x-1"
+                      : "bg-[#9db47d] text-[#2c331f] hover:bg-[#8ca36c] shadow-[4px_4px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1"
                   }
                 `}
               >
                 {loading ? (
-                  <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-4 border-[#2c331f] border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  "Send Message"
+                  "Send Message ✦"
                 )}
               </button>
             </form>

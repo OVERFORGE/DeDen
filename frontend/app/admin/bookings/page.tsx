@@ -16,7 +16,14 @@ import {
   Search,
   ChevronDown,
   X,
-  Calendar
+  Calendar,
+  Ticket,
+  MapPin,
+  Mail,
+  Smartphone,
+  Lock,
+  Bed,
+  Link as LinkIcon
 } from "lucide-react";
 
 // Types
@@ -184,23 +191,23 @@ export default function AdminDashboard() {
       }, {} as Record<string, { USDC: number; USDT: number }>),
   };
 
-  // ✅ UPDATED: Added RESERVED status
+  // ✅ UPDATED: Added RESERVED status and Neo-Brutalist styles
   const getStatusBadge = (status: string) => {
-    const styles: Record<string, { bg: string; text: string; label: string }> = {
-      WAITLISTED: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '⏳ Waitlisted' },
-      PENDING: { bg: 'bg-blue-100', text: 'text-blue-800', label: '💳 Pending Payment' },
-      RESERVED: { bg: 'bg-purple-100', text: 'text-purple-800', label: '🎫 Reserved' }, // ✅ NEW
-      CONFIRMED: { bg: 'bg-green-100', text: 'text-green-800', label: '✅ Confirmed' },
-      CANCELLED: { bg: 'bg-red-100', text: 'text-red-800', label: '❌ Cancelled' },
-      EXPIRED: { bg: 'bg-gray-100', text: 'text-gray-800', label: '⌛ Expired' },
-      FAILED: { bg: 'bg-pink-100', text: 'text-pink-800', label: '⚠️ Failed' },
+    const styles: Record<string, { bg: string; text: string; label: string; icon: any }> = {
+      WAITLISTED: { bg: 'bg-[#f7eedb]', text: 'text-[#2c331f]', label: 'Waitlisted', icon: <Clock size={12} className="mr-1 inline" /> },
+      PENDING: { bg: 'bg-[#9db47d]', text: 'text-[#2c331f]', label: 'Pending Payment', icon: <DollarSign size={12} className="mr-1 inline" /> },
+      RESERVED: { bg: 'bg-[#e8c37b]', text: 'text-[#2c331f]', label: 'Reserved', icon: <Ticket size={12} className="mr-1 inline" /> },
+      CONFIRMED: { bg: 'bg-[#2c331f]', text: 'text-[#f7eedb]', label: 'Confirmed', icon: <CheckCircle size={12} className="mr-1 inline" /> },
+      CANCELLED: { bg: 'bg-red-500', text: 'text-white', label: 'Cancelled', icon: <X size={12} className="mr-1 inline" /> },
+      EXPIRED: { bg: 'bg-gray-300', text: 'text-gray-800', label: 'Expired', icon: <Clock size={12} className="mr-1 inline" /> },
+      FAILED: { bg: 'bg-red-500', text: 'text-white', label: 'Failed', icon: <AlertCircle size={12} className="mr-1 inline" /> },
     };
 
-    const style = styles[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status };
+    const style = styles[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status, icon: null };
     
     return (
-      <span className={`${style.bg} ${style.text} px-3 py-1 rounded-full text-xs font-semibold`}>
-        {style.label}
+      <span className={`${style.bg} ${style.text} px-3 py-1.5 rounded-md border-2 border-[#2c331f] text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_#2c331f] inline-flex items-center`}>
+        {style.icon} {style.label}
       </span>
     );
   };
@@ -259,23 +266,23 @@ export default function AdminDashboard() {
 
   if (loading && bookings.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">Loading bookings...</p>
+      <div className="min-h-screen bg-[#f7eedb] flex items-center justify-center p-6">
+        <div className="text-center p-16 bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+          <div className="w-12 h-12 border-4 border-[#f7eedb] border-t-[#2c331f] rounded-full animate-spin mx-auto mb-5"></div>
+          <p className="font-bold text-[#2c331f] uppercase tracking-widest text-[10px]">Loading bookings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-[#f7eedb] p-6 lg:p-10">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-4xl md:text-5xl font-black mb-2 text-[#2c331f] font-display tracking-tight">
             Booking Management
           </h1>
-          <p className="text-gray-600">
+          <p className="text-[#5a6b3a] font-bold uppercase tracking-widest text-xs">
             Manage applications, payments, and guest information
           </p>
         </div>
@@ -292,102 +299,102 @@ export default function AdminDashboard() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Clock className="text-yellow-600" size={24} />
+          <div className="bg-white rounded-2xl p-6 border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-[#f7eedb] rounded-xl flex items-center justify-center border-2 border-[#2c331f]">
+                <Clock className="text-[#2c331f]" size={24} strokeWidth={2.5} />
               </div>
-              <span className="text-3xl font-bold text-gray-900">
+              <span className="text-3xl font-black text-[#2c331f] font-display">
                 {stats.waitlisted}
               </span>
             </div>
-            <p className="text-sm text-gray-600">Pending Approval</p>
+            <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">Pending Approval</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="text-blue-600" size={24} />
+          <div className="bg-[#9db47d] rounded-2xl p-6 border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center border-2 border-[#2c331f]">
+                <DollarSign className="text-[#2c331f]" size={24} strokeWidth={2.5} />
               </div>
-              <span className="text-3xl font-bold text-gray-900">
+              <span className="text-3xl font-black text-[#2c331f] font-display">
                 {stats.pending}
               </span>
             </div>
-            <p className="text-sm text-gray-600">Awaiting Payment</p>
+            <p className="text-[10px] font-bold text-[#2c331f]/80 uppercase tracking-widest">Awaiting Payment</p>
           </div>
 
-          {/* ✅ NEW: RESERVED Stats Card */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <span className="text-purple-600 text-2xl">🎫</span>
+          {/* RESERVED Stats Card */}
+          <div className="bg-[#e8c37b] rounded-2xl p-6 border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center border-2 border-[#2c331f]">
+                <Ticket className="text-[#2c331f]" size={24} strokeWidth={2.5} />
               </div>
-              <span className="text-3xl font-bold text-gray-900">
+              <span className="text-3xl font-black text-[#2c331f] font-display">
                 {stats.reserved}
               </span>
             </div>
-            <p className="text-sm text-gray-600">Reserved (Awaiting Remaining)</p>
+            <p className="text-[10px] font-bold text-[#2c331f]/80 uppercase tracking-widest">Reserved</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="text-green-600" size={24} />
+          <div className="bg-[#2c331f] rounded-2xl p-6 border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#9db47d]">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center border-2 border-[#f7eedb]/30">
+                <CheckCircle className="text-[#f7eedb]" size={24} strokeWidth={2.5} />
               </div>
-              <span className="text-3xl font-bold text-gray-900">
+              <span className="text-3xl font-black text-[#f7eedb] font-display">
                 {stats.confirmed}
               </span>
             </div>
-            <p className="text-sm text-gray-600">Confirmed</p>
+            <p className="text-[10px] font-bold text-[#f7eedb]/70 uppercase tracking-widest">Confirmed</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <Users className="text-gray-600" size={24} />
+          <div className="bg-white rounded-2xl p-6 border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center border-2 border-[#2c331f]">
+                <Users className="text-[#2c331f]" size={24} strokeWidth={2.5} />
               </div>
-              <span className="text-3xl font-bold text-gray-900">
+              <span className="text-3xl font-black text-[#2c331f] font-display">
                 {stats.total}
               </span>
             </div>
-            <p className="text-sm text-gray-600">Total Bookings</p>
+            <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">Total Bookings</p>
           </div>
         </div>
 
         {/* Revenue Analytics */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Revenue Analytics</h2>
+        <div className="bg-white rounded-2xl p-6 mb-8 border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+          <h2 className="text-xl font-black text-[#2c331f] font-display tracking-tight mb-6">Revenue Analytics</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="bg-green-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-1">Total USDC Received</p>
-              <p className="text-3xl font-bold text-green-600">
+            <div className="bg-[#9db47d]/20 border-2 border-[#2c331f] rounded-xl p-4">
+              <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest mb-1">Total USDC Received</p>
+              <p className="text-3xl font-black text-[#2c331f] font-display">
                 ${analytics.totalUSDC.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <div className="bg-purple-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-1">Total USDT Received</p>
-              <p className="text-3xl font-bold text-purple-600">
+            <div className="bg-[#e8c37b]/20 border-2 border-[#2c331f] rounded-xl p-4">
+              <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest mb-1">Total USDT Received</p>
+              <p className="text-3xl font-black text-[#2c331f] font-display">
                 ${analytics.totalUSDT.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">By Chain</h3>
+            <h3 className="text-xs font-bold text-[#2c331f] uppercase tracking-widest">By Chain</h3>
             {Object.entries(analytics.byChain).map(([chain, amounts]) => (
-              <div key={chain} className="bg-gray-50 rounded-lg p-4">
-                <p className="font-semibold text-gray-900 mb-2">{chain}</p>
+              <div key={chain} className="bg-[#f7eedb] border-2 border-[#2c331f] rounded-xl p-4">
+                <p className="font-bold text-[#2c331f] mb-3">{chain}</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-gray-600">USDC</p>
-                    <p className="text-lg font-bold text-green-600">
+                    <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">USDC</p>
+                    <p className="text-lg font-black text-[#2c331f]">
                       ${amounts.USDC.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600">USDT</p>
-                    <p className="text-lg font-bold text-purple-600">
+                    <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">USDT</p>
+                    <p className="text-lg font-black text-[#2c331f]">
                       ${amounts.USDT.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
@@ -398,24 +405,24 @@ export default function AdminDashboard() {
         </div>
 
         {/* Filters and Search */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-          <div className="flex flex-col md:flex-row gap-4 mb-4">
+        <div className="bg-white rounded-2xl p-6 mb-6 border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+          <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#2c331f]" size={20} strokeWidth={2.5} />
                 <input
                   type="text"
                   placeholder="Search by name, email, booking ID, or wallet..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-12 pr-4 py-3.5 border-2 border-[#2c331f] rounded-xl bg-[#f7eedb] text-[#2c331f] placeholder:text-[#5a6b3a] font-bold text-sm focus:outline-none focus:ring-4 focus:ring-[#9db47d]/30"
                 />
                 {searchTerm && (
                   <button
                     onClick={() => setSearchTerm('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#2c331f] hover:text-red-500 transition-colors"
                   >
-                    <X size={20} />
+                    <X size={20} strokeWidth={2.5} />
                   </button>
                 )}
               </div>
@@ -425,7 +432,7 @@ export default function AdminDashboard() {
               <select
                 value={selectedStay}
                 onChange={(e) => setSelectedStay(e.target.value)}
-                className="appearance-none pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                className="appearance-none pl-4 pr-12 py-3.5 border-2 border-[#2c331f] rounded-xl bg-[#f7eedb] text-[#2c331f] font-bold text-sm focus:outline-none focus:ring-4 focus:ring-[#9db47d]/30"
               >
                 <option value="ALL">All Events</option>
                 {uniqueStays.map(stay => (
@@ -434,33 +441,33 @@ export default function AdminDashboard() {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-[#2c331f] pointer-events-none" size={20} strokeWidth={2.5} />
             </div>
 
             <button
               onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+              className="flex items-center gap-2 px-6 py-3.5 bg-[#9db47d] text-[#2c331f] rounded-xl border-2 border-[#2c331f] shadow-[3px_3px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 transition-all font-bold uppercase tracking-wider text-sm"
             >
-              <Download size={20} />
+              <Download size={20} strokeWidth={2.5} />
               <span>Export CSV</span>
             </button>
           </div>
 
-          {/* ✅ UPDATED: Added RESERVED tab */}
-          <div className="flex gap-2 border-b border-gray-200">
+          {/* Tabs */}
+          <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
             {(['WAITLISTED', 'PENDING', 'RESERVED', 'CONFIRMED', 'ALL'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 font-medium transition-colors relative ${
+                className={`flex-shrink-0 px-5 py-2.5 font-bold uppercase tracking-widest text-[10px] transition-all rounded-xl border-2 ${
                   activeTab === tab
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-[#2c331f] text-[#f7eedb] border-[#2c331f] shadow-[3px_3px_0px_0px_#9db47d]'
+                    : 'bg-white text-[#5a6b3a] border-[#2c331f] hover:bg-[#f7eedb]'
                 }`}
               >
                 {tab.charAt(0) + tab.slice(1).toLowerCase()}
-                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-                  activeTab === tab ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
+                <span className={`ml-2 px-2 py-0.5 rounded-md border-2 border-[#2c331f] text-[10px] ${
+                  activeTab === tab ? 'bg-[#9db47d] text-[#2c331f]' : 'bg-[#f7eedb] text-[#2c331f]'
                 }`}>
                   {tab === 'ALL' ? stats.total : stats[tab.toLowerCase() as keyof typeof stats]}
                 </span>
@@ -469,70 +476,69 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="mb-4 text-sm text-gray-600">
+        <div className="mb-4 text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">
           Showing {filteredBookings.length} of {bookings.length} bookings
         </div>
 
         {/* Bookings Table */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
+        <div className="bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-[#2c331f] border-b-2 border-[#2c331f]">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-[#f7eedb] uppercase tracking-widest">
                     Booking Details
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-[#f7eedb] uppercase tracking-widest">
                     Guest Info
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-[#f7eedb] uppercase tracking-widest">
                     Room & Pricing
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-[#f7eedb] uppercase tracking-widest">
                     Payment Details
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-[#f7eedb] uppercase tracking-widest">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-[#f7eedb] uppercase tracking-widest">
                     Action
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y-2 divide-[#2c331f]">
                 {loading ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-12 text-center">
                       <div className="flex justify-center">
-                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        <div className="w-8 h-8 border-4 border-[#2c331f]/20 border-t-[#2c331f] rounded-full animate-spin"></div>
                       </div>
                     </td>
                   </tr>
                 ) : filteredBookings.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-12 text-center text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">
                       No bookings found
                     </td>
                   </tr>
                 ) : (
                   filteredBookings.map((booking) => (
-                    <tr key={booking.bookingId} className="hover:bg-gray-50 transition-colors">
+                    <tr key={booking.bookingId} className="hover:bg-[#f7eedb]/30 transition-colors">
                       {/* Booking Details */}
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <p className="font-mono text-xs text-gray-600">
+                      <td className="px-6 py-5">
+                        <div className="space-y-1.5">
+                          <p className="bg-[#f7eedb] px-2 py-1 rounded-md border-2 border-[#2c331f] text-[#2c331f] font-bold text-[10px] w-fit">
                             {booking.bookingId}
                           </p>
-                          <p className="font-semibold text-gray-900">
+                          <p className="font-black text-[#2c331f] text-base">
                             {booking.stay.title}
                           </p>
-                          <p className="text-sm text-gray-600">
-                            📍 {booking.stay.location}
+                          <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest flex items-center">
+                            <MapPin size={12} className="mr-1" /> {booking.stay.location}
                           </p>
                           
-                          {/* ✅ NEW: Show check-in/out dates if available */}
                           {booking.checkInDate && booking.checkOutDate && (
-                            <div className="text-xs text-gray-500 mt-2">
+                            <div className="text-[10px] font-bold text-[#2c331f] mt-2">
                               <div className="flex items-center gap-1">
                                 <Calendar size={12} />
                                 <span>
@@ -542,7 +548,7 @@ export default function AdminDashboard() {
                             </div>
                           )}
                           
-                          <p className="text-xs text-gray-500">
+                          <p className="text-[10px] font-bold text-[#2c331f]/50 uppercase tracking-widest">
                             {new Date(booking.createdAt).toLocaleDateString()} at{' '}
                             {new Date(booking.createdAt).toLocaleTimeString()}
                           </p>
@@ -550,84 +556,83 @@ export default function AdminDashboard() {
                       </td>
 
                       {/* Guest Info */}
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <p className="font-semibold text-gray-900">
+                      <td className="px-6 py-5">
+                        <div className="space-y-1.5">
+                          <p className="font-black text-[#2c331f]">
                             {booking.user.displayName}
                           </p>
-                          <p className="text-sm text-gray-600">
-                            ✉️ {booking.user.email}
+                          <p className="text-xs font-bold text-[#5a6b3a] flex items-center">
+                            <Mail size={12} className="mr-1" /> {booking.user.email}
                           </p>
                           {(booking.user.mobileNumber || booking.guestMobile) && (
-                            <p className="text-sm text-gray-600">
-                              📱 {booking.user.mobileNumber || booking.guestMobile}
+                            <p className="text-xs font-bold text-[#5a6b3a] flex items-center">
+                              <Smartphone size={12} className="mr-1" /> {booking.user.mobileNumber || booking.guestMobile}
                             </p>
                           )}
                           {(booking.user.age || booking.guestAge) && (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-[10px] font-bold text-[#2c331f]/70 uppercase tracking-widest">
                               Age: {booking.user.age || booking.guestAge}
                             </p>
                           )}
                           {(booking.user.gender || booking.guestGender) && (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-[10px] font-bold text-[#2c331f]/70 uppercase tracking-widest">
                               Gender: {booking.user.gender || booking.guestGender}
                             </p>
                           )}
                           {booking.user.walletAddress && (
-                            <p className="text-xs text-gray-500 font-mono">
-                              🔐 {booking.user.walletAddress.slice(0, 6)}...{booking.user.walletAddress.slice(-4)}
+                            <p className="text-[10px] font-bold text-[#2c331f] bg-[#f7eedb] border border-[#2c331f] px-2 py-0.5 rounded-md w-fit flex items-center">
+                              <Lock size={10} className="mr-1" /> {booking.user.walletAddress.slice(0, 6)}...{booking.user.walletAddress.slice(-4)}
                             </p>
                           )}
                         </div>
                       </td>
 
                       {/* Room & Pricing */}
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
+                      <td className="px-6 py-5">
+                        <div className="space-y-1.5">
                           {booking.selectedRoomName ? (
                             <>
-                              <p className="font-semibold text-gray-900">
-                                🛏️ {booking.selectedRoomName}
+                              <p className="font-black text-[#2c331f] flex items-center text-sm">
+                                <Bed size={14} className="mr-1.5" /> {booking.selectedRoomName}
                               </p>
                               {booking.numberOfNights && (
-                                <p className="text-sm text-gray-600">
+                                <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">
                                   {booking.numberOfNights} night{booking.numberOfNights !== 1 ? 's' : ''}
                                 </p>
                               )}
                               {booking.pricePerNightUSDC && (
-                                <p className="text-sm text-green-600">
+                                <p className="text-xs font-bold text-[#2c331f]">
                                   ${booking.pricePerNightUSDC}/night USDC
                                 </p>
                               )}
                             </>
                           ) : (
-                            <p className="text-sm text-gray-500">
+                            <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">
                               No room preference
                             </p>
                           )}
                         </div>
                       </td>
 
-                      {/* ✅ UPDATED: Payment Details with reservation breakdown */}
-                      <td className="px-6 py-4">
+                      {/* Payment Details with reservation breakdown */}
+                      <td className="px-6 py-5">
                         {booking.status === 'CONFIRMED' && booking.paymentAmount ? (
-                          <div className="space-y-1">
-                            <p className="font-bold text-lg text-green-600">
+                          <div className="space-y-1.5">
+                            <p className="font-black text-lg text-[#2c331f]">
                               ${booking.paymentAmount} {booking.paymentToken}
                             </p>
                             
-                            {/* ✅ NEW: Show reservation breakdown if applicable */}
                             {booking.requiresReservation && booking.reservationAmount && (
-                              <div className="text-xs text-gray-600 mt-2 space-y-1 bg-purple-50 p-2 rounded">
-                                <p className="font-semibold text-purple-700">Payment Breakdown:</p>
+                              <div className="text-[10px] font-bold text-[#2c331f] mt-2 space-y-1 bg-[#e8c37b]/20 border border-[#2c331f] p-2 rounded-md uppercase tracking-widest">
+                                <p className="text-[#5a6b3a]">Payment Breakdown:</p>
                                 <p>Reservation: ${booking.reservationAmount}</p>
                                 <p>Remaining: ${booking.remainingAmount}</p>
                               </div>
                             )}
                             
                             {booking.chainId && (
-                              <p className="text-xs text-gray-600">
-                                ⛓️ {getChainName(booking.chainId)}
+                              <p className="text-[10px] font-bold text-[#2c331f] flex items-center uppercase tracking-widest">
+                                <LinkIcon size={10} className="mr-1" /> {getChainName(booking.chainId)}
                               </p>
                             )}
                             {booking.txHash && (
@@ -635,7 +640,7 @@ export default function AdminDashboard() {
                                 href={`https://arbiscan.io/tx/${booking.txHash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:underline font-mono block truncate max-w-[150px]"
+                                className="text-[10px] font-bold text-blue-600 hover:text-[#5a6b3a] underline font-mono block truncate max-w-[150px]"
                                 title={booking.txHash}
                               >
                                 {booking.txHash.slice(0, 8)}...{booking.txHash.slice(-6)}
@@ -643,47 +648,46 @@ export default function AdminDashboard() {
                             )}
                           </div>
                         ) : booking.status === 'RESERVED' ? (
-                          // ✅ NEW: RESERVED status payment display
-                          <div className="space-y-1">
-                            <p className="font-bold text-purple-600">
-                              Reservation Paid: ${booking.reservationAmount}
+                          <div className="space-y-1.5">
+                            <p className="font-black text-[#2c331f]">
+                              Res. Paid: ${booking.reservationAmount}
                             </p>
-                            <p className="text-sm text-amber-700">
+                            <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">
                               Remaining: ${booking.remainingAmount} (due on check-in)
                             </p>
                             {booking.remainingDueDate && (
-                              <p className="text-xs text-gray-500">
+                              <p className="text-[10px] font-bold text-[#2c331f]/70 uppercase tracking-widest">
                                 Due: {new Date(booking.remainingDueDate).toLocaleDateString()}
                               </p>
                             )}
                           </div>
                         ) : booking.selectedRoomPriceUSDC || booking.selectedRoomPriceUSDT ? (
-                          <div className="space-y-1">
+                          <div className="space-y-1.5">
                             {booking.selectedRoomPriceUSDC && (
-                              <p className="text-sm text-green-600">
+                              <p className="text-xs font-black text-[#2c331f]">
                                 ${booking.selectedRoomPriceUSDC} USDC
                               </p>
                             )}
                             {booking.selectedRoomPriceUSDT && (
-                              <p className="text-sm text-purple-600">
+                              <p className="text-xs font-black text-[#2c331f]">
                                 ${booking.selectedRoomPriceUSDT} USDT
                               </p>
                             )}
                           </div>
                         ) : (
-                          <p className="text-sm text-gray-500">
+                          <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">
                             Not yet determined
                           </p>
                         )}
                       </td>
 
                       {/* Status */}
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-5">
                         {getStatusBadge(booking.status)}
                       </td>
 
                       {/* Action */}
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-5">
                         {booking.status === 'WAITLISTED' ? (
                           <ApproveWaitlistButton 
                             bookingId={booking.bookingId}
@@ -694,32 +698,31 @@ export default function AdminDashboard() {
                             <a 
                               href={`/booking/${booking.bookingId}`}
                               target="_blank"
-                              className="text-sm text-blue-600 hover:underline block"
+                              className="text-[10px] font-bold text-[#2c331f] hover:text-[#5a6b3a] uppercase tracking-widest underline"
                             >
                               View Payment →
                             </a>
                             {booking.expiresAt && new Date(booking.expiresAt) > new Date() && (
-                              <p className="text-xs text-amber-600">
+                              <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest">
                                 Expires: {new Date(booking.expiresAt).toLocaleString()}
                               </p>
                             )}
                           </div>
                         ) : booking.status === 'RESERVED' ? (
-                          // ✅ NEW: Action for RESERVED status
                           <div className="space-y-2">
-                            <span className="text-purple-600 font-semibold text-sm block">
-                              🎫 Reserved
+                            <span className="text-[#2c331f] font-black text-xs block flex items-center">
+                              <Ticket size={12} className="mr-1" /> Reserved
                             </span>
-                            <p className="text-xs text-gray-600">
-                              Awaiting remaining payment
+                            <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">
+                              Awaiting remaining
                             </p>
                           </div>
                         ) : booking.status === 'CONFIRMED' ? (
-                          <span className="text-green-600 font-semibold text-sm">
-                            ✓ Paid
+                          <span className="text-[#2c331f] font-black text-xs flex items-center">
+                            <CheckCircle size={12} className="mr-1" /> Paid
                           </span>
                         ) : (
-                          <span className="text-gray-400 text-sm">—</span>
+                          <span className="text-[#2c331f]/50 text-sm font-bold">—</span>
                         )}
                       </td>
                     </tr>

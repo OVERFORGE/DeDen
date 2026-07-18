@@ -2,32 +2,18 @@
 // ✅ FIXED: Prevents caching issues between localhost and production
 
 import { db } from "@/lib/database";
-import Image from "next/image";
-import Link from "next/link";
+import VillaStayCard from "@/components/VillaStayCard";
 
 // ============================================================================
 // ✅ CRITICAL FIX: Force Dynamic Rendering
 // ============================================================================
-// This prevents Next.js from caching the page at build time
-// Choose ONE of these options:
-
-// Option 1: Always fetch fresh data (recommended for admin-facing pages)
 export const dynamic = 'force-dynamic';
-
-// Option 2: Revalidate every 60 seconds (better for public pages)
-// export const revalidate = 60;
-
-// Option 3: Use 'auto' but add cache: 'no-store' to the query
-// export const dynamic = 'auto';
-// ============================================================================
 
 async function getStays() {
   const stays = await db.stay.findMany({
     where: { isPublished: true },
     orderBy: { startDate: "asc" },
   });
-  
-  console.log(`[Villas Page] Fetched ${stays.length} published stays`);
   return stays;
 }
 
@@ -35,48 +21,57 @@ export default async function VillasPage() {
   const stays = await getStays();
 
   return (
-    <div className="max-w-screen-xl mx-auto px-6 py-24">
-      <h1 className="text-5xl font-bold text-[#172a46] mb-12">
-        Upcoming Stays
-      </h1>
-      
-      {stays.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-600 text-lg">No upcoming stays available at the moment.</p>
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-2 gap-8">
-          {stays.map((stay) => (
-            <Link
-              key={stay.id}
-              href={`/stay/${stay.stayId}`}
-              className="bg-white p-4 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow grid md:grid-cols-2 gap-4"
-            >
-              <div className="relative w-full h-56 rounded-xl overflow-hidden grid-cols-1">
-                <Image
-                  src={stay.images?.[0] || "/logo-no-bg.png"}
-                  alt={stay.title}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-              <div className="grid-cols-1">
-                <h3 className="text-2xl font-bold text-[#172a46]">
-                  {stay.title}
-                </h3>
-                <p className="text-gray-600 mt-2">{stay.location}</p>
-                <p className="text-gray-800 font-semibold mt-4">
-                  {new Date(stay.startDate).toLocaleDateString()} -{" "}
-                  {new Date(stay.endDate).toLocaleDateString()}
-                </p>
-                <span className="mt-4 inline-block bg-[#172a46] text-white text-sm font-semibold py-2 px-5 rounded-full">
-                  View Details
+    <div className="min-h-screen bg-[#f7eedb] py-16 px-6 sm:px-10 font-inter">
+      <div className="max-w-[1000px] mx-auto">
+        
+        {/* Header Section */}
+        <div className="relative mb-20">
+          <div className="flex justify-between items-start">
+            <div className="max-w-xl">
+              <h1 className="text-[#43392e] leading-[0.8] flex flex-col mb-4">
+                <span className="text-7xl md:text-8xl" style={{ fontFamily: "'Caveat', cursive" }}>
+                  Live
                 </span>
-              </div>
-            </Link>
-          ))}
+                <span className="font-display font-black text-6xl md:text-[5.5rem] tracking-wide mt-[-5px]">
+                  STAYS
+                </span>
+              </h1>
+              <p className="mt-8 text-xs text-[#43392e] font-semibold max-w-[280px] tracking-wide leading-relaxed opacity-80">
+                Thoughtfully designed stays for every kind of traveller. Comfortable. Curated. Connected.
+              </p>
+            </div>
+            
+            {/* Circular badge */}
+            <div className="hidden md:flex w-32 h-32 rounded-full items-center justify-center relative mt-4">
+              <div className="absolute inset-0 rounded-full border border-dashed border-[#43392e]/40 m-1 rotate-12"></div>
+              
+              <svg viewBox="0 0 100 100" className="absolute w-[110%] h-[110%] top-[-5%] left-[-5%] animate-spin-slow" style={{ animationDuration: '20s' }}>
+                <path id="circlePath" d="M 50, 50 m -35, 0 a 35,35 0 1,1 70,0 a 35,35 0 1,1 -70,0" fill="transparent" />
+                <text className="text-[7.5px] tracking-widest font-bold uppercase" fill="#43392e">
+                  <textPath href="#circlePath">
+                    MORE THAN A STAY ✦ IT'S A MEMORY IN MOTION ✦ 
+                  </textPath>
+                </text>
+              </svg>
+
+              <div className="w-10 h-10 border-[3px] border-[#43392e] rounded-t-full border-b-0 mt-4"></div>
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* Stays List */}
+        <div className="flex flex-col gap-24 pb-20">
+          {stays.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-[#43392e] text-lg font-bold">No upcoming stays available at the moment.</p>
+            </div>
+          ) : (
+            stays.map((stay) => (
+              <VillaStayCard key={stay.id} stay={stay} />
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }

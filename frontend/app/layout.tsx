@@ -50,7 +50,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${delaGothic.variable} ${berlin.variable} font-berlin bg-[#E7E4DF] relative`}
+        className={`${inter.variable} ${delaGothic.variable} ${berlin.variable} font-berlin bg-[#F2EDE4] relative`}
       >
         <Providers>
           <Navbar />

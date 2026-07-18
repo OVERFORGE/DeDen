@@ -28,137 +28,96 @@ export function Navbar() {
   };
 
   return (
-    <nav className="bg-transparent text-white w-full z-50 sticky top-0 ">
-      <div className="font-inter max-w-screen-xl mx-auto px-6 py-6  relative ">
+    <nav className="bg-[#f7eedb] text-[#2c331f] w-full z-50 sticky top-0 border-b border-b-2 border-[#2c331f]">
+      <div className="font-inter max-w-screen-xl mx-auto px-6 py-3 relative">
         {/* Desktop Navigation */}
-        <div className="hidden md:flex justify-between items-center bg-[#172a46] border-2 border-[#2a4562] rounded-[20px] py-4 px-10 shadow-xl">
-          {/* Left side links */}
-          <div className="flex items-center gap-10">
-            <Link
-              href="/#gallery"
-              className="text-md font-bold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
-            >
-              Experiences
-            </Link>
-            <Link
-              href="/villas"
-              className="text-sm font-bold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
-            >
-              Upcoming Villas
-            </Link>
-          </div>
-
-          {/* Logo - Centered */}
-          <Link href="/" className="absolute left-1/2 -translate-x-1/2">
+        <div className="hidden md:flex justify-between items-center">
+          {/* Logo - Left */}
+          <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/images/logo-no-bg.png"
+              src="/images/deden-logo-dark.png"
               alt="DEDEN Logo"
-              width={207}
-              height={116}
-              className="h-[96px] w-auto"
+              width={120}
+              height={40}
+              className="h-12 w-auto"
               priority
             />
           </Link>
 
-          {/* Right side links & Auth */}
+          {/* Center links */}
           <div className="flex items-center gap-8">
-            <Link
-              href="/#about"
-              className="text-md font-bold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
-            >
+            <Link href="/#gallery" className="text-sm font-semibold text-[#2B3B1A] hover:text-[#3A4F24] transition-colors tracking-widest">
+              Experiences
+            </Link>
+            <Link href="/villas" className="text-sm font-semibold text-[#2B3B1A] hover:text-[#3A4F24] transition-colors tracking-widest">
+              Stays
+            </Link>
+            <Link href="/#about" className="text-sm font-semibold text-[#2B3B1A] hover:text-[#3A4F24] transition-colors tracking-widest">
               About
             </Link>
-            <Link
-              href="/contact"
-              className="text-sm font-bold text-gray-300 hover:text-white transition-colors uppercase tracking-wide"
-            >
+            <Link href="/contact" className="text-sm font-semibold text-[#2B3B1A] hover:text-[#3A4F24] transition-colors tracking-widest">
               Contact
             </Link>
+          </div>
 
-            {/* Auth Section */}
+          {/* Right: Auth */}
+          <div className="flex items-center gap-4">
             {status === "loading" ? (
-              <button className="bg-[#E7E4DF] text-[#172a46] text-sm font-bold py-3 px-6 rounded-[14px] shadow-lg">
-                ...
+              <button className="bg-[#3A4F24] text-[#F2EDE4] text-sm font-bold py-2 pl-5 pr-2 rounded-full flex items-center gap-3">
+                <span>Loading...</span>
+                <div className="bg-[#F2EDE4] rounded-full p-1.5"><span className="block w-4 h-4" /></div>
               </button>
             ) : status === "authenticated" && session.user ? (
               <div className="flex items-center gap-3">
-                {/* User Profile */}
                 <button
                   onClick={handleDashboard}
-                  className="flex items-center gap-2 bg-[#2a4562] hover:bg-[#3a5572] text-white px-4 py-2 rounded-[14px] transition-all"
+                  className="flex items-center gap-2 bg-[#3A4F24] hover:bg-[#2B3B1A] text-[#F2EDE4] pl-5 pr-2 py-2 rounded-full transition-all"
                 >
                   {session.user.image ? (
-                    <Image
-                      src={session.user.image}
-                      alt={session.user.name || "User"}
-                      width={28}
-                      height={28}
-                      className="rounded-full"
-                    />
+                    <Image src={session.user.image} alt={session.user.name || "User"} width={26} height={26} className="rounded-full" />
                   ) : (
-                    <User size={20} />
+                    <div className="bg-[#F2EDE4] rounded-full p-1"><User size={16} className="text-[#3A4F24]" /></div>
                   )}
-                  <span className="text-sm font-semibold">
-                    {session.user.name || "Dashboard"}
-                  </span>
+                  <span className="text-sm font-semibold">{session.user.name || "Dashboard"}</span>
                 </button>
-
-                {/* Sign Out */}
                 <button
                   onClick={() => signOut({ callbackUrl: "/" })}
                   className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full transition-all"
                   title="Sign Out"
                 >
-                  <LogOut size={20} />
+                  <LogOut size={18} />
                 </button>
               </div>
             ) : (
               <button
                 onClick={handleSignIn}
-                className="bg-[#E7E4DF] text-[#172a46] text-sm font-bold py-3 px-6 rounded-[14px] transition-all hover:scale-105 hover:bg-white shadow-lg"
+                className="bg-[#9db47d] hover:bg-[#2B3B1A] text-[#2c331f] hover:text-[#f7eedb] text-sm font-bold pl-5 pr-5 py-2 rounded-xl flex items-center gap-3 transition-all shadow-[2px_2px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] border-2 border-[#2c331f] hover:border-[#2c331f]"
               >
-                SIGN IN
+                <span>Login</span>
+                
               </button>
             )}
           </div>
         </div>
 
         {/* Mobile Navigation */}
-        <div className="md:hidden flex justify-between items-center bg-[#E7E4DF] px-2 rounded-md">
+        <div className="md:hidden flex justify-between items-center">
           <Link href="/">
             <Image
               src="/images/deden-logo-dark.png"
               alt="DEDEN Logo"
               width={100}
               height={35}
-              className="h-20 w-auto  rounded-md"
+              className="h-12 w-auto rounded-md"
               priority
             />
           </Link>
 
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-2 rounded-lg bg-[#172a46] transition-colors z-10"
+            className="p-2 rounded-lg bg-[#3A4F24] transition-colors z-10"
           >
-            {isMenuOpen ? (
-              <Image
-                src="/images/deden-claw.png"
-                alt="DEDEN Logo"
-                width={100}
-                height={35}
-                className="h-6 w-auto p-0"
-                priority
-              />
-            ) : (
-              <Image
-                src="/images/deden-claw.png"
-                alt="DEDEN Logo"
-                width={100}
-                height={35}
-                className="h-6 w-auto p-0"
-                priority
-              />
-            )}
+            {isMenuOpen ? <X size={20} className="text-white" /> : <Menu size={20} className="text-white" />}
           </button>
         </div>
       </div>
@@ -166,13 +125,13 @@ export function Navbar() {
       {/* Mobile Menu Dropdown */}
       <div className="">
         {isMenuOpen && (
-          <div className="font-inter z-0 absolute md:hidden rounded-xl bg-[#172a46] border-t-2 border-[#172a46] px-10 py-6 space-y-4 shadow-2xl right-0 mr-8 -mt-22 pt-10">
+          <div className="font-inter z-50 absolute md:hidden rounded-2xl bg-[#2B3B1A] border border-[#3A4F24] px-8 py-6 space-y-4 shadow-2xl right-6 mt-2 w-64">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setIsMenuOpen(false)}
-                className="block text-center text-base font-semibold text-gray-300 hover:text-white py-2 rounded-lg hover:bg-[#2a4562] transition-colors uppercase tracking-wide"
+                className="block text-center text-sm font-semibold text-[#C8D8A4] hover:text-white py-2 rounded-lg hover:bg-[#3A4F24] transition-colors uppercase tracking-wide"
               >
                 {link.label}
               </Link>
@@ -185,7 +144,7 @@ export function Navbar() {
                       handleDashboard();
                       setIsMenuOpen(false);
                     }}
-                    className="bg-[#2a4562] hover:bg-[#3a5572] text-white py-3 px-6 rounded-full transition-all w-full"
+                    className="bg-[#3A4F24] hover:bg-[#4A5C2F] text-white py-3 px-6 rounded-full transition-all w-full"
                   >
                     Dashboard
                   </button>
@@ -205,15 +164,16 @@ export function Navbar() {
                     handleSignIn();
                     setIsMenuOpen(false);
                   }}
-                  className="bg-[#f5f5f3] text-[#172a46] text-sm font-bold py-3 px-6 rounded-full transition-all hover:scale-105 hover:bg-white shadow-lg w-full"
+                  className="bg-[#F2EDE4] text-[#2B3B1A] text-sm font-bold py-3 px-6 rounded-full transition-all hover:bg-white shadow-lg w-full"
                 >
-                  SIGN IN
+                  Login
                 </button>
               )}
             </div>
           </div>
         )}
       </div>
+
     </nav>
   );
 }

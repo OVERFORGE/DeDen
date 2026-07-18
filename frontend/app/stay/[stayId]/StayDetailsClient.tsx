@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Star, Check, Calendar, Users, DollarSign, MapPin } from "lucide-react";
-import StayApplyButton from "@/components/StayApplyButton";
-import { AmenitiesBlock } from "@/components/AmenitiesBlock";
+import Image from "next/image";
 import Link from "next/link";
+import { Home, Users, Globe, Coffee, Backpack, ArrowLeft, ArrowRight, ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+
 type StayData = {
   id: string;
   stayId: string;
@@ -27,344 +28,277 @@ type StayData = {
 };
 
 export default function StayDetailsClient({ stay }: { stay: StayData }) {
-  const [selectedImage, setSelectedImage] = useState(0);
+  const router = useRouter();
+  
+  // Steps: 1 = Booking specs, 2 = Contact info, 3 = Success
+  const [step, setStep] = useState(1);
+  
+  // Step 1 State
+  const [roomType, setRoomType] = useState('Private room');
+  const [duration, setDuration] = useState(`7 Days 6 Night (Full stay) $${stay.priceUSDC || 100}`);
+  const [occupancy, setOccupancy] = useState('5');
+  
+  // Step 2 State
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    gender: '',
+    age: '',
+    country: '',
+    telegram: '',
+    xHandle: ''
+  });
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+  const [imageIndex, setImageIndex] = useState(0);
+  const images = stay.images?.length > 0 ? stay.images : [stay.heroImage || "/images/dedenbangalore4.jpeg"];
+
+  const nextImage = () => {
+    setImageIndex((prev) => (prev + 1) % images.length);
   };
 
-  const calculatedDuration =
-    stay.duration ||
-    Math.ceil(
-      (new Date(stay.endDate).getTime() - new Date(stay.startDate).getTime()) /
-        (1000 * 60 * 60 * 24)
-    );
+  const prevImage = () => {
+    setImageIndex((prev) => (prev - 1 + images.length) % images.length);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const submitApplication = () => {
+    // Here we would typically submit to an API. 
+    // For now, we'll just go to a success state or route to /apply
+    alert("Booking application submitted successfully!");
+    router.push('/villas');
+  };
+
+  const calculatedDuration = stay.duration || 
+    Math.ceil((new Date(stay.endDate).getTime() - new Date(stay.startDate).getTime()) / (1000 * 60 * 60 * 24));
 
   return (
-    <div className="min-h-screen bg-[#172a46] text-[#F5F5F3]">
-      {/* Hero Section with Split Layout */}
-      <section className="relative bg-[#E7E4DF] pt-8 pb-12">
-        <div className="max-w-screen-xl mx-auto px-6">
-          {/* Breadcrumb */}
-          <div className="text-gray-600 text-sm mb-8 flex items-center gap-2">
-            <Link
-              href="/"
-              className="hover:text-[#172a46] transition-colors cursor-pointer"
-            >
-              Home
-            </Link>
+    <div className="min-h-screen bg-[#f7eedb] py-16 px-6 sm:px-10 font-inter">
+      <div className="max-w-[1000px] mx-auto">
+        
+        {/* Header Section */}
+        <div className="relative mb-20">
+          <div className="flex justify-between items-start">
+            <div className="max-w-xl">
+              <h1 className="text-[#43392e] leading-[0.8] flex flex-col mb-4">
+                <span className="text-7xl md:text-8xl" style={{ fontFamily: "'Caveat', cursive" }}>
+                  Live
+                </span>
+                <span className="font-display font-black text-6xl md:text-[5.5rem] tracking-wide mt-[-5px]">
+                  STAYS
+                </span>
+              </h1>
+              <p className="mt-8 text-xs text-[#43392e] font-semibold max-w-[280px] tracking-wide leading-relaxed opacity-80">
+                Thoughtfully designed stays for every kind of traveller. Comfortable. Curated. Connected.
+              </p>
+            </div>
+            
+            {/* Circular badge */}
+            <div className="hidden md:flex w-32 h-32 rounded-full items-center justify-center relative mt-4">
+              <div className="absolute inset-0 rounded-full border border-dashed border-[#43392e]/40 m-1 rotate-12"></div>
+              
+              <svg viewBox="0 0 100 100" className="absolute w-[110%] h-[110%] top-[-5%] left-[-5%] animate-spin-slow" style={{ animationDuration: '20s' }}>
+                <path id="circlePath" d="M 50, 50 m -35, 0 a 35,35 0 1,1 70,0 a 35,35 0 1,1 -70,0" fill="transparent" />
+                <text className="text-[7.5px] tracking-widest font-bold uppercase" fill="#43392e">
+                  <textPath href="#circlePath">
+                    MORE THAN A STAY ✦ IT'S A MEMORY IN MOTION ✦ 
+                  </textPath>
+                </text>
+              </svg>
 
-            <span>/</span>
-
-            <Link
-              href="/villas"
-              className="hover:text-[#172a46] transition-colors cursor-pointer"
-            >
-              Stays
-            </Link>
-
-            <span>/</span>
-
-            <Link
-              href={`/stay/${stay.stayId}`}
-              className="hover:text-[#172a46] transition-colors cursor-pointer font-semibold"
-            >
-              {stay.title}
-            </Link>
+              <div className="w-10 h-10 border-[3px] border-[#43392e] rounded-t-full border-b-0 mt-4"></div>
+            </div>
           </div>
+        </div>
 
-          <div className="grid lg:grid-cols-2 gap-12 items-start">
-            {/* LEFT: Image Gallery */}
+        {/* Booking Card */}
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col md:flex-row w-full rounded-2xl overflow-hidden shadow-md h-auto md:h-[450px]">
+            
+            {/* Left: Dynamic Booking Form Panel */}
+            <div className="bg-[#46392b] text-[#f7eedb] w-full md:w-[45%] p-10 flex flex-col justify-center relative">
+              
+              {step === 1 && (
+                <div className="animate-fade-in w-full max-w-sm">
+                  {/* Room Type Toggle */}
+                  <div className="flex border border-[#f7eedb]/30 rounded-full w-fit mb-10 overflow-hidden text-xs font-bold">
+                    <button 
+                      onClick={() => setRoomType('Private room')}
+                      className={`px-6 py-2.5 transition-colors ${roomType === 'Private room' ? 'bg-[#f7eedb] text-[#46392b]' : 'text-[#f7eedb]/70 hover:bg-[#f7eedb]/10'}`}
+                    >
+                      Private room
+                    </button>
+                    <button 
+                      onClick={() => setRoomType('Dorm Room')}
+                      className={`px-6 py-2.5 transition-colors ${roomType === 'Dorm Room' ? 'bg-[#f7eedb] text-[#46392b]' : 'text-[#f7eedb]/70 hover:bg-[#f7eedb]/10'}`}
+                    >
+                      Dorm Room
+                    </button>
+                  </div>
 
-            <div className="space-y-4">
-              {/* Event Title Below Images */}
-              <div className="pt-4">
-                <h1 className="font-berlin text-5xl md:text-6xl font-bold text-[#172a46] mb-4">
-                  {stay.title}
-                </h1>
-                <div className="flex items-center gap-2 text-gray-600 ">
-                  <MapPin size={20} className="text-[#172a46]" />
-                  <span className="text-lg">{stay.location}</span>
-                </div>
-              </div>
-              {/* Main Large Image */}
-              {stay.images && stay.images.length > 0 ? (
-                <>
-                  <div className="w-full h-[300px] md:h-[500px] rounded-2xl overflow-hidden shadow-xl border-4 border-white">
-                    <img
-                      src={stay.images[selectedImage]}
-                      alt={stay.title}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                  {/* Duration Dropdown */}
+                  <div className="mb-8 relative">
+                    <select 
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-sm px-5 py-3.5 rounded-xl appearance-none outline-none pr-10 cursor-pointer shadow-inner"
+                    >
+                      <option>{calculatedDuration} Days {calculatedDuration - 1} Night (Full stay) ${stay.priceUSDC || 100}</option>
+                      <option>3 Days 2 Night (Weekend) ${Math.floor((stay.priceUSDC || 100)/2)}</option>
+                    </select>
+                    <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#46392b] pointer-events-none" />
+                  </div>
+
+                  {/* Occupancy Input */}
+                  <div className="mb-12">
+                    <label className="block text-[11px] font-bold text-[#f7eedb] mb-2 tracking-wide">
+                      No. Occupancy
+                    </label>
+                    <input 
+                      type="number" 
+                      value={occupancy}
+                      onChange={(e) => setOccupancy(e.target.value)}
+                      className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-sm px-5 py-3.5 rounded-xl outline-none shadow-inner"
                     />
                   </div>
 
-                  {/* Thumbnail Grid Below */}
-                  <div className="grid grid-cols-4 gap-3">
-                    {stay.images.slice(0, 4).map((img, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => setSelectedImage(idx)}
-                        className={`h-18 md:h-28 rounded-xl overflow-hidden cursor-pointer transition-all hover:scale-105 shadow-md border-2 ${
-                          selectedImage === idx
-                            ? "border-[#172a46] ring-2 ring-[#172a46]"
-                            : "border-white"
-                        }`}
-                      >
-                        <img
-                          src={img}
-                          alt={`View ${idx + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ))}
+                  <button 
+                    onClick={() => setStep(2)}
+                    className="inline-flex w-fit items-center justify-center bg-[#f7eedb] text-[#46392b] font-black px-10 py-3.5 rounded-full hover:bg-white transition-colors uppercase tracking-widest text-[11px]"
+                  >
+                    Continue ✦
+                  </button>
+                </div>
+              )}
+
+              {step === 2 && (
+                <div className="animate-fade-in w-full max-w-md space-y-4">
+            
+                  
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Name</label>
+                    <input 
+                      type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
+                      className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
+                    />
                   </div>
-                </>
-              ) : (
-                <div className="w-full h-[500px] rounded-2xl bg-gray-200 flex items-center justify-center text-4xl text-gray-400">
-                  📸 No images yet
+                  
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Mail</label>
+                    <input 
+                      type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
+                      className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Gender</label>
+                      <input 
+                        type="text" name="gender" value={formData.gender} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
+                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Age</label>
+                      <input 
+                        type="text" name="age" value={formData.age} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
+                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Country</label>
+                      <input 
+                        type="text" name="country" value={formData.country} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
+                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 pb-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Telegram Handle</label>
+                      <input 
+                        type="text" name="telegram" value={formData.telegram} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
+                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">X Handle</label>
+                      <input 
+                        type="text" name="xHandle" value={formData.xHandle} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
+                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
+                      />
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={submitApplication}
+                    className="inline-flex w-fit items-center justify-center bg-[#f7eedb] text-[#46392b] font-black px-10 py-3.5 rounded-full hover:bg-white transition-colors uppercase tracking-widest text-[11px]"
+                  >
+                    Continue ✦
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* RIGHT: Overview Card & Apply Button */}
-            <div className="lg:sticky lg:top-8 space-y-6">
-              {/* Overview Card */}
-              <div className="bg-white rounded-3xl shadow-2xl p-4  md:p-8 border-4 border-[#172a46]">
-                <h2 className="text-3xl font-bold text-[#172a46] mb-6">
-                  Overview
-                </h2>
-
-                <div className="space-y-6 pl-2">
-                  {/* Price */}
-                  <div className="flex items-center justify-between pb-4 border-b-2 border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-[#172a46] rounded-xl flex items-center justify-center">
-                        <DollarSign className="text-white" size={24} />
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-500">Price</div>
-                        <div className="text-2xl font-bold text-[#172a46]">
-                          ${stay.priceUSDC} USDC/USDT per Night
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Duration */}
-                  <div className="flex items-center justify-between pb-4 border-b-2 border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-[#172a46] rounded-xl flex items-center justify-center">
-                        <Calendar className="text-white" size={24} />
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-500">Duration</div>
-                        <div className="text-xl font-bold text-[#172a46]">
-                          {calculatedDuration} Days
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {formatDate(stay.startDate)} -{" "}
-                          {formatDate(stay.endDate)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Availability */}
-                  <div className="flex items-center justify-between pb-4 border-b-2 border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-[#172a46] rounded-xl flex items-center justify-center">
-                        <Users className="text-white" size={24} />
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-500">
-                          Availability
-                        </div>
-                        <div className="text-xl font-bold text-[#172a46]">
-                          {stay.slotsAvailable} of {stay.slotsTotal} slots
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Rating */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-[#172a46] rounded-xl flex items-center justify-center">
-                        <Star className="text-white" fill="white" size={24} />
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-500">Rating</div>
-                        <div className="text-xl font-bold text-[#172a46]">
-                          4.9 / 5.0
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Apply Button Card */}
-              <div className="bg-gradient-to-br from-[#172a46] to-[#2a4a6a] rounded-3xl shadow-2xl p-4 md:p-6 text-center border-4 border-[#172a46]">
-                <StayApplyButton
-                  stayId={stay.stayId}
-                  stayTitle={stay.title}
-                  slotsAvailable={stay.slotsAvailable}
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* About Section */}
-      <section className=" mx-auto px-6 md:px-40   py-20 bg-[#E7E4DF]">
-        <h2 className="font-berlin text-4xl md:text-5xl font-bold text-[#172a46] mb-8">
-          About This Stay
-        </h2>
-        <p className="font-inter text-lg text-[#172a46] leading-relaxed whitespace-pre-line max-w-4xl opacity-90">
-          {stay.description}
-        </p>
-      </section>
-
-      {/* Amenities & Highlights Grid */}
-      <section className="bg-[#172a46] py-20 relative px-6 md:px-30">
-        <div className="max-w-screen-xl mx-auto px-6 relative z-10">
-          <div className="grid md:grid-cols-2 gap-12">
-            {/* --- AMENITIES --- */}
-            {stay.amenities && stay.amenities.length > 0 && (
-              <AmenitiesBlock title="What's Included" items={stay.amenities} />
-            )}
-
-            {/* --- HIGHLIGHTS --- */}
-            {stay.highlights && stay.highlights.length > 0 && (
-              <AmenitiesBlock
-                title="What to Expect"
-                items={stay.highlights}
-                isHighlight
+            {/* Right: Image Panel */}
+            <div className="relative w-full md:w-[55%] h-72 md:h-full">
+              <Image
+                src={images[imageIndex]}
+                alt={stay.title}
+                fill
+                className="object-cover"
               />
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Room Options */}
-      {stay.rooms && stay.rooms.length > 0 && (
-        <section className=" mx-auto px-6 py-20 bg-[#E7E4DF]  md:px-30 ">
-          <h2 className="text-4xl md:text-5xl font-bold text-[#172a46] mb-12 text-center">
-            Room Options
-          </h2>
-
-          <div className="grid md:grid-cols-4 gap-8">
-            {stay.rooms.map((room) => (
-              <div
-                key={room.id}
-                className="bg-white rounded-xl overflow-hidden shadow-xl hover:shadow-2xl transition-all hover:scale-[1.02] border-4 border-[#172a46]"
-              >
-                {room.images && room.images.length > 0 ? (
-                  <div className="h-60 relative overflow-hidden">
-                    <img
-                      src={room.images[0]}
-                      alt={room.name}
-                      className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
-                    />
-                    <div className="absolute top-4 right-4 bg-[#172a46] text-white px-4 py-2 rounded-full font-bold text-lg">
-                      ${room.priceUSDT}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-54 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-6xl">
-                    🛏️
-                  </div>
-                )}
-                <div className="p-4">
-                  <h4 className="text-2xl font-bold text-[#172a46] mb-2">
-                    {room.name}
-                  </h4>
-                  <p className="font-inter text-gray-600 mb-2 tracking-tighter">
-                    {room.description}
-                  </p>
-                  <div className="flex items-center gap-2 text-[#172a46] mb-2 bg-[#172a46]/5 p-3 rounded-xl">
-                    <Users size={18} />
-                    <span className="font-semibold">
-                      Capacity: {room.capacity}{" "}
-                      {room.capacity === 1 ? "person" : "people"}
-                    </span>
-                  </div>
-                  {room.amenities && room.amenities.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {room.amenities
-                        .slice(0, 4)
-                        .map((amenity: string, idx: number) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-1 bg-[#172a46]/10 text-[#172a46] text-xs rounded-full font-semibold border-2 border-[#172a46]/20"
-                          >
-                            {amenity}
-                          </span>
-                        ))}
-                    </div>
-                  )}
-                  <div className="flex items-baseline gap-2 pt-2 border-t-2 border-gray-200">
-                    <span className="text-4xl font-bold text-[#172a46]">
-                      ${room.priceUSDT}
-                    </span>
-                    <span className="text-lg text-gray-500">USDC</span>
-                  </div>
-                </div>
+              {/* Navigation Buttons overlay (functional) */}
+              <div className="absolute bottom-6 right-6 flex gap-2">
+                <button 
+                  onClick={prevImage}
+                  className="w-10 h-10 rounded-full bg-[#46392b]/60 text-white flex items-center justify-center hover:bg-[#46392b] transition-colors border border-white/20 backdrop-blur-sm"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <button 
+                  onClick={nextImage}
+                  className="w-10 h-10 rounded-full bg-[#f7eedb] text-[#46392b] flex items-center justify-center hover:bg-white transition-colors shadow-sm"
+                >
+                  <ArrowRight size={16} />
+                </button>
               </div>
-            ))}
+            </div>
           </div>
-        </section>
-      )}
 
-      {/* FAQ Section */}
-      <section className="bg-[#172a46] py-20 border-b-2 border-b-gray-400">
-        <div className="max-w-4xl mx-auto px-6">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-12 text-center">
-            Frequently Asked Questions
-          </h2>
-
-          <div className="space-y-6">
-            <div className="bg-white/5 backdrop-blur-sm border-2 border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all">
-              <h4 className="text-xl font-bold text-white mb-3 flex items-center gap-3">
-                <span className="text-2xl">❓</span>
-                What's the application process?
-              </h4>
-              <p className="font-inter text-gray-200 leading-relaxed">
-                Submit your application → Wait for approval (24-48h) → Pay with
-                crypto → You're in!
-              </p>
+          {/* Bottom Amenities Bar */}
+          <div className="w-full bg-[#ebdcc2] rounded-xl py-5 px-6 md:px-12 flex flex-wrap justify-between items-center shadow-sm">
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
+              <Home size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">Cozy Spaces</span>
             </div>
-
-            <div className="bg-white/5 backdrop-blur-sm border-2 border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all">
-              <h4 className="text-xl font-bold text-white mb-3 flex items-center gap-3">
-                <span className="text-2xl">💳</span>
-                What payment methods do you accept?
-              </h4>
-           <p className="font-inter text-gray-200 leading-relaxed">
-  We accept USDC and USDT on the <strong>BNB, Base, and Arbitrum</strong> networks. You'll need a crypto
-  wallet like MetaMask.
-</p>
+            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
+              <Users size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">Good People</span>
             </div>
-
-            <div className="bg-white/5 backdrop-blur-sm border-2 border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all">
-              <h4 className="text-xl font-bold text-white mb-3 flex items-center gap-3">
-                <span className="text-2xl">🔄</span>
-                What's your cancellation policy?
-              </h4>
-              <p className="font-inter text-gray-200 leading-relaxed">
-                Full refund if cancelled 14+ days before. 50% refund if 7-14
-                days before. No refund within 7 days.
-              </p>
+            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
+              <Globe size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">New Stories</span>
+            </div>
+            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
+              <Coffee size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">Slow Days</span>
+            </div>
+            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
+              <Backpack size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">Lasting Memories</span>
             </div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 }

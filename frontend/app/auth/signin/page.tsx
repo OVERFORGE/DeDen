@@ -37,10 +37,10 @@ const TabButton: React.FC<{
 }> = ({ label, isActive, onClick }) => (
   <button
     onClick={onClick}
-    className={`w-1/2 py-3 px-4 font-semibold text-center transition-colors duration-200 ${
+    className={`w-1/2 py-3 px-4 font-black uppercase tracking-widest text-xs text-center transition-all ${
       isActive
-        ? "bg-white text-[#172a46]" // ACTIVE: White BG, Dark Font
-        : "bg-[#1f3a5a] text-gray-300 hover:bg-[#254261] hover:text-white" // INACTIVE: Dark BG, Light Font
+        ? "bg-[#2c331f] text-[#f7eedb]" // ACTIVE: Dark BG, Cream Font
+        : "bg-white text-[#2c331f] hover:bg-[#f7eedb]" // INACTIVE: White BG, Dark Font
     }`}
   >
     {label}
@@ -52,9 +52,9 @@ const InfoListItem: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => (
   <li className="flex items-start space-x-3">
-    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#2a4562] flex items-center justify-center mt-1">
+    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#9db47d] border-2 border-[#2c331f] flex items-center justify-center mt-1">
       <svg
-        className="w-4 h-4 text-[#E7E4DF]"
+        className="w-4 h-4 text-[#2c331f]"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -68,7 +68,7 @@ const InfoListItem: React.FC<{ children: React.ReactNode }> = ({
         ></path>
       </svg>
     </div>
-    <span className="text-lg text-gray-300">{children}</span>
+    <span className="text-lg font-bold text-[#2c331f]">{children}</span>
   </li>
 );
 
@@ -217,19 +217,19 @@ function SignInForm() {
     activeTab === "signup" ? "Sign up with Google" : "Sign in with Google";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#E7E4DF] p-4 relative overflow-hidden w-full h-full">
+    <div className="min-h-screen flex items-center justify-center bg-[#f7eedb] p-4 sm:p-8 relative overflow-hidden w-full h-full">
       {/* Sign-In Card */}
-      <div className="flex flex-col md:flex-row  w-full bg-[#172a46] rounded-2xl shadow-2xl p-8 z-10 md:w-8/12 md:-mt-60 md:justify-between md:items-center">
-        {/* Logo */}
-        <div>
-          <h1 className="font-berlin text-5xl md:text-7xl font-bold text-center text-white mb-6">
-            Sign In
+      <div className="flex flex-col md:flex-row w-full bg-[#9db47d] border-4 border-[#2c331f] rounded-2xl shadow-[8px_8px_0px_0px_#2c331f] p-0 z-10 md:w-10/12 lg:w-8/12 md:max-w-5xl overflow-hidden">
+        {/* Left Column */}
+        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
+          <h1 className="font-display text-5xl md:text-7xl font-black text-[#2c331f] tracking-tight mb-4 uppercase">
+            {title}
           </h1>
-          <p className="text-gray-300 mb-6 text-lg">{subtitle}</p>
+          <p className="text-[#2c331f] font-bold uppercase tracking-widest text-sm mb-8">{subtitle}</p>
 
           {/* --- MOVED: Error Message IS NOW HERE --- */}
           {error && (
-            <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded-lg text-sm mb-6">
+            <div className="bg-red-100 border-2 border-red-600 text-red-800 px-4 py-3 rounded-xl font-bold text-sm mb-6 shadow-[2px_2px_0px_0px_#dc2626]">
               <strong>Error:</strong> {error}
             </div>
           )}
@@ -237,27 +237,27 @@ function SignInForm() {
           {/* --- Info List --- */}
           <ul className="space-y-5 mt-4">
             <InfoListItem>
-              <strong className="text-white">Where Web3 lives</strong> and
+              <strong className="text-[#2c331f] font-black">Where Web3 lives</strong> and
               builders connect
             </InfoListItem>
             <InfoListItem>
-              A <strong className="text-white">luxury villa experience</strong>{" "}
+              A <strong className="text-[#2c331f] font-black">luxury villa experience</strong>{" "}
               curated for the biggest Web3 events.
             </InfoListItem>
             <InfoListItem>
-              <strong className="font-inter text-white">Network.</strong>{" "}
-              <strong className="font-inter text-white">Unwind.</strong>{" "}
-              <strong className="font-inter text-white">Buidl IRL.</strong>
+              <strong className="font-display text-[#2c331f]">Network.</strong>{" "}
+              <strong className="font-display text-[#2c331f]">Unwind.</strong>{" "}
+              <strong className="font-display text-[#2c331f]">Buidl IRL.</strong>
             </InfoListItem>
           </ul>
         </div>
 
         {/* --- MODIFIED: RIGHT COLUMN (Form & Actions) --- */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 bg-[#0f1e33] rounded-b-2xl md:rounded-2xl  flex flex-col justify-center">
+        <div className="w-full md:w-1/2 p-8 md:p-12 bg-white border-t-4 md:border-t-0 md:border-l-4 border-[#2c331f] flex flex-col justify-center">
           {/* --- REMOVED: Title, Subtitle, and Error (moved to left) --- */}
 
           {/* --- Tab Switcher --- */}
-          <div className="flex rounded-lg overflow-hidden mb-6 border border-[#2a4562]">
+          <div className="flex rounded-xl overflow-hidden mb-8 border-2 border-[#2c331f]">
             <TabButton
               label="Sign Up"
               isActive={activeTab === "signup"}
@@ -277,12 +277,12 @@ function SignInForm() {
           </div>
 
           {/* --- Conditional Content --- */}
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Google Button (Text is dynamic) */}
             <button
               onClick={handleGoogleSignIn}
               disabled={isLoadingGoogle || isLoadingWallet}
-              className="w-full flex items-center justify-center gap-3 bg-white text-[#172a46] font-semibold py-3 px-5 rounded-xl shadow-lg transition-all hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-3 bg-[#f7eedb] text-[#2c331f] font-black uppercase tracking-widest text-sm py-4 px-5 rounded-xl shadow-[4px_4px_0px_0px_#2c331f] border-2 border-[#2c331f] transition-all hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoadingGoogle ? (
                 <Spinner />
@@ -295,7 +295,7 @@ function SignInForm() {
 
             {/* --- "Sign Up" Tab Content --- */}
             {activeTab === "signup" && (
-              <p className="text-gray-400 text-sm text-center pt-2">
+              <p className="text-[#5a6b3a] font-bold text-xs uppercase tracking-widest text-center pt-2">
                 New accounts must be created with Google. You can link your
                 wallet from your profile settings after signing up.
               </p>
@@ -305,19 +305,19 @@ function SignInForm() {
             {activeTab === "login" && (
               <>
                 {/* Divider */}
-                <div className="flex items-center pt-2">
-                  <div className="flex-grow border-t border-gray-600"></div>
-                  <span className="flex-shrink mx-4 text-gray-400 text-sm">
+                <div className="flex items-center pt-2 pb-2">
+                  <div className="flex-grow border-t-2 border-[#2c331f]"></div>
+                  <span className="flex-shrink mx-4 text-[#2c331f] font-black uppercase tracking-widest text-xs">
                     OR
                   </span>
-                  <div className="flex-grow border-t border-gray-600"></div>
+                  <div className="flex-grow border-t-2 border-[#2c331f]"></div>
                 </div>
 
                 {/* Wallet Button */}
                 <button
                   onClick={handleWalletSignIn}
                   disabled={isLoadingWallet || isLoadingGoogle}
-                  className="w-full flex items-center justify-center gap-3 bg-[#2a4562] text-white font-semibold py-3 px-5 rounded-xl shadow-lg transition-all hover:bg-[#3a5572] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center gap-3 bg-[#2c331f] text-[#f7eedb] font-black uppercase tracking-widest text-sm py-4 px-5 rounded-xl shadow-[4px_4px_0px_0px_#9db47d] border-2 border-[#2c331f] transition-all hover:shadow-[0px_0px_0px_0px_#9db47d] hover:translate-y-1 hover:translate-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoadingWallet ? (
                     <Spinner />
@@ -341,8 +341,8 @@ export default function SignInPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-[#f5f5f3]">
-          <div className="text-[#172a46] text-lg">Loading...</div>
+        <div className="min-h-screen flex items-center justify-center bg-[#f7eedb]">
+          <div className="w-12 h-12 border-4 border-[#f7eedb] border-t-[#2c331f] rounded-full animate-spin"></div>
         </div>
       }
     >

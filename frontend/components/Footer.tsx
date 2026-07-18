@@ -1,213 +1,79 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
 import React from "react";
-import { Inter, Dela_Gothic_One } from "next/font/google";
-import { usePathname } from "next/navigation";
-
-const delaGothic = Dela_Gothic_One({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-dela-gothic",
-});
+import Link from "next/link";
+import Image from "next/image";
 
 const Footer = () => {
-  const pathname = usePathname();
-
-  // Active route checker
-  const isActive = (route: String) => pathname === route;
-
   return (
-    <footer
-      className={`bg-[#172a46] text-white pt-10 pb-12 relative ${delaGothic.variable} overflow-hidden`}
-    >
-      {/* Top Wave (Inverted) */}
-
-      <div className=" w-full mx-6 md:mx-30 px-6 z-10 relative">
-        {/* Footer content */}
-        <div className=" grid md:grid-cols-5 gap-12 mb-16">
-          <div className=" col-span-2 md:col-span-1">
-            <div className="mb-2">
-              <Image
-                src="/images/logo-no-bg.png"
-                alt="DEDEN Logo"
-                width={140}
-                height={50}
-                className=" w-auto -mb-2"
-              />
-              <div className="flex gap-3 md:w-9/12  md:justify-end invert">
-                <a
-                  href="https://www.instagram.com/decentralizedden/"
-                  target="_blank"
-                >
-                  <Image
-                    src="/insta_icon.png"
-                    alt="DEDEN Logo"
-                    width={140}
-                    height={50}
-                    className=" w-[40px] cursor-pointer"
-                  />
-                </a>
-                <a
-                  href="https://chat.whatsapp.com/IXzTVWE40zGDrKxoDTVHv5"
-                  target="_blank"
-                >
-                  <Image
-                    src="/wp_icon.png"
-                    alt="DEDEN Logo"
-                    width={140}
-                    height={50}
-                    className=" w-[40px] cursor-pointer"
-                  />
-                </a>
-
-                <a href="https://x.com/TheDeDenn" target="_blank">
-                  <Image
-                    src="/x_icon.png"
-                    alt="DEDEN Logo"
-                    width={140}
-                    height={50}
-                    className=" w-[40px] cursor-pointer"
-                  />
-                </a>
+    <footer className="bg-[#f7eedb] text-[#2c331f] pt-20 pb-8 w-full border-t border-[#2c331f]/10">
+      <div className="max-w-[1100px] mx-auto px-6">
+        
+        {/* Top section with columns */}
+        <div className="flex flex-col md:flex-row justify-between items-start gap-12 mb-20">
+          
+          {/* Brand Column */}
+          <div className="flex flex-col max-w-[200px]">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 bg-[#7e9154] rounded flex items-center justify-center">
+                 <span className="text-white text-xs font-bold font-display leading-none pb-0.5">e</span>
               </div>
+              <span className="text-2xl font-bold tracking-tight text-[#7e9154]">eDen</span>
             </div>
+            <p className="text-xl italic font-bold mb-4 text-[#7e9154]" style={{ fontFamily: "'Caveat', cursive" }}>
+              Meet. Travel. Stay. Repeat.
+            </p>
+            <p className="text-[9px] uppercase tracking-wider font-bold opacity-70 leading-relaxed text-[#2c331f]">
+              Curated stays for people building<br/>the decentralized future.
+            </p>
           </div>
-          <div className="col-span-2 md:col-span-1"></div>
-          <div className="col-span-2 md:col-span-1">
-            <h4 className="font-bold text-lg mb-5 text-gray-400">Explore</h4>
-            <ul className="space-y-3 text-sm text-gray-200">
-              <li>
-                <Link
-                  href="/#about"
-                  className="hover:text-white transition-colors"
-                >
-                  About DeDen
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/villas"
-                  className="hover:text-white transition-colors"
-                >
-                  Upcoming Stays
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/#gallery"
-                  className="hover:text-white transition-colors"
-                >
-                  The Experience
-                </Link>
-              </li>
-              <li>
-                <a
-                  href="https://drive.google.com/drive/folders/1TcaTYpXnxF_1QUmIzUA3Db6May78WTX4?usp=sharing"
-                  target="_blank"
-                  className="hover:text-white transition-colors"
-                >
-                  Brand Assets
-                </a>
-              </li>
-
-              <li>
-                <Link
-                  href="/contact"
-                  className="hover:text-white transition-colors"
-                >
-                  Contact Us
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div className="col-span-2 md:col-span-2">
-            <p className="text-sm text-gray-400 mb-3">Get in touch</p>
-            <p className="text-sm text-gray-200 mb-1">+91 91615 56758</p>
-            <p className="text-sm text-gray-200">support@deden.space</p>
+          
+          {/* Links Columns */}
+          <div className="flex flex-wrap gap-12 md:gap-24">
+            
+            {/* Explore */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-[10px] font-black uppercase tracking-widest mb-1">Explore</h4>
+              <Link href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">About</Link>
+              <Link href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">Live Stays</Link>
+              <Link href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">Past Stays</Link>
+              <Link href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">The Crews</Link>
+            </div>
+            
+            {/* Company */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-[10px] font-black uppercase tracking-widest mb-1">Company</h4>
+              <Link href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">Host a Den</Link>
+              <Link href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">Brand Kit</Link>
+              <Link href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">Contact Us</Link>
+            </div>
+            
+            {/* Follow */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-[10px] font-black uppercase tracking-widest mb-1">Follow</h4>
+              <a href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">Twitter</a>
+              <a href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">LinkedIn</a>
+              <a href="#" className="text-[11px] font-bold uppercase tracking-widest opacity-80 hover:opacity-100 transition-opacity">TikTok</a>
+            </div>
+            
           </div>
         </div>
-      </div>
-
-      <div>
-        <p className="text-center text-gray-400 text-sm mb-4">
-          2025 DecentralizedDen. All rights reserved.
-        </p>
-
-        {/* Bottom Navigation Bar */}
-        <div
-          className=" hidden md:flex bg-[#E7E4DF] text-black rounded-full py-2 px-3 
-          max-w-2xl mx-auto  justify-between items-center mb-14 shadow-lg"
-        >
-          {/* HOME */}
-          <Link
-            href="/"
-            className={`font-bold text-base py-5 px-10 rounded-full transition-all
-              ${
-                isActive("/")
-                  ? "bg-[#172a46] text-[#E7E4DF]"
-                  : "text-[#172a46] hover:opacity-70"
-              }`}
-          >
-            Home
-          </Link>
-
-          {/* VILLAS */}
-          <Link
-            href="/villas"
-            className={`font-semibold text-base py-5 px-10 rounded-full transition-all
-              ${
-                isActive("/villas")
-                  ? "bg-[#172a46] text-[#E7E4DF]"
-                  : "text-gray-700 hover:text-[#172a46]"
-              }`}
-          >
-            Villas
-          </Link>
-
-          {/* EXPERIENCES */}
-          <Link
-            href="/#gallery"
-            className={`font-semibold text-base py-5 px-10 rounded-full transition-all
-              ${
-                isActive("/experiences")
-                  ? "bg-[#172a46] text-[#E7E4DF]"
-                  : "text-gray-700 hover:text-[#172a46]"
-              }`}
-          >
-            Experiences
-          </Link>
-
-          {/* CAREERS */}
-          <Link
-            href="/careers"
-            className={`font-semibold text-base py-5 px-10 rounded-full transition-all
-              ${
-                isActive("/careers")
-                  ? "bg-[#172a46] text-[#E7E4DF]"
-                  : "text-gray-700 hover:text-[#172a46]"
-              }`}
-          >
-            Careers
-          </Link>
+        
+        {/* Bottom Bar */}
+        <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-[#2c331f]/20 gap-4">
+          <p className="text-[9px] font-bold uppercase tracking-widest opacity-60">
+            © 2024 eDen. All rights reserved.
+          </p>
+          <div className="flex items-center gap-6">
+            <a href="#" className="text-[9px] font-bold uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">Privacy Policy</a>
+            <a href="#" className="text-[9px] font-bold uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">Terms of Service</a>
+          </div>
         </div>
-      </div>
-
-      <div className="w-full text-center bg-[#172a46] mt-16 -mb-14 md:-mb-20">
-        <h1
-          className="text-2xl md:text-8xl lg:text-8xl font-medium text-[#E7E4DF] leading-[0.95] tracking-tight"
-          style={{
-            fontFamily: "'New Rocker', cursive",
-            letterSpacing: "-0.07em",
-          }}
-        >
-          Where Web3 lives and Builders Connect
-        </h1>
+        
       </div>
     </footer>
   );
 };
 
 export default Footer;
+

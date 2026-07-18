@@ -19,9 +19,9 @@ import { useState } from 'react';
 // --- A simple loading component ---
 function AdminLoading() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-      <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
-      <p className="mt-4 text-lg text-gray-700">Verifying access...</p>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-[#f7eedb]">
+      <div className="w-12 h-12 border-4 border-[#2c331f]/20 border-t-[#2c331f] rounded-full animate-spin mb-4"></div>
+      <p className="mt-4 text-[10px] font-bold text-[#2c331f] uppercase tracking-widest">Verifying access...</p>
     </div>
   );
 }
@@ -95,11 +95,11 @@ export default function AdminLayout({
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-[#f7eedb] flex">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-[#2c331f]/50 z-40 lg:hidden backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -107,27 +107,27 @@ export default function AdminLayout({
       {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50
-        w-64 bg-gray-900 text-white
+        w-72 bg-[#2c331f] text-[#f7eedb] border-r-2 border-[#2c331f]
         transform transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-800">
+          <div className="flex items-center justify-between p-6 border-b-2 border-[#2c331f] bg-[#9db47d]">
             <div>
-              <h2 className="text-xl font-bold">Admin Panel</h2>
-              <p className="text-xs text-gray-400 mt-1">DeDen Management</p>
+              <h2 className="text-2xl font-black text-[#2c331f] font-display tracking-tight">Admin Panel</h2>
+              <p className="text-[10px] font-bold text-[#2c331f] uppercase tracking-widest mt-1">DeDen Management</p>
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-gray-400 hover:text-white"
+              className="lg:hidden text-[#2c331f] hover:scale-110 transition-transform"
             >
-              <X size={24} />
+              <X size={24} strokeWidth={3} />
             </button>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          <nav className="flex-1 p-5 space-y-3 overflow-y-auto">
             {navigation.map((item) => {
               const isActive = pathname === item.href;
               const Icon = item.icon;
@@ -138,18 +138,18 @@ export default function AdminLayout({
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
                   className={`
-                    flex items-start gap-3 px-4 py-3 rounded-lg
-                    transition-all duration-200
+                    flex items-start gap-3 px-4 py-3 rounded-xl border-2
+                    transition-all duration-200 
                     ${isActive 
-                      ? 'bg-blue-600 text-white shadow-lg' 
-                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      ? 'bg-[#f7eedb] text-[#2c331f] border-[#2c331f] shadow-[3px_3px_0px_0px_#9db47d]' 
+                      : 'border-transparent text-[#f7eedb]/70 hover:bg-[#9db47d] hover:text-[#2c331f] hover:border-[#2c331f] hover:shadow-[3px_3px_0px_0px_#2c331f]'
                     }
                   `}
                 >
-                  <Icon size={20} className="flex-shrink-0 mt-0.5" />
+                  <Icon size={20} strokeWidth={isActive ? 3 : 2} className="flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-xs opacity-75 mt-0.5">
+                    <p className="font-bold text-sm tracking-wide">{item.name}</p>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isActive ? 'text-[#5a6b3a]' : 'opacity-70'}`}>
                       {item.description}
                     </p>
                   </div>
@@ -159,13 +159,12 @@ export default function AdminLayout({
           </nav>
 
           {/* Footer */}
-          <div className="p-4 border-t border-gray-800">
-            {/* ✅ UPDATED: Added onClick to sign out */}
+          <div className="p-5 border-t-2 border-[#2c331f] bg-[#2c331f]">
             <button 
-              onClick={() => signOut({ callbackUrl: '/' })} // Sign out and redirect to home
-              className="w-full flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-lg transition-colors"
+              onClick={() => signOut({ callbackUrl: '/' })} 
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#e8c37b] text-[#2c331f] rounded-xl border-2 border-[#2c331f] shadow-[3px_3px_0px_0px_#9db47d] hover:shadow-[0px_0px_0px_0px_#9db47d] hover:translate-y-1 hover:translate-x-1 transition-all font-bold uppercase tracking-widest text-xs"
             >
-              <LogOut size={20} />
+              <LogOut size={16} strokeWidth={3} />
               <span>Sign Out</span>
             </button>
           </div>
@@ -175,14 +174,14 @@ export default function AdminLayout({
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4 lg:hidden">
+        <header className="bg-[#f7eedb] border-b-2 border-[#2c331f] px-6 py-4 lg:hidden">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
+            <h1 className="text-2xl font-black text-[#2c331f] font-display tracking-tight">Admin Panel</h1>
             <button
               onClick={() => setSidebarOpen(true)}
-              className="text-gray-600 hover:text-gray-900"
+              className="text-[#2c331f] hover:scale-110 transition-transform"
             >
-              <Menu size={24} />
+              <Menu size={28} strokeWidth={2.5} />
             </button>
           </div>
         </header>

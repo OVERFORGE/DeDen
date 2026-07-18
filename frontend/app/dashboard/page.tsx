@@ -7,7 +7,7 @@ import { SiweMessage } from "siwe";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ConnectKitButton } from "connectkit";
 import Link from "next/link";
-import { AlertTriangle, Calendar, DollarSign, ExternalLink } from "lucide-react";
+import { AlertTriangle, Calendar, DollarSign, ExternalLink, Mail, Key, Wallet, CheckCircle, XCircle, Clock, CreditCard, HelpCircle, History } from "lucide-react";
 
 // ✅ UPDATED: Added check-in/out date fields
 type Booking = {
@@ -280,48 +280,48 @@ export default function UserDashboard() {
     switch (status) {
       case "WAITLISTED":
         return {
-          icon: "⏳",
+          icon: <Clock size={18} strokeWidth={3} className="shrink-0" />,
           label: "Under Review",
-          classes: "bg-[#172a46] text-white",
+          classes: "bg-[#f7eedb] border-2 border-[#2c331f] text-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f]",
           message:
             "Your application is being reviewed. We'll notify you within 24-48 hours.",
         };
       case "PENDING":
         if (isExpired) {
           return {
-            icon: "⌛",
+            icon: <History size={18} strokeWidth={3} className="shrink-0" />,
             label: "Payment Expired",
-            classes: "bg-[#172a46] text-white",
+            classes: "bg-[#f7eedb] border-2 border-[#2c331f] text-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f]",
             message: "Your payment session expired. Please contact support.",
           };
         }
         return {
-          icon: "💳",
+          icon: <CreditCard size={18} strokeWidth={3} className="shrink-0" />,
           label: "Payment Required",
-          classes: "bg-[#172a46] text-white",
+          classes: "bg-[#9db47d] border-2 border-[#2c331f] text-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f]",
           message:
             "Your application was approved! Complete payment to confirm your spot.",
         };
       case "CONFIRMED":
         return {
-          icon: "✅",
+          icon: <CheckCircle size={18} strokeWidth={3} className="shrink-0" />,
           label: "Confirmed",
-          classes: "bg-[#172a46] text-white",
+          classes: "bg-[#2c331f] border-2 border-[#2c331f] text-[#f7eedb] shadow-[2px_2px_0px_0px_#2c331f]",
           message:
             "All set! Your spot is confirmed. Check your email for details.",
         };
       case "CANCELLED":
         return {
-          icon: "❌",
+          icon: <XCircle size={18} strokeWidth={3} className="shrink-0" />,
           label: "Cancelled",
-          classes: "bg-[#172a46] text-white",
+          classes: "bg-[#f7eedb] border-2 border-[#2c331f] text-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f]",
           message: "This booking was cancelled.",
         };
       default:
         return {
-          icon: "❓",
+          icon: <HelpCircle size={18} strokeWidth={3} className="shrink-0" />,
           label: status,
-          classes: "bg-[#172a46] text-white",
+          classes: "bg-[#f7eedb] border-2 border-[#2c331f] text-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f]",
           message: "",
         };
     }
@@ -330,10 +330,10 @@ export default function UserDashboard() {
   // Loading state
   if (sessionStatus === "loading") {
     return (
-      <div className="max-w-5xl mx-auto p-5 md:p-10 min-h-[80vh] flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <div className="max-w-[1000px] mx-auto p-6 md:p-10 min-h-[80vh] flex items-center justify-center bg-[#f7eedb]">
+        <div className="text-center bg-white border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] p-8 rounded-2xl">
+          <div className="w-12 h-12 border-4 border-[#f7eedb] border-t-[#2c331f] rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-[#2c331f] font-bold tracking-widest uppercase text-sm">Loading...</p>
         </div>
       </div>
     );
@@ -342,17 +342,17 @@ export default function UserDashboard() {
   // Not authenticated
   if (!session?.user) {
     return (
-      <div className="max-w-5xl mx-auto p-5 md:p-10 min-h-[80vh] flex items-center justify-center">
-        <div className="text-center p-10 md:p-16 bg-white rounded-xl shadow-lg w-full max-w-md">
-          <h2 className="text-3xl font-bold mb-4 text-gray-900">
+      <div className="max-w-[1000px] mx-auto p-6 md:p-10 min-h-[80vh] flex items-center justify-center bg-[#f7eedb]">
+        <div className="text-center p-10 md:p-16 bg-white border-2 border-[#2c331f] shadow-[8px_8px_0px_0px_#2c331f] rounded-2xl w-full max-w-md">
+          <h2 className="text-4xl font-black mb-4 text-[#2c331f] font-display tracking-tight">
             Sign In Required
           </h2>
-          <p className="text-lg text-gray-600 mb-6">
-            Please sign in to view your dashboard.
+          <p className="text-sm font-bold text-[#5a6b3a] mb-8 uppercase tracking-widest">
+            Please sign in to view your dashboard
           </p>
           <Link
             href="/auth/signin"
-            className="block w-full py-3 px-6 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            className="block w-full py-4 px-6 bg-[#9db47d] text-[#2c331f] border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 rounded-xl font-bold uppercase tracking-wider transition-all"
           >
             Go to Sign In
           </Link>
@@ -362,91 +362,91 @@ export default function UserDashboard() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-5 md:p-10 min-h-screen">
+    <div className="max-w-[1000px] mx-auto p-6 md:p-10 min-h-screen bg-[#f7eedb] text-[#2c331f]">
       {/* Header Section */}
-      <div className="mb-10">
-        <div className="flex justify-between items-start mb-6 flex-wrap gap-4">
+      <div className="mb-12">
+        <div className="flex justify-between items-start mb-8 flex-wrap gap-4">
           <div>
-            <h1 className="text-4xl font-bold mb-2 text-gray-900">
-              My Dashboard
+            <h1 className="text-5xl md:text-6xl font-black mb-2 text-[#2c331f] font-display tracking-tight">
+              Dashboard
             </h1>
-            <p className="text-base text-gray-500">
+            <p className="text-[#5a6b3a] font-bold uppercase tracking-widest text-sm">
               {userName && `Welcome, ${userName}`}
             </p>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
-            className="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+            className="py-2.5 px-6 bg-[#2c331f] text-[#f7eedb] rounded-full hover:bg-white hover:text-[#2c331f] border-2 border-[#2c331f] transition-colors font-bold uppercase tracking-widest text-[10px]"
           >
             Sign Out
           </button>
         </div>
 
         {/* Account Connections */}
-        <div className="grid md:grid-cols-2 gap-4 mb-6">
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
           {/* Google Connection Card */}
-          <div className="bg-gradient-to-br from-red-50 to-orange-50 p-6 rounded-xl border-2 border-red-200">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 flex items-center gap-2">
-              <span className="text-2xl">🔐</span> Google Account
+          <div className="bg-white p-6 md:p-8 rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+            <h3 className="text-xl font-black mb-4 text-[#2c331f] flex items-center gap-3 tracking-tight">
+              <Mail size={24} strokeWidth={2.5} className="text-[#2c331f]" /> Google Account
             </h3>
-            <div className="space-y-3">
-              <div className="flex items-start gap-2">
-                <span className="text-green-600 font-semibold mt-1">✅</span>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle size={20} strokeWidth={3} className="text-[#9db47d] mt-1 shrink-0" />
                 <div className="flex-1">
-                  <div className="text-sm text-gray-600 mb-1">
-                    Primary Account:
+                  <div className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest mb-1">
+                    Primary Account
                   </div>
-                  <div className="bg-white px-3 py-2 rounded text-sm font-medium break-all">
+                  <div className="bg-[#f7eedb] border-2 border-[#2c331f] px-4 py-2.5 rounded-xl text-sm font-bold text-[#2c331f] break-all">
                     {userEmail}
                   </div>
                 </div>
               </div>
-              <p className="text-gray-700 text-sm">
+              <p className="text-[#2c331f]/70 font-medium text-sm">
                 This is your primary account for signing in.
               </p>
             </div>
           </div>
 
           {/* Wallet Connection Card */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border-2 border-blue-200">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 flex items-center gap-2">
-              <span className="text-2xl">💼</span> Wallet
+          <div className="bg-[#9db47d] p-6 md:p-8 rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+            <h3 className="text-xl font-black mb-4 text-[#2c331f] flex items-center gap-3 tracking-tight">
+              <Wallet size={24} strokeWidth={2.5} className="text-[#2c331f]" /> Wallet
             </h3>
 
             {isWalletLinked ? (
-              <div className="space-y-3">
-                <div className="flex items-start gap-2">
-                  <span className="text-green-600 font-semibold mt-1">✅</span>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle size={20} strokeWidth={3} className="text-[#2c331f] mt-1 shrink-0" />
                   <div className="flex-1">
-                    <div className="text-sm text-gray-600 mb-1">
-                      Linked Wallet:
+                    <div className="text-[10px] font-bold text-[#2c331f]/70 uppercase tracking-widest mb-1">
+                      Linked Wallet
                     </div>
-                    <code className="bg-white px-3 py-2 rounded text-sm font-mono block break-all">
+                    <code className="bg-[#f7eedb] border-2 border-[#2c331f] px-4 py-2.5 rounded-xl text-sm font-bold text-[#2c331f] block break-all">
                       {linkedWallet}
                     </code>
                   </div>
                 </div>
                 <button
                   onClick={handleUnlinkWallet}
-                  className="py-2 px-4 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium w-full"
+                  className="py-3 px-6 bg-white text-[#2c331f] rounded-xl border-2 border-[#2c331f] shadow-[3px_3px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 transition-all text-sm font-bold w-full uppercase tracking-wider"
                 >
                   Unlink Wallet
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                <p className="text-gray-700 text-sm mb-3">
+              <div className="space-y-4">
+                <p className="text-[#2c331f] font-medium text-sm mb-4">
                   Link your wallet to manage bookings and make crypto payments.
                 </p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex-1 min-w-[150px]">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex-1 min-w-[150px] custom-connect-button-wrapper">
                     <ConnectKitButton />
                   </div>
                   {isConnected && (
                     <button
                       onClick={handleLinkWallet}
                       disabled={isLinkingWallet}
-                      className="flex-1 min-w-[150px] py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                      className="flex-1 min-w-[150px] py-3 px-6 bg-[#2c331f] text-[#f7eedb] rounded-xl border-2 border-[#2c331f] shadow-[3px_3px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-bold text-sm uppercase tracking-wider"
                     >
                       {isLinkingWallet ? "Linking..." : "Link Wallet"}
                     </button>
@@ -459,38 +459,37 @@ export default function UserDashboard() {
 
         {/* Wallet Mismatch Warning */}
         {isWalletMismatched && (
-          <div className="mb-6 p-6 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border-2 border-red-200">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <AlertTriangle className="text-red-600" size={24} />
+          <div className="mb-8 p-6 md:p-8 bg-[#e8c37b] rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+            <h3 className="text-xl font-black text-[#2c331f] flex items-center gap-3 tracking-tight">
+              <AlertTriangle strokeWidth={3} className="text-[#2c331f]" size={24} />
               Wallet Mismatch
             </h3>
-            <p className="mt-3 text-gray-700 text-sm">
+            <p className="mt-3 text-[#2c331f] font-medium text-sm">
               The wallet currently connected in your browser does not match the
               wallet linked to this account.
             </p>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-5 space-y-4 md:space-y-0 md:flex md:gap-4">
               <div className="flex-1">
-                <div className="text-sm text-gray-600 mb-1">
-                  Linked to Account:
+                <div className="text-[10px] font-bold text-[#2c331f]/70 uppercase tracking-widest mb-1">
+                  Linked to Account
                 </div>
-                <code className="bg-white px-3 py-2 rounded text-sm font-mono block break-all text-green-700 font-medium">
+                <code className="bg-white px-4 py-2.5 rounded-xl border-2 border-[#2c331f] text-sm font-bold block break-all text-[#5a6b3a]">
                   {truncateAddress(linkedWallet)}
                 </code>
               </div>
               <div className="flex-1">
-                <div className="text-sm text-gray-600 mb-1">
-                  Currently Connected:
+                <div className="text-[10px] font-bold text-[#2c331f]/70 uppercase tracking-widest mb-1">
+                  Currently Connected
                 </div>
-                <code className="bg-white px-3 py-2 rounded text-sm font-mono block break-all text-red-700 font-medium">
+                <code className="bg-white px-4 py-2.5 rounded-xl border-2 border-[#2c331f] text-sm font-bold block break-all text-red-600">
                   {truncateAddress(address)}
                 </code>
               </div>
             </div>
 
-            <p className="mt-4 text-sm font-semibold text-gray-900">
-              Please switch the active wallet in your browser (e.g.,
-              MetaMask) to your linked address to proceed.
+            <p className="mt-5 text-sm font-black text-[#2c331f] uppercase tracking-wider">
+              Please switch the active wallet in your browser to your linked address to proceed.
             </p>
           </div>
         )}
@@ -509,41 +508,43 @@ export default function UserDashboard() {
       </div>
 
       {/* Bookings Section */}
-      <h2 className="text-2xl font-bold mb-5 text-gray-900">My Applications</h2>
+      <h2 className="text-4xl md:text-5xl font-black mb-8 text-[#2c331f] font-display tracking-tight">
+        My Applications
+      </h2>
 
       {loading ? (
-        <div className="text-center p-16 text-lg text-gray-600">
-          <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-5"></div>
-          <p>Loading your applications...</p>
+        <div className="text-center p-16 bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+          <div className="w-12 h-12 border-4 border-[#f7eedb] border-t-[#2c331f] rounded-full animate-spin mx-auto mb-5"></div>
+          <p className="font-bold text-[#2c331f] uppercase tracking-widest text-[10px]">Loading your applications...</p>
         </div>
       ) : !linkedWallet && !isConnected ? (
-        <div className="text-center p-16 bg-white rounded-xl shadow-lg">
-          <div className="text-6xl mb-5">💼</div>
-          <h3 className="text-2xl font-semibold mb-2 text-gray-900">
+        <div className="text-center p-10 md:p-16 bg-[#9db47d] rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+          <Wallet size={48} strokeWidth={2} className="mx-auto mb-5 text-[#2c331f]" />
+          <h3 className="text-3xl font-black mb-2 text-[#2c331f] font-display tracking-tight">
             Link Your Wallet
           </h3>
-          <p className="text-gray-600 mb-6">
+          <p className="text-[#2c331f]/80 font-bold uppercase tracking-widest text-xs mb-8">
             Connect and link your wallet to view your applications and bookings.
           </p>
         </div>
       ) : bookings.length === 0 ? (
-        <div className="text-center p-16 bg-white rounded-xl shadow-lg">
-          <div className="text-6xl mb-5">📋</div>
-          <h3 className="text-2xl font-semibold mb-2 text-gray-900">
+        <div className="text-center p-10 md:p-16 bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
+          <Calendar size={48} strokeWidth={2} className="mx-auto mb-5 text-[#2c331f]" />
+          <h3 className="text-3xl font-black mb-2 text-[#2c331f] font-display tracking-tight">
             No Applications Yet
           </h3>
-          <p className="text-gray-600 mb-6">
+          <p className="text-[#5a6b3a] font-bold uppercase tracking-widest text-xs mb-8">
             You haven't applied to any stays yet.
           </p>
           <Link
             href="/villas"
-            className="inline-block mt-5 py-3 px-8 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            className="inline-block py-3.5 px-8 bg-[#9db47d] text-[#2c331f] rounded-xl border-2 border-[#2c331f] shadow-[3px_3px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 transition-all font-bold uppercase tracking-wider text-sm"
           >
-            Browse Available Stays
+            Browse Available Popups
           </Link>
         </div>
       ) : (
-        <div className="flex flex-col gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {bookings.map((booking) => {
             const statusInfo = getStatusInfo(booking.status, booking.expiresAt);
             const isExpired =
@@ -567,54 +568,54 @@ export default function UserDashboard() {
             return (
               <div
                 key={booking.bookingId}
-                className="bg-white p-6 md:p-8 rounded-xl shadow-lg relative transition-all hover:shadow-xl"
+                className="bg-white p-6 md:p-8 rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] relative flex flex-col h-full"
               >
                 <div
-                  className={`inline-block py-2 px-4 rounded-full text-sm font-semibold mb-5 ${statusInfo.classes}`}
+                  className={`inline-flex items-center gap-2 py-2 px-4 rounded-xl text-[10px] font-bold uppercase tracking-widest mb-6 w-fit ${statusInfo.classes}`}
                 >
                   {statusInfo.icon} {statusInfo.label}
                 </div>
 
-                <h3 className="text-2xl md:text-3xl font-bold mb-2 text-gray-900">
+                <h3 className="text-3xl font-black mb-2 text-[#2c331f] font-display tracking-tight leading-tight">
                   {booking.stay.title}
                 </h3>
                 
                 {/* Room name if selected */}
                 {booking.selectedRoomName && (
-                  <p className="text-md text-blue-600 font-semibold mb-2">
-                    🛏️ {booking.selectedRoomName}
+                  <p className="text-xs font-bold text-[#5a6b3a] uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#9db47d]"></span>
+                    {booking.selectedRoomName}
                   </p>
                 )}
                 
-                <p className="text-lg text-gray-600 mb-1">
-                  📍 {booking.stay.location}
+                <p className="text-sm font-bold text-[#2c331f]/70 uppercase tracking-widest mb-6">
+                  {booking.stay.location}
                 </p>
 
-                {/* ✅ NEW: Show Check-In/Out Dates */}
+                {/* Show Check-In/Out Dates */}
                 {checkInDate && checkOutDate && (
-                  <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 my-4">
-                    <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                      <Calendar size={16} />
+                  <div className="bg-[#f7eedb] border-2 border-[#2c331f] rounded-xl p-4 mb-6">
+                    <p className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Calendar size={14} />
                       Your Stay Period
                     </p>
-                    <div className="flex items-center justify-between">
-                      <div className="text-center">
-                        <div className="text-xs text-gray-500 mb-1">Check-in</div>
-                        <div className="font-bold text-gray-900">
+                    <div className="flex items-center justify-between text-[#2c331f]">
+                      <div className="text-left">
+                        <div className="text-[10px] font-bold text-[#2c331f]/50 uppercase tracking-widest mb-1">Check-in</div>
+                        <div className="font-black text-sm">
                           {checkInDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </div>
                       </div>
-                      <div className="flex-shrink-0 px-3">
+                      <div className="flex-shrink-0 px-2">
                         <div className="text-center">
-                          <div className="text-xs text-gray-500 mb-1">Duration</div>
-                          <div className="font-bold text-blue-600">
+                          <div className="font-bold text-[#5a6b3a] text-xs px-3 py-1 border-2 border-[#2c331f] rounded-full bg-white">
                             {nights} night{nights !== 1 ? 's' : ''}
                           </div>
                         </div>
                       </div>
-                      <div className="text-center">
-                        <div className="text-xs text-gray-500 mb-1">Check-out</div>
-                        <div className="font-bold text-gray-900">
+                      <div className="text-right">
+                        <div className="text-[10px] font-bold text-[#2c331f]/50 uppercase tracking-widest mb-1">Check-out</div>
+                        <div className="font-black text-sm">
                           {checkOutDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </div>
                       </div>
@@ -622,39 +623,41 @@ export default function UserDashboard() {
                   </div>
                 )}
 
-                <div className="p-4 bg-gray-50 rounded-lg mb-5 text-base text-gray-700">
+                <div className="p-4 bg-[#f7eedb]/50 rounded-xl mb-6 text-sm font-medium text-[#2c331f] border-2 border-[#2c331f] border-dashed">
                   {statusInfo.message}
                 </div>
 
-                <div className="border-t border-gray-200 pt-5 mb-5">
+                <div className="flex-1"></div>
+
+                <div className="border-t-2 border-[#2c331f] pt-6 mb-6">
                   <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
-                    <span className="text-gray-500">Application ID:</span>
-                    <code className="text-gray-900 font-semibold font-mono">
+                    <span className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">Application ID:</span>
+                    <code className="bg-[#f7eedb] px-2 py-1 rounded-md border-2 border-[#2c331f] text-[#2c331f] font-bold text-[10px]">
                       {booking.bookingId}
                     </code>
                   </div>
-                  <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
-                    <span className="text-gray-500">Applied on:</span>
-                    <span className="text-gray-900 font-semibold">
+                  <div className="flex justify-between items-center mb-4 text-sm flex-wrap gap-2">
+                    <span className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">Applied on:</span>
+                    <span className="text-[#2c331f] font-black text-xs">
                       {new Date(booking.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                   
                   {/* Per-night pricing if available */}
                   {perNightUSDC && perNightUSDT && nights > 0 && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                      <div className="flex justify-between items-center mb-2 text-sm">
-                        <span className="text-gray-600 flex items-center gap-1">
-                          <DollarSign size={16} />
-                          Price per night:
+                    <div className="bg-white border-2 border-[#2c331f] rounded-xl p-4 mb-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest flex items-center gap-1">
+                          <DollarSign size={14} />
+                          Price per night
                         </span>
-                        <span className="text-gray-900 font-semibold">
+                        <span className="text-[#2c331f] font-black text-sm">
                           ${perNightUSDC} USDC / ${perNightUSDT} USDT
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-600">Calculation:</span>
-                        <span className="text-gray-700 font-mono text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">Calculation:</span>
+                        <span className="text-[#2c331f] font-bold text-[10px] bg-[#f7eedb] px-2 py-1 border border-[#2c331f] rounded">
                           ${perNightUSDC} × {nights} nights = ${totalUSDC || (perNightUSDC * nights).toFixed(2)}
                         </span>
                       </div>
@@ -663,41 +666,41 @@ export default function UserDashboard() {
                   
                   {/* Total amount */}
                   {(totalUSDC || totalUSDT || booking.paymentAmount) && (
-                    <div className="flex justify-between items-center mb-3 text-sm flex-wrap gap-2">
-                      <span className="text-gray-500 font-semibold">Total Amount:</span>
-                      <span className="text-gray-900 font-bold text-lg">
+                    <div className="flex justify-between items-center p-4 bg-[#2c331f] rounded-xl mb-4 text-sm flex-wrap gap-2 shadow-[2px_2px_0px_0px_#9db47d]">
+                      <span className="text-[#f7eedb] font-bold uppercase tracking-widest text-[10px]">Total Amount</span>
+                      <span className="text-[#9db47d] font-black text-xl">
                         ${booking.paymentAmount || totalUSDC} {paymentToken}
                       </span>
                     </div>
                   )}
 
-                  {/* ✅ NEW: Transaction Hash (for confirmed bookings) */}
+                  {/* Transaction Hash */}
                   {booking.status === "CONFIRMED" && booking.txHash && (
-                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mt-4">
+                    <div className="bg-[#9db47d]/20 border-2 border-[#2c331f] rounded-xl p-4 mt-2">
                       <div className="flex justify-between items-start gap-2 mb-2">
-                        <span className="text-sm font-semibold text-gray-700">
-                          Transaction Hash:
+                        <span className="text-[10px] font-bold text-[#5a6b3a] uppercase tracking-widest">
+                          Tx Hash:
                         </span>
                         <a
                           href={getExplorerUrl(booking.chainId, booking.txHash)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-mono hover:underline"
+                          className="flex items-center gap-1 text-[10px] font-bold text-[#2c331f] hover:text-[#5a6b3a] underline underline-offset-2"
                         >
-                          {booking.txHash.slice(0, 10)}...{booking.txHash.slice(-8)}
-                          <ExternalLink size={14} />
+                          {booking.txHash.slice(0, 8)}...{booking.txHash.slice(-6)}
+                          <ExternalLink size={12} />
                         </a>
                       </div>
                       {booking.chainId && (
-                        <div className="flex justify-between items-center text-xs text-gray-600">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-[#2c331f]/70 uppercase tracking-widest">
                           <span>Network:</span>
-                          <span className="font-semibold">{getChainName(booking.chainId)}</span>
+                          <span className="text-[#2c331f]">{getChainName(booking.chainId)}</span>
                         </div>
                       )}
                       {booking.blockNumber && (
-                        <div className="flex justify-between items-center text-xs text-gray-600 mt-1">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-[#2c331f]/70 uppercase tracking-widest mt-1">
                           <span>Block:</span>
-                          <span className="font-mono">#{booking.blockNumber}</span>
+                          <span className="text-[#2c331f]">#{booking.blockNumber}</span>
                         </div>
                       )}
                     </div>
@@ -708,22 +711,20 @@ export default function UserDashboard() {
                 {booking.status === "PENDING" && !isExpired && (
                   <Link
                     href={`/booking/${booking.bookingId}`}
-                    className="block w-full py-3 px-5 bg-[#172a46] text-white text-center rounded-lg font-semibold text-lg hover:bg-[#172a46]/80 transition-colors"
+                    className="block w-full py-4 px-6 bg-[#9db47d] text-[#2c331f] border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 text-center rounded-xl font-bold uppercase tracking-wider text-sm transition-all"
                   >
-                    Complete Payment
+                    Complete Payment ✦
                   </Link>
                 )}
 
                 {booking.status === "WAITLISTED" && (
                   <Link
                     href={`/stay/${booking.stay.stayId}`}
-                    className="block w-full py-3 px-5 bg-gray-600 text-white text-center rounded-lg font-semibold text-lg hover:bg-gray-700 transition-colors"
+                    className="block w-full py-4 px-6 bg-[#f7eedb] text-[#2c331f] border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 text-center rounded-xl font-bold uppercase tracking-wider text-sm transition-all"
                   >
-                    View Stay Details
+                    View Popup Details ✦
                   </Link>
                 )}
-
-                {/* ✅ REMOVED: "View Booking Details" button - everything is shown here */}
               </div>
             );
           })}
