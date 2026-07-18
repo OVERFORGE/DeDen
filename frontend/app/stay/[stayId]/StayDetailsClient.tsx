@@ -22,6 +22,7 @@ type StayData = {
   slotsAvailable: number;
   allowWaitlist: boolean;
   images: string[];
+  heroImage?: string | null;
   amenities: string[];
   highlights: string[];
   rooms: any[];
