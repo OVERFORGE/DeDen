@@ -1,5 +1,5 @@
 // File: lib/verification.ts
-// ✅ UPDATED: Handles reservation and remaining payment verification with correct status transitions
+// ✅ UPDATED: Handles reservation and remaining payment verification with NFT minting
 
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
@@ -7,6 +7,7 @@ import { getPublicClient } from './web3-client';
 import { chainConfig, treasuryAddress } from './config';
 import { parseUnits } from 'viem';
 import { sendConfirmationEmail, sendReservationConfirmedEmail } from './email';
+import { mintBookingNFT } from './nft-service'; // ✅ NEW: Import NFT service
 
 /**
  * Check if a transaction hash has already been used
@@ -27,13 +28,13 @@ export async function checkTransactionUsed(txHash: string): Promise<boolean> {
 
 /**
  * Verify a payment transaction on the blockchain with retries
- * ✅ UPDATED: Handles both reservation and remaining payments
+ * ✅ UPDATED: Handles both reservation and remaining payments + NFT minting
  */
 export async function verifyPayment(
   bookingId: string,
   txHash: string,
   chainId: number,
-  isRemainingPayment: boolean = false, // ✅ NEW: Flag to indicate remaining payment
+  isRemainingPayment: boolean = false,
   maxRetries: number = 10,
   retryDelayMs: number = 3000
 ): Promise<void> {
@@ -62,7 +63,7 @@ export async function verifyPayment(
         throw new Error('Booking not found');
       }
 
-      // ✅ NEW: Check if this is reservation or remaining payment
+      // ✅ Check if this is reservation or remaining payment
       const isReservationPayment = booking.requiresReservation && !booking.reservationPaid && !isRemainingPayment;
       
       console.log(`[Verification] Requires Reservation: ${booking.requiresReservation}`);
@@ -74,7 +75,6 @@ export async function verifyPayment(
       let paymentToken: string;
       
       if (isReservationPayment) {
-        // This is a reservation payment
         expectedAmount = booking.reservationAmount!;
         paymentToken = booking.reservationToken || booking.paymentToken || 'USDC';
         
@@ -85,7 +85,6 @@ export async function verifyPayment(
           return;
         }
       } else if (isRemainingPayment) {
-        // This is remaining payment after reservation
         expectedAmount = booking.remainingAmount!;
         paymentToken = booking.remainingToken || booking.paymentToken || 'USDC';
         
@@ -100,7 +99,6 @@ export async function verifyPayment(
           return;
         }
       } else {
-        // This is a full payment (no reservation)
         expectedAmount = booking.paymentAmount!;
         paymentToken = booking.paymentToken || 'USDC';
         
@@ -275,9 +273,11 @@ export async function verifyPayment(
           
           console.log(`[Verification] Gas fee: ${gasFeeNative.toFixed(6)} ${chain.nativeCurrency.symbol} (~$${gasFeeUSD.toFixed(4)})`);
           
-          // ✅ NEW: Update booking based on payment type
+          // ✅ UPDATE BOOKING BASED ON PAYMENT TYPE
           if (isReservationPayment) {
+            // ==========================================
             // RESERVATION PAYMENT CONFIRMED
+            // ==========================================
             console.log('[Verification] 💾 Updating booking status to RESERVED...');
             
             await db.booking.update({
@@ -360,8 +360,11 @@ export async function verifyPayment(
             }
             
             console.log(`\n[Verification] ✅✅✅ RESERVATION confirmed for booking ${bookingId} ✅✅✅\n`);
+            
           } else if (isRemainingPayment) {
-            // REMAINING PAYMENT CONFIRMED
+            // ==========================================
+            // REMAINING PAYMENT CONFIRMED (WITH NFT)
+            // ==========================================
             console.log('[Verification] 💾 Updating booking status to CONFIRMED...');
             
             await db.booking.update({
@@ -398,6 +401,90 @@ export async function verifyPayment(
               },
             });
             
+            // ✅ ✅ ✅ MINT NFT AFTER FULL PAYMENT ✅ ✅ ✅
+            console.log('[Verification] 🎫 Starting NFT minting process...');
+            try {
+              const nftResult = await mintBookingNFT({
+                bookingId: booking.bookingId,
+                recipientAddress: tx.from,
+                chainId: chainId,
+                stayTitle: booking.stay.title,
+                location: booking.stay.location,
+                checkInDate: booking.checkInDate!,
+                checkOutDate: booking.checkOutDate!,
+                guestName: booking.guestName || booking.user?.name || 'Guest',
+                numberOfNights: booking.numberOfNights || 0,
+              });
+
+              if (nftResult.success) {
+                console.log(`[Verification] ✅ NFT minted successfully! Token ID: ${nftResult.tokenId}`);
+                
+                // Update booking with NFT details
+                await db.booking.update({
+                  where: { bookingId },
+                  data: {
+                    nftTokenId: nftResult.tokenId?.toString(),
+                    nftContractAddress: nftResult.contractAddress,
+                    nftMinted: true,
+                  },
+                });
+
+                // Log NFT minting
+                await db.activityLog.create({
+                  data: {
+                    bookingId: booking.id,
+                    userId: booking.userId,
+                    action: 'nft_minted',
+                    entity: 'booking',
+                    entityId: booking.id,
+                    details: {
+                      tokenId: nftResult.tokenId,
+                      contractAddress: nftResult.contractAddress,
+                      txHash: nftResult.txHash,
+                      chainId: chainId,
+                    },
+                  },
+                });
+
+                console.log('[Verification] 🎉 NFT ticket successfully minted and saved!');
+              } else {
+                console.error(`[Verification] ⚠️ NFT minting failed: ${nftResult.error}`);
+                
+                // Log NFT minting failure (but don't fail the booking)
+                await db.activityLog.create({
+                  data: {
+                    bookingId: booking.id,
+                    userId: booking.userId,
+                    action: 'nft_mint_failed',
+                    entity: 'booking',
+                    entityId: booking.id,
+                    details: {
+                      error: nftResult.error,
+                      chainId: chainId,
+                    },
+                  },
+                });
+              }
+            } catch (nftError) {
+              console.error('[Verification] ⚠️ NFT minting error:', nftError);
+              
+              // Log error but don't fail the booking
+              await db.activityLog.create({
+                data: {
+                  bookingId: booking.id,
+                  userId: booking.userId,
+                  action: 'nft_mint_error',
+                  entity: 'booking',
+                  entityId: booking.id,
+                  details: {
+                    error: (nftError as Error).message,
+                    chainId: chainId,
+                  },
+                },
+              });
+            }
+            // ✅ ✅ ✅ END NFT MINTING ✅ ✅ ✅
+            
             // Send full confirmation email
             if (booking.user?.email && booking.stay) {
               try {
@@ -424,8 +511,11 @@ export async function verifyPayment(
             }
             
             console.log(`\n[Verification] ✅✅✅ FULL BOOKING confirmed for ${bookingId} ✅✅✅\n`);
+            
           } else {
-            // FULL PAYMENT (no reservation)
+            // ==========================================
+            // FULL PAYMENT - NO RESERVATION (WITH NFT)
+            // ==========================================
             console.log('[Verification] 💾 Updating booking status to CONFIRMED...');
             
             await db.booking.update({
@@ -461,6 +551,90 @@ export async function verifyPayment(
                 },
               },
             });
+            
+            // ✅ ✅ ✅ MINT NFT AFTER FULL PAYMENT ✅ ✅ ✅
+            console.log('[Verification] 🎫 Starting NFT minting process...');
+            try {
+              const nftResult = await mintBookingNFT({
+                bookingId: booking.bookingId,
+                recipientAddress: tx.from,
+                chainId: chainId,
+                stayTitle: booking.stay.title,
+                location: booking.stay.location,
+                checkInDate: booking.checkInDate!,
+                checkOutDate: booking.checkOutDate!,
+                guestName: booking.guestName || booking.user?.name || 'Guest',
+                numberOfNights: booking.numberOfNights || 0,
+              });
+
+              if (nftResult.success) {
+                console.log(`[Verification] ✅ NFT minted successfully! Token ID: ${nftResult.tokenId}`);
+                
+                // Update booking with NFT details
+                await db.booking.update({
+                  where: { bookingId },
+                  data: {
+                    nftTokenId: nftResult.tokenId?.toString(),
+                    nftContractAddress: nftResult.contractAddress,
+                    nftMinted: true,
+                  },
+                });
+
+                // Log NFT minting
+                await db.activityLog.create({
+                  data: {
+                    bookingId: booking.id,
+                    userId: booking.userId,
+                    action: 'nft_minted',
+                    entity: 'booking',
+                    entityId: booking.id,
+                    details: {
+                      tokenId: nftResult.tokenId,
+                      contractAddress: nftResult.contractAddress,
+                      txHash: nftResult.txHash,
+                      chainId: chainId,
+                    },
+                  },
+                });
+
+                console.log('[Verification] 🎉 NFT ticket successfully minted and saved!');
+              } else {
+                console.error(`[Verification] ⚠️ NFT minting failed: ${nftResult.error}`);
+                
+                // Log NFT minting failure
+                await db.activityLog.create({
+                  data: {
+                    bookingId: booking.id,
+                    userId: booking.userId,
+                    action: 'nft_mint_failed',
+                    entity: 'booking',
+                    entityId: booking.id,
+                    details: {
+                      error: nftResult.error,
+                      chainId: chainId,
+                    },
+                  },
+                });
+              }
+            } catch (nftError) {
+              console.error('[Verification] ⚠️ NFT minting error:', nftError);
+              
+              // Log error but don't fail the booking
+              await db.activityLog.create({
+                data: {
+                  bookingId: booking.id,
+                  userId: booking.userId,
+                  action: 'nft_mint_error',
+                  entity: 'booking',
+                  entityId: booking.id,
+                  details: {
+                    error: (nftError as Error).message,
+                    chainId: chainId,
+                  },
+                },
+              });
+            }
+            // ✅ ✅ ✅ END NFT MINTING ✅ ✅ ✅
             
             // Send confirmation email
             if (booking.user?.email && booking.stay) {

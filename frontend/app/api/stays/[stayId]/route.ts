@@ -1,13 +1,10 @@
-// File: app/api/stays/[stayId]/route.ts
-// ✅ FIXED: Returns ALL fields needed for the apply page
-
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 
 /**
  * GET /api/stays/[stayId]
  * Fetches public details for a single stay,
- * including dates, duration, prices, and room options for the apply page.
+ * including dates, duration, prices, room options, AND reservation settings.
  */
 export async function GET(
   request: Request,
@@ -32,16 +29,16 @@ export async function GET(
         location: true,
         description: true,
         
-        // ✅ CRITICAL: Date & Duration fields for the apply form
+        // ✅ Date & Duration
         startDate: true,
         endDate: true,
         duration: true,
         
-        // ✅ Pricing (defaults if no room selected)
+        // ✅ Pricing
         priceUSDC: true,
         priceUSDT: true,
         
-        // ✅ Room options with their prices
+        // ✅ Room options
         rooms: true,
         
         // ✅ Additional useful fields
@@ -51,6 +48,12 @@ export async function GET(
         images: true,
         amenities: true,
         highlights: true,
+
+        // ✅ NEW: Reservation System Fields (CRITICAL FIX)
+        // These must be selected so the frontend knows if reservation is enabled
+        requiresReservation: true,
+        reservationAmount: true,
+        minNightsForReservation: true,
       },
     });
 

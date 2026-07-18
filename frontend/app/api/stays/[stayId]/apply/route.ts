@@ -5,8 +5,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-
+import { authOptions } from "@/lib/auth";
 /**
  * Apply for a stay with referral code, loyalty discount, and reservation system support
  * POST /api/stays/[stayId]/apply
@@ -114,8 +113,12 @@ export async function POST(
     }
 
     // ✅ NEW: Check if booking requires reservation (2+ nights)
-const requiresReservation = stay.requiresReservation && numberOfNights > 2;    const reservationAmount = requiresReservation ? (stay.reservationAmount || 30) : null;
-
+    const requiresReservation = stay.requiresReservation && 
+      numberOfNights >= (stay.minNightsForReservation || 2);
+    
+const reservationAmount = requiresReservation 
+  ? (stay.reservationAmount ?? 30) 
+  : null;
     console.log(`[Apply] Booking requires reservation: ${requiresReservation}`);
     if (requiresReservation) {
       console.log(`[Apply] Reservation amount: $${reservationAmount}`);
