@@ -12,8 +12,8 @@ type StayProps = {
     title: string;
     slotsTotal: number;
     priceUSDC: number;
-    shortDescription?: string;
-    images?: string[];
+    shortDescription?: string | null;
+    images?: string[] | null;
     heroImage?: string | null;
   };
 };
