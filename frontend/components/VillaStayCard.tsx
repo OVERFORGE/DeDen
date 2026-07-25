@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Bed, Tag, Home, Users, Globe, Coffee, Backpack, ArrowRight, ArrowLeft } from "lucide-react";
+import { Bed, Tag, Home, Users, Globe, Coffee, Backpack, ArrowRight, ArrowLeft, Wifi, MapPin, Sun, Wind, Music, TreePine } from "lucide-react";
+
+const IconMap: Record<string, any> = { Home, Users, Globe, Coffee, Backpack, Wifi, MapPin, Sun, Wind, Music, TreePine };
 
 type StayProps = {
   stay: {
@@ -15,6 +17,7 @@ type StayProps = {
     shortDescription?: string | null;
     images?: string[] | null;
     heroImage?: string | null;
+    amenityIcons?: any;
   };
 };
 
@@ -94,30 +97,48 @@ export default function VillaStayCard({ stay }: StayProps) {
 
       {/* Bottom Amenities Bar */}
       <div className="w-full bg-[#ebdcc2] rounded-xl mt-4 py-4 px-6 md:px-12 flex flex-wrap justify-between items-center shadow-sm">
-        <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
-          <Home size={22} className="text-[#46392b]/70" strokeWidth={1} />
-          <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">Cozy Spaces</span>
-        </div>
-        <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
-        <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
-          <Users size={22} className="text-[#46392b]/70" strokeWidth={1} />
-          <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">Good People</span>
-        </div>
-        <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
-        <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
-          <Globe size={22} className="text-[#46392b]/70" strokeWidth={1} />
-          <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">New Stories</span>
-        </div>
-        <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
-        <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
-          <Coffee size={22} className="text-[#46392b]/70" strokeWidth={1} />
-          <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">Slow Days</span>
-        </div>
-        <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
-        <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
-          <Backpack size={22} className="text-[#46392b]/70" strokeWidth={1} />
-          <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">Lasting Memories</span>
-        </div>
+        {(stay.amenityIcons && stay.amenityIcons.length > 0) ? (
+          stay.amenityIcons.map((am: any, i: number) => {
+            const IconComponent = IconMap[am.icon] || Home;
+            return (
+              <div key={i} className="flex items-center gap-1.5 md:gap-3 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
+                <IconComponent size={22} className="text-[#46392b]/70" strokeWidth={1} />
+                <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">{am.text}</span>
+                {i < stay.amenityIcons!.length - 1 && (
+                  <div className="hidden md:block w-px h-6 bg-[#46392b]/10 ml-6"></div>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          // Default fallback
+          <>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
+              <Home size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">Cozy Spaces</span>
+            </div>
+            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
+              <Users size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">Good People</span>
+            </div>
+            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
+              <Globe size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">New Stories</span>
+            </div>
+            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
+              <Coffee size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">Slow Days</span>
+            </div>
+            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
+            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
+              <Backpack size={22} className="text-[#46392b]/70" strokeWidth={1} />
+              <span className="text-[7px] font-black text-[#46392b]/70 uppercase tracking-widest">Lasting Memories</span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

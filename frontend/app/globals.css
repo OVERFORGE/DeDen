@@ -6,9 +6,15 @@
   src: url("./fonts/berlin.ttf");
 }
 
+@font-face {
+  font-family: caveat;
+  src: url("./fonts/caveat.ttf");
+}
+
 @theme {
   --font-berlin: berlin, "sans-serif";
   --font-inter: "Inter", "sans-serif";
+  --font-caveat: caveat, "sans-serif";
 }
 
 html {
@@ -17,8 +23,13 @@ html {
 
 /* Marquee animation */
 @keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 .animate-marquee {

@@ -82,6 +82,7 @@ export async function POST(request: Request) {
       // Arrays - ensure they're arrays
       images: body.images || [],
       amenities: body.amenities || [],
+      amenityIcons: body.amenityIcons || [],
       rooms: body.rooms || [],
       galleryImages: body.galleryImages || [],
       highlights: body.highlights || [],

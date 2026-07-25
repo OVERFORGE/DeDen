@@ -126,6 +126,9 @@ export async function PATCH(
     if (body.amenities !== undefined) {
       dataToUpdate.amenities = Array.isArray(body.amenities) ? body.amenities : [];
     }
+    if (body.amenityIcons !== undefined) {
+      dataToUpdate.amenityIcons = Array.isArray(body.amenityIcons) ? body.amenityIcons : [];
+    }
     if (body.tags !== undefined) {
       dataToUpdate.tags = Array.isArray(body.tags) ? body.tags : [];
     }

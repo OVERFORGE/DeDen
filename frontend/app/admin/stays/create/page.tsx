@@ -6,7 +6,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 
-// Form schema - all strings from inputs
 const staySchema = z.object({
   title: z.string().min(3, 'Title is required'),
   slug: z.string().min(3, 'Slug is required (e.g., "ibw")'),
@@ -34,7 +33,6 @@ export default function CreateStayPage() {
   const onSubmit: SubmitHandler<StayFormInputs> = async (data) => {
     setApiError(null);
     
-    // Validate and transform numeric values
     const priceUSDC = parseFloat(data.priceUSDC);
     const priceUSDT = parseFloat(data.priceUSDT);
     const slotsTotal = parseInt(data.slotsTotal, 10);
@@ -75,305 +73,165 @@ export default function CreateStayPage() {
       }
       
       alert('Stay created successfully! Now add room types with specific prices.');
-      router.push(`/admin/stays/${result.id}`); // Redirect to edit page to add rooms
+      router.push(`/admin/stays/${result.id}`);
     } catch (err: any) {
       setApiError(err.message);
     }
   };
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>Create New Stay</h1>
-      
-      {/* Important Notice */}
-      <div style={styles.noticeBox}>
-        <strong>📌 Note:</strong> The prices you set here are <strong>default values</strong> that will be suggested when you create room types. 
-        Each room will have its own specific prices that guests will actually pay.
-      </div>
-
-      <form onSubmit={handleSubmit(onSubmit)} style={styles.form}>
-        <div style={styles.field}>
-          <label style={styles.label}>Stay Title</label>
-          <input 
-            {...register('title')} 
-            placeholder="IBW 2026 Den"
-            style={styles.input}
-          />
-          {errors.title && <span style={styles.error}>{errors.title.message}</span>}
-        </div>
-
-        <div style={styles.field}>
-          <label style={styles.label}>Slug (URL-friendly)</label>
-          <input 
-            {...register('slug')} 
-            placeholder="ibw-2026"
-            style={styles.input}
-          />
-          {errors.slug && <span style={styles.error}>{errors.slug.message}</span>}
-          <small style={styles.hint}>Used in URLs like: /stay/ibw-2026</small>
-        </div>
-
-        <div style={styles.field}>
-          <label style={styles.label}>Location</label>
-          <input 
-            {...register('location')} 
-            placeholder="Goa, India"
-            style={styles.input}
-          />
-          {errors.location && <span style={styles.error}>{errors.location.message}</span>}
-        </div>
-
-        <div style={styles.fieldGroup}>
-          <div style={styles.field}>
-            <label style={styles.label}>Start Date</label>
-            <input 
-              type="date" 
-              {...register('startDate')}
-              style={styles.input}
-            />
-            {errors.startDate && <span style={styles.error}>{errors.startDate.message}</span>}
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>End Date</label>
-            <input 
-              type="date" 
-              {...register('endDate')}
-              style={styles.input}
-            />
-            {errors.endDate && <span style={styles.error}>{errors.endDate.message}</span>}
-          </div>
-        </div>
-
-        {/* Price Section with Clear Labels */}
-        <div style={styles.priceSection}>
-          <h3 style={styles.sectionTitle}>Default Room Prices</h3>
-          <p style={styles.sectionDescription}>
-            These will be used as suggested prices when creating room types. 
-            You can set different prices for each room type later.
+    <div className="min-h-screen bg-[#F3EDE0] py-16 px-6 sm:px-10 font-inter">
+      <div className="max-w-[800px] mx-auto">
+        <h1 className="text-4xl md:text-5xl font-serif text-[#3D4331] font-bold mb-8">
+          Create New Stay
+        </h1>
+        
+        {/* Important Notice */}
+        <div className="bg-[#EBE1D0] border-l-4 border-[#96A476] rounded-r-xl p-5 mb-10 shadow-sm">
+          <p className="text-sm font-semibold text-[#3D4331]">
+            <span className="uppercase tracking-widest text-[10px] font-black mr-2 bg-[#96A476] text-[#F3EDE0] px-2 py-1 rounded-full">Note</span>
+            The prices you set here are <strong className="font-black">default values</strong> that will be suggested when you create room types. Each room will have its own specific prices that guests will actually pay.
           </p>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-3xl p-8 sm:p-12 shadow-sm border border-[#EBE1D0]/50 space-y-8">
           
-          <div style={styles.fieldGroup}>
-            <div style={styles.field}>
-              <label style={styles.label}>
-                Default USDC Price
-                <span style={styles.labelHint}> (for new rooms)</span>
-              </label>
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase tracking-widest text-[#3D4331]">Stay Title</label>
+            <input 
+              {...register('title')} 
+              placeholder="IBW 2026 Den"
+              className="w-full bg-[#F3EDE0]/50 border border-[#EBE1D0] rounded-xl px-4 py-3 text-sm text-[#3D4331] font-medium outline-none focus:border-[#96A476] transition-colors"
+            />
+            {errors.title && <span className="text-xs text-red-500 font-bold">{errors.title.message}</span>}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase tracking-widest text-[#3D4331]">Slug (URL-friendly)</label>
+            <input 
+              {...register('slug')} 
+              placeholder="ibw-2026"
+              className="w-full bg-[#F3EDE0]/50 border border-[#EBE1D0] rounded-xl px-4 py-3 text-sm text-[#3D4331] font-medium outline-none focus:border-[#96A476] transition-colors"
+            />
+            {errors.slug && <span className="text-xs text-red-500 font-bold">{errors.slug.message}</span>}
+            <p className="text-[10px] text-[#3D4331]/60 font-semibold mt-1">Used in URLs like: /stay/ibw-2026</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase tracking-widest text-[#3D4331]">Location</label>
+            <input 
+              {...register('location')} 
+              placeholder="Goa, India"
+              className="w-full bg-[#F3EDE0]/50 border border-[#EBE1D0] rounded-xl px-4 py-3 text-sm text-[#3D4331] font-medium outline-none focus:border-[#96A476] transition-colors"
+            />
+            {errors.location && <span className="text-xs text-red-500 font-bold">{errors.location.message}</span>}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-widest text-[#3D4331]">Start Date</label>
               <input 
-                type="number" 
-                step="0.01"
-                {...register('priceUSDC')} 
-                placeholder="300"
-                style={styles.input}
+                type="date" 
+                {...register('startDate')}
+                className="w-full bg-[#F3EDE0]/50 border border-[#EBE1D0] rounded-xl px-4 py-3 text-sm text-[#3D4331] font-medium outline-none focus:border-[#96A476] transition-colors"
               />
-              {errors.priceUSDC && <span style={styles.error}>{errors.priceUSDC.message}</span>}
+              {errors.startDate && <span className="text-xs text-red-500 font-bold">{errors.startDate.message}</span>}
             </div>
-            <div style={styles.field}>
-              <label style={styles.label}>
-                Default USDT Price
-                <span style={styles.labelHint}> (for new rooms)</span>
-              </label>
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-widest text-[#3D4331]">End Date</label>
               <input 
-                type="number" 
-                step="0.01"
-                {...register('priceUSDT')} 
-                placeholder="300"
-                style={styles.input}
+                type="date" 
+                {...register('endDate')}
+                className="w-full bg-[#F3EDE0]/50 border border-[#EBE1D0] rounded-xl px-4 py-3 text-sm text-[#3D4331] font-medium outline-none focus:border-[#96A476] transition-colors"
               />
-              {errors.priceUSDT && <span style={styles.error}>{errors.priceUSDT.message}</span>}
+              {errors.endDate && <span className="text-xs text-red-500 font-bold">{errors.endDate.message}</span>}
             </div>
           </div>
-        </div>
 
-        <div style={styles.field}>
-          <label style={styles.label}>Total Slots</label>
-          <input 
-            type="number" 
-            {...register('slotsTotal')} 
-            placeholder="50"
-            style={styles.input}
-          />
-          {errors.slotsTotal && <span style={styles.error}>{errors.slotsTotal.message}</span>}
-          <small style={styles.hint}>Maximum number of guests for this stay</small>
-        </div>
-
-        {apiError && (
-          <div style={styles.errorBox}>
-            <strong>Error:</strong> {apiError}
+          <div className="bg-[#F3EDE0]/30 rounded-2xl p-6 border border-[#EBE1D0]/50">
+            <h3 className="text-lg font-serif font-bold text-[#3D4331] mb-2">Default Room Prices</h3>
+            <p className="text-xs text-[#3D4331]/70 font-medium mb-6">
+              These will be used as suggested prices when creating room types. You can set different prices for each room type later.
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-black uppercase tracking-widest text-[#3D4331]">
+                  Default USDC Price
+                </label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  {...register('priceUSDC')} 
+                  placeholder="300"
+                  className="w-full bg-[#F3EDE0]/50 border border-[#EBE1D0] rounded-xl px-4 py-3 text-sm text-[#3D4331] font-medium outline-none focus:border-[#96A476] transition-colors"
+                />
+                {errors.priceUSDC && <span className="text-xs text-red-500 font-bold">{errors.priceUSDC.message}</span>}
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-black uppercase tracking-widest text-[#3D4331]">
+                  Default USDT Price
+                </label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  {...register('priceUSDT')} 
+                  placeholder="300"
+                  className="w-full bg-[#F3EDE0]/50 border border-[#EBE1D0] rounded-xl px-4 py-3 text-sm text-[#3D4331] font-medium outline-none focus:border-[#96A476] transition-colors"
+                />
+                {errors.priceUSDT && <span className="text-xs text-red-500 font-bold">{errors.priceUSDT.message}</span>}
+              </div>
+            </div>
           </div>
-        )}
 
-        <div style={styles.buttonGroup}>
-          <button 
-            type="button" 
-            onClick={() => router.push('/admin/stays')}
-            style={styles.cancelButton}
-          >
-            Cancel
-          </button>
-          <button 
-            type="submit" 
-            disabled={isSubmitting} 
-            style={{
-              ...styles.button,
-              opacity: isSubmitting ? 0.6 : 1,
-              cursor: isSubmitting ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isSubmitting ? 'Creating...' : 'Create Stay & Add Rooms'}
-          </button>
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase tracking-widest text-[#3D4331]">Total Slots</label>
+            <input 
+              type="number" 
+              {...register('slotsTotal')} 
+              placeholder="50"
+              className="w-full bg-[#F3EDE0]/50 border border-[#EBE1D0] rounded-xl px-4 py-3 text-sm text-[#3D4331] font-medium outline-none focus:border-[#96A476] transition-colors"
+            />
+            {errors.slotsTotal && <span className="text-xs text-red-500 font-bold">{errors.slotsTotal.message}</span>}
+            <p className="text-[10px] text-[#3D4331]/60 font-semibold mt-1">Maximum number of guests for this stay</p>
+          </div>
+
+          {apiError && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-semibold border border-red-100">
+              {apiError}
+            </div>
+          )}
+
+          <div className="pt-6 flex flex-col sm:flex-row gap-4">
+            <button 
+              type="button" 
+              onClick={() => router.push('/admin/stays')}
+              className="flex-1 bg-[#F3EDE0] text-[#3D4331] font-bold text-sm tracking-widest uppercase rounded-full py-4 hover:bg-[#EBE1D0] transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              disabled={isSubmitting} 
+              className={`flex-[2] bg-[#3D4331] text-[#F3EDE0] font-bold text-sm tracking-widest uppercase rounded-full py-4 transition-colors ${
+                isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-[#525942]'
+              }`}
+            >
+              {isSubmitting ? 'Creating...' : 'Create Stay & Add Rooms ✦'}
+            </button>
+          </div>
+        </form>
+
+        {/* Additional Info */}
+        <div className="mt-12 bg-white rounded-3xl p-8 shadow-sm border border-[#EBE1D0]/50">
+          <h4 className="text-lg font-serif font-bold text-[#3D4331] mb-4">What happens next?</h4>
+          <ol className="list-decimal pl-5 space-y-2 text-sm text-[#3D4331]/80 font-medium">
+            <li>After creating the stay, you'll be redirected to add room types</li>
+            <li>Each room type can have different prices for USDC and USDT</li>
+            <li>Guests will see and pay the specific room prices, not the default stay prices</li>
+          </ol>
         </div>
-      </form>
-
-      {/* Additional Info */}
-      <div style={styles.infoBox}>
-        <h4 style={styles.infoTitle}>What happens next?</h4>
-        <ol style={styles.infoList}>
-          <li>After creating the stay, you'll be redirected to add room types</li>
-          <li>Each room type can have different prices for USDC and USDT</li>
-          <li>Guests will see and pay the specific room prices, not the default stay prices</li>
-        </ol>
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    padding: '40px 20px',
-    maxWidth: '800px',
-    margin: '0 auto',
-  },
-  title: {
-    fontSize: '2rem',
-    marginBottom: '20px',
-    color: '#111',
-  },
-  noticeBox: {
-    backgroundColor: '#fef3c7',
-    border: '2px solid #fbbf24',
-    borderRadius: '8px',
-    padding: '16px',
-    marginBottom: '30px',
-    fontSize: '0.95rem',
-    color: '#92400e',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '20px',
-    backgroundColor: 'white',
-    padding: '30px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  },
-  field: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '8px',
-  },
-  fieldGroup: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '20px',
-  },
-  label: {
-    fontWeight: '600' as const,
-    fontSize: '0.95rem',
-    color: '#374151',
-  },
-  labelHint: {
-    fontWeight: '400' as const,
-    fontSize: '0.85rem',
-    color: '#6b7280',
-  },
-  input: {
-    padding: '10px 14px',
-    fontSize: '1rem',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    transition: 'border-color 0.2s',
-  },
-  hint: {
-    fontSize: '0.85rem',
-    color: '#6b7280',
-    marginTop: '4px',
-  },
-  error: { 
-    color: '#dc2626', 
-    fontSize: '0.875rem',
-    marginTop: '4px',
-  },
-  errorBox: {
-    padding: '12px 16px',
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    borderRadius: '8px',
-    color: '#dc2626',
-  },
-  priceSection: {
-    backgroundColor: '#f9fafb',
-    padding: '20px',
-    borderRadius: '8px',
-    border: '1px solid #e5e7eb',
-  },
-  sectionTitle: {
-    fontSize: '1.1rem',
-    fontWeight: '600' as const,
-    marginBottom: '8px',
-    color: '#1f2937',
-  },
-  sectionDescription: {
-    fontSize: '0.9rem',
-    color: '#6b7280',
-    marginBottom: '16px',
-  },
-  buttonGroup: {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '10px',
-  },
-  button: {
-    flex: 1,
-    padding: '14px',
-    fontSize: '1rem',
-    fontWeight: '600' as const,
-    backgroundColor: '#0070f3',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-  },
-  cancelButton: {
-    flex: 1,
-    padding: '14px',
-    fontSize: '1rem',
-    fontWeight: '600' as const,
-    backgroundColor: '#f3f4f6',
-    color: '#374151',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-  },
-  infoBox: {
-    marginTop: '30px',
-    backgroundColor: '#eff6ff',
-    border: '1px solid #bfdbfe',
-    borderRadius: '8px',
-    padding: '20px',
-  },
-  infoTitle: {
-    fontSize: '1rem',
-    fontWeight: '600' as const,
-    marginBottom: '12px',
-    color: '#1e40af',
-  },
-  infoList: {
-    marginLeft: '20px',
-    fontSize: '0.9rem',
-    color: '#3730a3',
-    lineHeight: '1.8',
-  },
-} as const;

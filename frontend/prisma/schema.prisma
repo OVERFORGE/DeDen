@@ -203,6 +203,7 @@ model Stay {
   // Amenities & Features
   amenities       String[]  @default([])
   programHighlights Json?
+  amenityIcons      Json?   @default("[]")
   highlights        String[] @default([])
   rules             String[] @default([])
   

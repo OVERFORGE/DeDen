@@ -37,7 +37,7 @@ function StayCard({ image, location, event, price, href }: { image: string; loca
     <div className="bg-[#9db47d] border-2 border-[#2c331f] rounded-2xl overflow-hidden transition-all shadow-[4px_4px_0px_0px_#2c331f] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#2c331f] group flex flex-col">
       <div className="relative h-48 overflow-hidden border-b-2 border-[#2c331f]">
         <Image src={image} alt={location} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
-        <div className="absolute top-4 left-[-10px] bg-[#e8c37b] text-[#2c331f] text-[10px] font-bold px-4 py-1.5 rounded-full border-2 border-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f] rotate-[-5deg] uppercase tracking-wider">
+        <div className="font-caveat font-extrabold text-[12px] absolute top-4 left-[-10px] bg-[#e8c37b] text-[#2c331f] text-[10px] font-bold px-4 py-1.5 rounded-full border-2 border-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f] rotate-[-5deg] tracking-wider">
           DevCon ✦ Nov 5-11
         </div>
       </div>
@@ -105,7 +105,7 @@ function HeroSearch({ stays }: { stays: StayOption[] }) {
     <div className="relative max-w-[420px]">
       {/* Overlapping banner text */}
       <div className="absolute -top-3 left-6 bg-white px-2 z-10 border border-white">
-        <span className="text-[#7b9459] text-[11px] italic font-bold tracking-wide block pt-0.5">Find your bunk ? ✦</span>
+        <span className="font-caveat font-extrabold text-[#7b9459] text-[14px] italic  tracking-wide block pt-0.5">Find your bunk ? ✦</span>
       </div>
 
       <div className="bg-white border-2 border-[#2c331f] rounded-3xl shadow-[4px_4px_0px_0px_#2c331f] p-4 pt-5 flex flex-col gap-3">
@@ -240,7 +240,7 @@ export default function HomePage() {
           {/* Left Column */}
           <div className="flex flex-col w-full md:w-[52%] pt-4 md:pt-10">
             <div className="relative items-center gap-2 mb-2 rotate-[-3deg] origin-left top-4 left-1">
-              <span className="text-md italic font-bold text-[#7e9154] tracking-wider">popup hostels for event season ✦</span>
+              <span className="font-caveat font-extrabold text-md italic  text-[#7e9154] tracking-wider">popup hostels for event season ✦</span>
             </div>
             
             <h1 className="text-6xl md:text-7xl lg:text-[5.5rem] font-black text-[#2c331f] leading-[0.95] tracking-tight mb-8 font-display">
@@ -274,7 +274,7 @@ export default function HomePage() {
               
               {/* Green badge */}
               <div className="absolute -top-6 -right-1 w-24 h-24 bg-[#7b9459] text-[#fbf4e5] rounded-full flex flex-col items-center justify-center border-2 border-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f] -rotate-[15deg] z-20">
-                <span className="text-center font-bold text-[14px] leading-tight">
+                <span className="font-caveat font-extrabold text-center text-[20px] leading-tight">
                   grab a<br/>bunk ✦
                 </span>
                 
@@ -282,13 +282,13 @@ export default function HomePage() {
               
               {/* Yellow banner overlapping bottom left */}
               <div className="absolute bottom-4 left-3 bg-[#e8c37b] border-2 border-black rounded-xl px-4 py-1  rotate-[-5deg] z-20">
-                <span className="text-black text-[14px] font-bold tracking-widest">
+                <span className="font-caveat font-extrabold text-black text-[18px] tracking-widest">
                   the common room, 11pm
                 </span>
               </div>
 
               <div className="absolute -bottom-9 -left-6 bg-[#fbf5e7] border-2 border-black rounded-xl px-2 py-3  rotate-[5deg] z-20 shadow-[2px_2px_0px_0px_#2c331f]">
-                <span className="text-[#b4623b] text-[14px] font-bold tracking-widest">
+                <span className="font-caveat font-extrabold text-[#b4623b] text-[18px] tracking-widest">
                   ROOM 302 ✦ CHECK IN & CHILL
                 </span>
               </div>
@@ -308,7 +308,7 @@ export default function HomePage() {
             
             {/* Left Column */}
             <div className="flex flex-col w-full md:w-[50%]">
-              <p className="text-sm italic font-bold text-[#7e9154] tracking-wider mb-2">who we are</p>
+              <p className="font-caveat font-extrabold text-[24px] italic text-[#7e9154] tracking-wider mb-2 -rotate-[3deg]  ">who we are</p>
               <h2 className="text-5xl md:text-6xl lg:text-[4.5rem] font-black text-[#2c331f] leading-[0.95] tracking-tight mb-6 font-display">
                 We host the<br />underground.
               </h2>
@@ -318,7 +318,7 @@ export default function HomePage() {
               <p className="text-[#2c331f] text-sm leading-relaxed mb-6 font-medium">
                 We curate intimate pop-ups where the real conversations happen, right after the panels end. You're not booking a room, you're finding a crew.
               </p>
-              <Link href="/#about" className="inline-flex items-center gap-2 text-[#d04639] font-bold text-xs hover:opacity-80 transition-opacity uppercase tracking-widest">
+              <Link href="/#about" className="font-caveat font-extrabold text-[18px] inline-flex items-center gap-2 text-[#d04639]  hover:opacity-80 transition-opacity uppercase tracking-widest">
                 read our story ✦ stay awhile
               </Link>
             </div>
@@ -370,7 +370,7 @@ export default function HomePage() {
         <div className="max-w-[1000px] mx-auto px-6">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-8">
             <div className="flex flex-col gap-1">
-              <span className="text-sm italic font-bold text-[#7e9154] tracking-wider mb-2">book a habit</span>
+              <span className="font-caveat font-extrabold text-[24px] italic text-[#7e9154] tracking-wider mb-2 rotate-[-3deg]">book a habit</span>
               <h2 className="text-5xl md:text-6xl lg:text-[4.5rem] font-black text-[#2c331f] leading-[0.95] tracking-tight font-display">
                 Live Stays
               </h2>
@@ -403,7 +403,7 @@ export default function HomePage() {
           </div>
           
           <div className="text-center mt-12 flex justify-center">
-             <Link href="/villas" className="inline-block text-[#8ca36c] text-sm font-bold pb-1 border-b border-[#8ca36c] hover:text-[#2c331f] hover:border-[#2c331f] transition-colors italic tracking-widest uppercase">
+             <Link href="/villas" className="font-caveat font-extrabold text-[24px] inline-block text-[#8ca36c] pb-1 border-b border-[#8ca36c] hover:text-[#2c331f] hover:border-[#2c331f] transition-colors italic tracking-widest ">
                + check more popups in our timeline +
              </Link>
           </div>
@@ -418,7 +418,7 @@ export default function HomePage() {
           <h2 className="text-4xl md:text-5xl font-black text-[#2c331f] mb-2 font-display tracking-tight">
             Two years of showing up.
           </h2>
-          <p className="text-xs italic font-bold text-[#5a6b3a] tracking-widest mb-16">
+          <p className="font-caveat font-extrabold text-[18px]  italic  text-[#5a6b3a] tracking-widest mb-16">
             more than just a stay ✦
           </p>
           
@@ -428,28 +428,28 @@ export default function HomePage() {
             <div className="flex flex-col items-center">
               <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">38</p>
               <div className="w-12 h-1 bg-[#2c331f] mb-4"></div>
-              <p className="text-[#5a6b3a] text-[11px] italic font-bold uppercase tracking-widest">super hosts</p>
+              <p className="font-caveat font-extrabold text-[18px] text-[#5a6b3a] italic tracking-widest">super hosts</p>
             </div>
             
             {/* Stat 2 */}
             <div className="flex flex-col items-center">
               <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">12</p>
               <div className="w-12 h-1 bg-[#2c331f] mb-4"></div>
-              <p className="text-[#5a6b3a] text-[11px] italic font-bold uppercase tracking-widest">cities covered</p>
+              <p className="font-caveat font-extrabold text-[18px] text-[#5a6b3a] italic tracking-widest">cities covered</p>
             </div>
 
             {/* Stat 3 */}
             <div className="flex flex-col items-center">
               <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">4,200+</p>
               <div className="w-12 h-1 bg-[#2c331f] mb-4"></div>
-              <p className="text-[#5a6b3a] text-[11px] italic font-bold uppercase tracking-widest">founders met</p>
+              <p className="font-caveat font-extrabold text-[18px] text-[#5a6b3a] italic tracking-widest">founders met</p>
             </div>
 
             {/* Stat 4 */}
             <div className="flex flex-col items-center">
               <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">60+</p>
               <div className="w-12 h-1 bg-[#2c331f] mb-4"></div>
-              <p className="text-[#5a6b3a] text-[11px] italic font-bold uppercase tracking-widest">events powered</p>
+              <p className="font-caveat font-extrabold text-[18px] text-[#5a6b3a] italic tracking-widest">events powered</p>
             </div>
 
           </div>
@@ -467,7 +467,7 @@ export default function HomePage() {
           {/* Left Text */}
           <div className="relative w-full lg:w-auto flex flex-col items-center lg:items-start z-10 lg:pl-10 lg:pr-12 flex-shrink-0">
             <h2 className="relative flex flex-col items-center lg:items-start">
-              <span className="font-handwriting text-[3.5rem] md:text-[5.5rem] text-[#5c3826] rotate-[-4deg] absolute -top-8 -left-2 md:-top-16 md:-left-8 whitespace-nowrap z-0 tracking-wide opacity-90">
+              <span className="font-caveat font-extrabold  text-[3.5rem] md:text-[5.5rem] text-[#5c3826] rotate-[-4deg] absolute -top-8 -left-2 md:-top-16 md:-left-8 whitespace-nowrap z-0 tracking-wide opacity-90">
                 COMMUNITY
               </span>
               <span className="font-display font-black text-6xl md:text-[5.5rem] text-[#2c331f] tracking-tight relative z-10 pt-4 md:pt-6">
@@ -518,7 +518,7 @@ export default function HomePage() {
       {/* ── Partners ──────────────────────────────────────────────────────────── */}
       <section className="bg-[#f7eedb] py-20 md:py-24 overflow-hidden text-[#2c331f]">
         <div className="max-w-[1000px] mx-auto px-6 text-center">
-          <p className="text-sm italic font-bold text-[#7e9154] tracking-wider mb-2 rotate-[-3deg]">in good company</p>
+          <p className="font-caveat font-extrabold text-[24px] italic  text-[#7e9154] tracking-wider mb-2 rotate-[-3deg]">in good company</p>
           <h2 className="text-5xl md:text-6xl font-black text-[#2c331f] mb-6 font-display leading-tight">
             Backed by the crews we <br /> crash with.
           </h2>
@@ -551,7 +551,7 @@ export default function HomePage() {
         <div className="absolute -bottom-20 -left-10 text-[300px] font-black text-[#f7eedb] opacity-[0.03] leading-none font-display pointer-events-none">D</div>
         
         <div className="max-w-[800px] mx-auto px-6 relative z-10 text-center flex flex-col items-center">
-          <p className="text-sm italic font-bold text-[#f7eedb] tracking-wider mb-4 opacity-70">host a den ✦</p>
+          <p className="font-caveat font-extrabold text-[24px] italic font-bold text-[#f7eedb] tracking-wider mb-4 opacity-70">host a den ✦</p>
           <h2 className="text-5xl md:text-[5rem] font-black text-[#f7eedb] leading-[1] mb-6 font-display tracking-tight text-center">
             Host an event<br />In DeDen
           </h2>
@@ -577,7 +577,7 @@ export default function HomePage() {
              <button className="bg-[#9db47d] text-[#2c331f] px-8 py-2.5 rounded-tr-xl rounded-tl-md rounded-br-md rounded-bl-xl font-bold text-sm hover:bg-[#8ca36c] transition-colors border-2 border-transparent mt-2 border-[#2c331f] border-2">
                Submit
              </button>
-             <p className="text-[#f7eedb]/50 text-[10px] mt-2 tracking-widest uppercase font-bold">
+             <p className="font-caveat font-extrabold text-[18px] italic text-[#f7eedb]/50  mt-2 tracking-widest  font-bold">
                Your details are secure with us
              </p>
           </div>

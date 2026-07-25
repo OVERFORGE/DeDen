@@ -1,3 +1,4 @@
+import { Caveat } from "next/font/google";
 import type { Config } from "tailwindcss";
 
 const config: Config = {
@@ -13,6 +14,7 @@ const config: Config = {
         sans: ["var(--font-inter)", "sans-serif"],
         display: ["var(--font-dela-gothic)", "sans-serif"],
         inter: ["Inter", "sans-serif"],
+        Caveat: ["var(--font-caveat)", "sans-serif"]
       },
       colors: {
         "den-blue": "#172a46",
