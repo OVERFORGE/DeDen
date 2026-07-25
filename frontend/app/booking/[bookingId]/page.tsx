@@ -1,7 +1,8 @@
+"use client";
+
+import { ArrowLeft, Check } from "lucide-react";
 // File: app/booking/[bookingId]/page.tsx
 // ✅ FIXED: Removed extra margins and improved spacing
-
-"use client";
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";

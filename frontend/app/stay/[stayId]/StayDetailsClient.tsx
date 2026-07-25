@@ -147,9 +147,9 @@ export default function StayDetailsClient({ stay }: { stay: StayData }) {
                 per night • taxes extra
               </div>
             </div>
-            <button className="bg-[#3D4331] text-[#F3EDE0] px-8 py-3.5 rounded-full font-bold text-sm tracking-widest hover:bg-[#525942] transition-colors flex items-center gap-2 mt-2 shadow-lg shadow-[#3D4331]/10">
-              Book Stay <span className="text-lg leading-none">+</span>
-            </button>
+              <Link href={`/stay/${stay.stayId}/apply?guests=${searchParams.get("guests") || 1}`} className="bg-[#3D4331] text-[#F3EDE0] px-8 py-3.5 rounded-full font-bold text-sm tracking-widest hover:bg-[#525942] transition-colors flex items-center gap-2 mt-2 shadow-lg shadow-[#3D4331]/10">
+                Book Stay <span className="text-lg leading-none">+</span>
+              </Link>
           </div>
         </div>
 

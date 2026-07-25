@@ -335,6 +335,8 @@ model Booking {
   guestName       String?
   guestEmail      String?
   guestPhone      String?
+  guests          Json[]        @default([])
+  
   
   // Referral Code & Discount Tracking
   referralCode     ReferralCode?  @relation(fields: [referralCodeId], references: [id])
