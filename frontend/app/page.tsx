@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, MapPin, Calendar, Search, Users } from "lucide-react";
-import { useState, useEffect } from "react";
+import { ArrowRight, MapPin, Calendar, Search, Users, ChevronDown, Minus, Plus } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 
 function MarqueeBanner() {
   const items = ["MEET", "TRAVEL", "STAY", "REPEAT", "MEET", "TRAVEL", "STAY", "REPEAT", "MEET", "TRAVEL", "STAY", "REPEAT", "MEET", "TRAVEL", "STAY", "REPEAT"];
@@ -49,6 +49,147 @@ function StayCard({ image, location, event, price, href }: { image: string; loca
             Book a stay
           </Link>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const PartnerCard = () => (
+  <div className="bg-white rounded-xl w-[100px] h-[64px] sm:w-[120px] sm:h-[72px] md:w-[140px] md:h-[80px] flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:scale-105 transition-transform duration-300">
+    <div className="font-black text-[#1A1A1A] text-sm sm:text-base md:text-lg flex items-center tracking-wide">
+      BYB<span className="text-[#f7a600] mx-[1px] md:mx-[2px]">|</span>T
+    </div>
+  </div>
+);
+
+interface StayOption {
+  id: string;
+  stayId: string;
+  title: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  priceUSDC: number;
+  slug: string;
+}
+
+function HeroSearch({ stays }: { stays: StayOption[] }) {
+  const [selectedStay, setSelectedStay] = useState<StayOption | null>(null);
+  const [guests, setGuests] = useState(2);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const router = useRef<any>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const handleFindStay = () => {
+    if (!selectedStay) {
+      setDropdownOpen(true);
+      return;
+    }
+    window.location.href = `/stay/${selectedStay.stayId}?guests=${guests}`;
+  };
+
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  return (
+    <div className="relative max-w-[420px]">
+      {/* Overlapping banner text */}
+      <div className="absolute -top-3 left-6 bg-white px-2 z-10 border border-white">
+        <span className="text-[#7b9459] text-[11px] italic font-bold tracking-wide block pt-0.5">Find your bunk ? ✦</span>
+      </div>
+
+      <div className="bg-white border-2 border-[#2c331f] rounded-3xl shadow-[4px_4px_0px_0px_#2c331f] p-4 pt-5 flex flex-col gap-3">
+        <div className="flex gap-3">
+          {/* Stay Dropdown */}
+          <div className="flex-1 relative" ref={dropdownRef}>
+            <button
+              id="hero-stay-dropdown"
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="w-full h-11 flex items-center justify-between bg-[#f7eedb] border-2 border-[#2c331f] rounded-xl px-3 transition-colors hover:bg-[#ede3c9]"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <MapPin size={14} className="text-[#2c331f] shrink-0" />
+                <span className="text-xs font-bold text-[#2c331f] truncate">
+                  {selectedStay ? selectedStay.title : <span className="opacity-60">Event or City</span>}
+                </span>
+              </div>
+              <ChevronDown size={14} className={`text-[#2c331f] shrink-0 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Custom Dropdown Panel */}
+            {dropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-[#2c331f] rounded-2xl shadow-[4px_4px_0px_0px_#2c331f] z-50 overflow-hidden">
+                {stays.length === 0 ? (
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-xs font-bold text-[#2c331f] opacity-60">No active stays right now.</p>
+                  </div>
+                ) : (
+                  stays.map((stay) => (
+                    <button
+                      key={stay.id}
+                      id={`stay-option-${stay.stayId}`}
+                      onClick={() => { setSelectedStay(stay); setDropdownOpen(false); }}
+                      className={`w-full text-left px-4 py-3 flex flex-col gap-0.5 hover:bg-[#f7eedb] transition-colors border-b border-[#2c331f]/10 last:border-0 ${
+                        selectedStay?.id === stay.id ? 'bg-[#f7eedb]' : ''
+                      }`}
+                    >
+                      <span className="text-xs font-black text-[#2c331f] leading-tight">{stay.title}</span>
+                      <span className="text-[10px] font-semibold text-[#5a6b3a] flex items-center gap-1">
+                        <MapPin size={10} /> {stay.location}
+                        &nbsp;·&nbsp;
+                        <Calendar size={10} /> {formatDate(stay.startDate)} – {formatDate(stay.endDate)}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Guest counter */}
+          <div className="w-[110px] h-11 flex items-center justify-between bg-[#f7eedb] border-2 border-[#2c331f] rounded-xl px-2 gap-1">
+            <button
+              id="hero-guests-minus"
+              onClick={() => setGuests(g => Math.max(1, g - 1))}
+              className="w-6 h-6 flex items-center justify-center rounded-full bg-[#2c331f] text-[#f7eedb] hover:bg-[#3a4f26] transition-colors shrink-0"
+            >
+              <Minus size={10} strokeWidth={3} />
+            </button>
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] font-bold text-[#2c331f] opacity-60">Guests</span>
+              <span className="text-sm font-black text-[#2c331f]">{guests}</span>
+            </div>
+            <button
+              id="hero-guests-plus"
+              onClick={() => setGuests(g => Math.min(20, g + 1))}
+              className="w-6 h-6 flex items-center justify-center rounded-full bg-[#2c331f] text-[#f7eedb] hover:bg-[#3a4f26] transition-colors shrink-0"
+            >
+              <Plus size={10} strokeWidth={3} />
+            </button>
+          </div>
+        </div>
+
+        <button
+          id="hero-find-stay"
+          onClick={handleFindStay}
+          className={`w-full font-bold text-sm py-3.5 rounded-xl border-2 border-[#2c331f] transition-all shadow-[2px_2px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-x-[2px] hover:translate-y-[2px] ${
+            selectedStay
+              ? 'bg-[#9db47d] text-[#2c331f] hover:bg-[#8ca36c]'
+              : 'bg-[#2c331f] text-[#f7eedb] hover:bg-[#3a4f26]'
+          }`}
+        >
+          {selectedStay ? 'Find stays ✦' : 'Pick an event first ✦'}
+        </button>
       </div>
     </div>
   );
@@ -119,30 +260,7 @@ export default function HomePage() {
             </p>
             
             {/* Search Box */}
-            <div className="relative max-w-[420px]">
-              {/* Overlapping banner text */}
-              <div className="absolute -top-3 left-6 bg-white px-2 z-10 border border-white">
-                <span className="text-[#7b9459] text-[11px] italic font-bold tracking-wide block pt-0.5">Find your bunk ? ✦</span>
-              </div>
-              
-              <div className="bg-white border-2 border-[#2c331f] rounded-3xl shadow-[4px_4px_0px_0px_#2c331f] p-4 pt-5 flex flex-col gap-3">
-                <div className="flex gap-3">
-                   <div className="flex-1 flex items-center justify-between bg-[#f7eedb] border-2 border-[#2c331f] rounded-xl px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                         <MapPin size={16} className="text-[#2c331f] shrink-0" />
-                         <span className="text-xs font-bold text-[#2c331f] opacity-70">Event or City</span>
-                      </div>
-                   </div>
-                   <div className="w-[100px] flex items-center justify-between bg-[#f7eedb] border-2 border-[#2c331f] rounded-xl px-3 py-2.5">
-                      <span className="text-xs font-bold text-[#2c331f] opacity-70">Guests</span>
-                      <span className="text-xs font-bold text-[#2c331f]">2</span>
-                   </div>
-                </div>
-                <button className="w-full bg-[#9db47d] text-[#2c331f] font-bold text-sm py-3.5 rounded-xl border-2 border-[#2c331f] hover:bg-[#8ca36c] transition-colors shadow-[2px_2px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f]">
-                  Find stays ✦
-                </button>
-              </div>
-            </div>
+            <HeroSearch stays={liveStays} />
           </div>
 
           {/* Right Column - Illustration */}
@@ -332,6 +450,65 @@ export default function HomePage() {
               <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">60+</p>
               <div className="w-12 h-1 bg-[#2c331f] mb-4"></div>
               <p className="text-[#5a6b3a] text-[11px] italic font-bold uppercase tracking-widest">events powered</p>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* ── Community Partners ────────────────────────────────────────────────── */}
+      <section className="bg-[#f6ebd8] py-20 overflow-hidden relative">
+        <style dangerouslySetInnerHTML={{__html: `
+          @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
+          .font-handwriting { font-family: 'Caveat', cursive; }
+        `}} />
+        <div className="max-w-[1200px] mx-auto px-6 flex flex-col lg:flex-row items-center justify-between gap-16 lg:gap-8">
+          
+          {/* Left Text */}
+          <div className="relative w-full lg:w-auto flex flex-col items-center lg:items-start z-10 lg:pl-10 lg:pr-12 flex-shrink-0">
+            <h2 className="relative flex flex-col items-center lg:items-start">
+              <span className="font-handwriting text-[3.5rem] md:text-[5.5rem] text-[#5c3826] rotate-[-4deg] absolute -top-8 -left-2 md:-top-16 md:-left-8 whitespace-nowrap z-0 tracking-wide opacity-90">
+                COMMUNITY
+              </span>
+              <span className="font-display font-black text-6xl md:text-[5.5rem] text-[#2c331f] tracking-tight relative z-10 pt-4 md:pt-6">
+                Partners
+              </span>
+            </h2>
+          </div>
+
+          {/* Right Cards Grid with Mask Effect */}
+          <div 
+            className="w-full lg:w-auto flex justify-center lg:justify-end gap-4 sm:gap-5 md:gap-6 relative z-10 py-10 px-4 md:px-10"
+            style={{ 
+              WebkitMaskImage: 'radial-gradient(ellipse at center, black 40%, transparent 75%)', 
+              maskImage: 'radial-gradient(ellipse at center, black 40%, transparent 75%)' 
+            }}
+          >
+            
+            {/* Column 1 (Offset) */}
+            <div className="flex flex-col gap-4 sm:gap-5 md:gap-6 mt-[40px] sm:mt-[46px] md:mt-[52px]">
+               <PartnerCard />
+               <PartnerCard />
+            </div>
+
+            {/* Column 2 (Normal) */}
+            <div className="flex flex-col gap-4 sm:gap-5 md:gap-6">
+               <PartnerCard />
+               <PartnerCard />
+               <PartnerCard />
+            </div>
+
+            {/* Column 3 (Offset) */}
+            <div className="flex flex-col gap-4 sm:gap-5 md:gap-6 mt-[40px] sm:mt-[46px] md:mt-[52px]">
+               <PartnerCard />
+               <PartnerCard />
+            </div>
+
+            {/* Column 4 (Normal) */}
+            <div className="flex flex-col gap-4 sm:gap-5 md:gap-6 hidden sm:flex">
+               <PartnerCard />
+               <PartnerCard />
+               <PartnerCard />
             </div>
 
           </div>

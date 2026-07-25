@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   Gift,
-  Loader2, // A good icon for loading
+  Loader2,
+  History,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -79,6 +80,12 @@ export default function AdminLayout({
       href: '/admin/referrals', 
       icon: Gift,
       description: 'Community referral codes'
+    },
+    { 
+      name: 'Past Events', 
+      href: '/admin/past-events', 
+      icon: History,
+      description: 'Manage completed events and experiences'
     },
     { 
       name: 'Users', 

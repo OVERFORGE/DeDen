@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, MapPin, Calendar, Users, DollarSign, Edit, Trash2, Globe, FileX } from "lucide-react";
+import { Plus, MapPin, Calendar, Users, DollarSign, Edit, Trash2, Globe, FileX, CheckCircle } from "lucide-react";
 
 interface Stay {
   id: string;
@@ -16,6 +16,7 @@ interface Stay {
   slotsAvailable: number;
   slotsTotal: number;
   priceUSDC: number;
+  status: string;
 }
 
 export default function AdminStaysPage() {
@@ -52,6 +53,24 @@ export default function AdminStaysPage() {
       if (!response.ok) throw new Error("Failed to update stay");
       
       // Refresh the list
+      fetchStays();
+    } catch (err) {
+      alert("Error updating stay: " + (err as Error).message);
+    }
+  };
+
+  const markAsDone = async (stayId: string) => {
+    if (!confirm("Are you sure you want to mark this stay as DONE? It will be moved to Past Events.")) return;
+
+    try {
+      const response = await fetch(`/api/admin/stays/${stayId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "DONE" }),
+      });
+
+      if (!response.ok) throw new Error("Failed to mark as done");
+      
       fetchStays();
     } catch (err) {
       alert("Error updating stay: " + (err as Error).message);
@@ -121,14 +140,14 @@ export default function AdminStaysPage() {
           </Link>
         </div>
 
-        {stays.length === 0 ? (
+        {stays.filter(s => s.status !== 'DONE').length === 0 ? (
           <div className="text-center p-16 bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
             <Globe size={48} strokeWidth={2} className="mx-auto mb-5 text-[#2c331f]" />
             <h3 className="text-3xl font-black mb-2 text-[#2c331f] font-display tracking-tight">
               No Popups Found
             </h3>
             <p className="text-[#5a6b3a] font-bold uppercase tracking-widest text-xs mb-8">
-              You haven't created any stays yet.
+              You haven't created any active stays yet.
             </p>
             <Link 
               href="/admin/stays/create" 
@@ -140,7 +159,7 @@ export default function AdminStaysPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {stays.map((stay) => (
+            {stays.filter(s => s.status !== 'DONE').map((stay) => (
               <div key={stay.id} className="bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] overflow-hidden flex flex-col relative">
                 
                 {stay.isFeatured && (
@@ -193,13 +212,19 @@ export default function AdminStaysPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 border-t-2 border-[#2c331f] bg-gray-50">
+                <div className="grid grid-cols-3 border-t-2 border-[#2c331f] bg-gray-50">
                   <Link
                     href={`/admin/stays/${stay.id}`}
                     className="flex items-center justify-center gap-2 py-4 text-[#2c331f] font-bold uppercase tracking-widest text-xs border-r-2 border-[#2c331f] hover:bg-[#e8c37b] transition-colors"
                   >
                     <Edit size={16} strokeWidth={2.5} /> Edit
                   </Link>
+                  <button
+                    onClick={() => markAsDone(stay.id)}
+                    className="flex items-center justify-center gap-2 py-4 text-[#5a6b3a] font-bold uppercase tracking-widest text-xs border-r-2 border-[#2c331f] hover:bg-[#9db47d] hover:text-[#2c331f] transition-colors"
+                  >
+                    <CheckCircle size={16} strokeWidth={2.5} /> Done
+                  </button>
                   <button
                     onClick={() => deleteStay(stay.id, stay.title)}
                     className="flex items-center justify-center gap-2 py-4 text-red-600 font-bold uppercase tracking-widest text-xs hover:bg-red-100 transition-colors"

@@ -13,7 +13,7 @@ export function Navbar() {
   const router = useRouter();
 
   const navLinks = [
-    { href: "/#gallery", label: "EXPERIENCES" },
+    { href: "/experiences", label: "EXPERIENCES" },
     { href: "/villas", label: "UPCOMING VILLAS" },
     { href: "/#about", label: "ABOUT" },
     { href: "/contact", label: "CONTACT" },
@@ -46,7 +46,7 @@ export function Navbar() {
 
           {/* Center links */}
           <div className="flex items-center gap-8">
-            <Link href="/#gallery" className="text-sm font-semibold text-[#2B3B1A] hover:text-[#3A4F24] transition-colors tracking-widest">
+            <Link href="/experiences" className="text-sm font-semibold text-[#2B3B1A] hover:text-[#3A4F24] transition-colors tracking-widest">
               Experiences
             </Link>
             <Link href="/villas" className="text-sm font-semibold text-[#2B3B1A] hover:text-[#3A4F24] transition-colors tracking-widest">

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Home, Users, Globe, Coffee, Backpack, ArrowLeft, ArrowRight, ChevronDown } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type StayData = {
   id: string;
@@ -30,6 +30,7 @@ type StayData = {
 
 export default function StayDetailsClient({ stay }: { stay: StayData }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   // Steps: 1 = Booking specs, 2 = Contact info, 3 = Success
   const [step, setStep] = useState(1);
@@ -37,7 +38,11 @@ export default function StayDetailsClient({ stay }: { stay: StayData }) {
   // Step 1 State
   const [roomType, setRoomType] = useState('Private room');
   const [duration, setDuration] = useState(`7 Days 6 Night (Full stay) $${stay.priceUSDC || 100}`);
-  const [occupancy, setOccupancy] = useState('5');
+  // Pre-fill guests from URL query param
+  const [occupancy, setOccupancy] = useState(() => {
+    const guestsParam = searchParams.get('guests');
+    return guestsParam && !isNaN(Number(guestsParam)) ? guestsParam : '2';
+  });
   
   // Step 2 State
   const [formData, setFormData] = useState({

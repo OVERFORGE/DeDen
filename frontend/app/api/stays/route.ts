@@ -17,9 +17,12 @@ export async function GET() {
         stayId: true,
         title: true,
         location: true,
+        startDate: true,
+        endDate: true,
         priceUSDC: true,
         images: true,
         heroImage: true,
+        slug: true,
       },
       take: 3,
     });

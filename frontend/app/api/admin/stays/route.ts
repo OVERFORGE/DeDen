@@ -23,6 +23,7 @@ export async function GET() {
         endDate: true,
         isPublished: true,
         isFeatured: true,
+        status: true,
         slotsAvailable: true,
         slotsTotal: true,
         priceUSDC: true,
