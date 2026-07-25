@@ -17,6 +17,9 @@ type Room = {
     priceUSDT: number;
     images: string[];
     amenities: string[];
+    beds?: string;
+    area?: string;
+    roomsLeft?: number;
 };
 
 type Stay = {
@@ -206,7 +209,7 @@ export default function EditStayPage() {
         if (!stay) return;
         const address = stay.address || {};
         const landmarks = address.landmarks || [];
-        const updated = landmarks.filter((_, i) => i !== index);
+        const updated = landmarks.filter((_: any, i: number) => i !== index);
         setStay({ ...stay, address: { ...address, landmarks: updated } });
     };
 
@@ -583,7 +586,7 @@ export default function EditStayPage() {
                             </div>
                             
                             <div className="space-y-2">
-                                {(stay.address?.landmarks || []).map((landmark, i) => (
+                                {(stay.address?.landmarks || []).map((landmark: any, i: number) => (
                                     <div key={i} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg bg-gray-50">
                                         <div className="flex items-center gap-3">
                                             <span className="text-xs font-bold uppercase text-gray-500 bg-white px-2 py-1 rounded border">{landmark.type}</span>
@@ -698,7 +701,7 @@ export default function EditStayPage() {
                             </div>
                             
                             <div className="space-y-2">
-                                {(stay.address?.landmarks || []).map((landmark, i) => (
+                                {(stay.address?.landmarks || []).map((landmark: any, i: number) => (
                                     <div key={i} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg bg-gray-50">
                                         <div className="flex items-center gap-3">
                                             <span className="text-xs font-bold uppercase text-gray-500 bg-white px-2 py-1 rounded border">{landmark.type}</span>
