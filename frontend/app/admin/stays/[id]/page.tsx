@@ -121,8 +121,6 @@ export default function EditStayPage() {
                     highlights: stay?.highlights || [],
                     rules: stay?.rules || [],
                     address: stay?.address || null,
-                    rules: stay?.rules || [],
-                    address: stay?.address || null,
                 }),
             });
 
