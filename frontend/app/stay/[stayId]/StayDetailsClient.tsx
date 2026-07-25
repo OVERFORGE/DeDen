@@ -3,8 +3,26 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Home, Users, Globe, Coffee, Backpack, ArrowLeft, ArrowRight, ChevronDown } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { 
+  ArrowLeft, ArrowRight, MapPin, Wind, Wifi, Droplet, 
+  Sparkles, Monitor, BatteryCharging, Shirt, Lock, Plane, 
+  Train, ShoppingBag, Hospital, Mountain
+} from "lucide-react";
+
+type Room = {
+  id?: string;
+  name: string;
+  description: string;
+  capacity: number;
+  priceUSDC: number;
+  priceUSDT: number;
+  images: string[];
+  amenities: string[];
+  beds?: string;
+  area?: string;
+  roomsLeft?: number;
+};
 
 type StayData = {
   id: string;
@@ -25,285 +43,341 @@ type StayData = {
   heroImage?: string | null;
   amenities: string[];
   highlights: string[];
-  rooms: any[];
+  rules: string[];
+  address?: {
+    mapUrl?: string;
+    fullAddress?: string;
+    landmarks?: { name: string; distance: string; type: string }[];
+  } | null;
+  rooms: Room[];
 };
 
 export default function StayDetailsClient({ stay }: { stay: StayData }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Steps: 1 = Booking specs, 2 = Contact info, 3 = Success
-  const [step, setStep] = useState(1);
-  
-  // Step 1 State
-  const [roomType, setRoomType] = useState('Private room');
-  const [duration, setDuration] = useState(`7 Days 6 Night (Full stay) $${stay.priceUSDC || 100}`);
-  // Pre-fill guests from URL query param
-  const [occupancy, setOccupancy] = useState(() => {
-    const guestsParam = searchParams.get('guests');
-    return guestsParam && !isNaN(Number(guestsParam)) ? guestsParam : '2';
-  });
-  
-  // Step 2 State
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    gender: '',
-    age: '',
-    country: '',
-    telegram: '',
-    xHandle: ''
-  });
-
   const [imageIndex, setImageIndex] = useState(0);
   const images = stay.images?.length > 0 ? stay.images : [stay.heroImage || "/images/dedenbangalore4.jpeg"];
+  
+  const nextImage = () => setImageIndex((prev) => (prev + 1) % images.length);
+  const prevImage = () => setImageIndex((prev) => (prev - 1 + images.length) % images.length);
 
-  const nextImage = () => {
-    setImageIndex((prev) => (prev + 1) % images.length);
+  // Icon mapper
+  const getAmenityIcon = (name: string) => {
+    const lower = name.toLowerCase();
+    if (lower.includes('wifi') || lower.includes('internet')) return <Wifi size={28} strokeWidth={1.5} />;
+    if (lower.includes('air') || lower.includes('ac')) return <Wind size={28} strokeWidth={1.5} />;
+    if (lower.includes('water') || lower.includes('hot')) return <Droplet size={28} strokeWidth={1.5} />;
+    if (lower.includes('desk') || lower.includes('work')) return <Monitor size={28} strokeWidth={1.5} />;
+    if (lower.includes('power') || lower.includes('backup')) return <BatteryCharging size={28} strokeWidth={1.5} />;
+    if (lower.includes('laundry') || lower.includes('wash') || lower.includes('clean')) return <Shirt size={28} strokeWidth={1.5} />;
+    if (lower.includes('lock') || lower.includes('safe') || lower.includes('secure')) return <Lock size={28} strokeWidth={1.5} />;
+    if (lower.includes('housekeeping') || lower.includes('daily')) return <Sparkles size={28} strokeWidth={1.5} />;
+    return <Sparkles size={28} strokeWidth={1.5} />; // fallback
   };
 
-  const prevImage = () => {
-    setImageIndex((prev) => (prev - 1 + images.length) % images.length);
+  const getLandmarkIcon = (type: string) => {
+    switch (type) {
+      case 'Airport': return <Plane size={18} strokeWidth={2} />;
+      case 'Train': return <Train size={18} strokeWidth={2} />;
+      case 'Shopping': return <ShoppingBag size={18} strokeWidth={2} />;
+      case 'Hospital': return <Hospital size={18} strokeWidth={2} />;
+      case 'Attraction': return <Mountain size={18} strokeWidth={2} />;
+      default: return <MapPin size={18} strokeWidth={2} />;
+    }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  // Find lowest price
+  const startingPrice = stay.rooms?.length > 0 
+    ? Math.min(...stay.rooms.map(r => r.priceUSDC))
+    : stay.priceUSDC;
 
-  const submitApplication = () => {
-    // Here we would typically submit to an API. 
-    // For now, we'll just go to a success state or route to /apply
-    alert("Booking application submitted successfully!");
-    router.push('/villas');
-  };
-
-  const calculatedDuration = stay.duration || 
-    Math.ceil((new Date(stay.endDate).getTime() - new Date(stay.startDate).getTime()) / (1000 * 60 * 60 * 24));
+  const firstLandmark = stay.address?.landmarks?.[0];
 
   return (
-    <div className="min-h-screen bg-[#f7eedb] py-16 px-6 sm:px-10 font-inter">
-      <div className="max-w-[1000px] mx-auto">
-        
-        {/* Header Section */}
-        <div className="relative mb-20">
-          <div className="flex justify-between items-start">
-            <div className="max-w-xl">
-              <h1 className="text-[#43392e] leading-[0.8] flex flex-col mb-4">
-                <span className="text-7xl md:text-8xl" style={{ fontFamily: "'Caveat', cursive" }}>
-                  Live
-                </span>
-                <span className="font-display font-black text-6xl md:text-[5.5rem] tracking-wide mt-[-5px]">
-                  STAYS
-                </span>
-              </h1>
-              <p className="mt-8 text-xs text-[#43392e] font-semibold max-w-[280px] tracking-wide leading-relaxed opacity-80">
-                Thoughtfully designed stays for every kind of traveller. Comfortable. Curated. Connected.
-              </p>
-            </div>
-            
-            {/* Circular badge */}
-            <div className="hidden md:flex w-32 h-32 rounded-full items-center justify-center relative mt-4">
-              <div className="absolute inset-0 rounded-full border border-dashed border-[#43392e]/40 m-1 rotate-12"></div>
-              
-              <svg viewBox="0 0 100 100" className="absolute w-[110%] h-[110%] top-[-5%] left-[-5%] animate-spin-slow" style={{ animationDuration: '20s' }}>
-                <path id="circlePath" d="M 50, 50 m -35, 0 a 35,35 0 1,1 70,0 a 35,35 0 1,1 -70,0" fill="transparent" />
-                <text className="text-[7.5px] tracking-widest font-bold uppercase" fill="#43392e">
-                  <textPath href="#circlePath">
-                    MORE THAN A STAY ✦ IT'S A MEMORY IN MOTION ✦ 
-                  </textPath>
-                </text>
-              </svg>
+    <div className="min-h-screen bg-[#F3EDE0] text-[#3D4331] font-sans pb-24 selection:bg-[#96A476] selection:text-[#F3EDE0] relative overflow-hidden">
+      
+      {/* Top Background Blob */}
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#EBE1D0] rounded-full blur-[100px] opacity-70 pointer-events-none -translate-y-1/3 translate-x-1/4"></div>
 
-              <div className="w-10 h-10 border-[3px] border-[#43392e] rounded-t-full border-b-0 mt-4"></div>
-            </div>
+      <div className="max-w-[1100px] mx-auto px-6 sm:px-10 pt-10 relative z-10">
+        
+        {/* Breadcrumb / Top Bar */}
+        <div className="flex items-center gap-4 mb-8">
+          <button onClick={() => router.back()} className="w-8 h-8 rounded-full bg-[#3D4331] text-[#F3EDE0] flex items-center justify-center hover:bg-[#525942] transition-colors">
+            <ArrowLeft size={16} strokeWidth={2.5} />
+          </button>
+          <div className="text-[13px] font-bold tracking-wide text-[#3D4331] flex items-center gap-1.5">
+            <span style={{ fontFamily: "'Caveat', cursive" }} className="text-xl capitalize">Live</span>
+            <span className="uppercase">STAYS</span> 
+            <span className="text-[#3D4331]/30 mx-0.5">/</span> 
+            <span className="text-[#3D4331]/70 font-semibold">Stay Detail</span>
           </div>
         </div>
 
-        {/* Booking Card */}
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col md:flex-row w-full rounded-2xl overflow-hidden shadow-md h-auto md:h-[450px]">
-            
-            {/* Left: Dynamic Booking Form Panel */}
-            <div className="bg-[#46392b] text-[#f7eedb] w-full md:w-[45%] p-10 flex flex-col justify-center relative">
-              
-              {step === 1 && (
-                <div className="animate-fade-in w-full max-w-sm">
-                  {/* Room Type Toggle */}
-                  <div className="flex border border-[#f7eedb]/30 rounded-full w-fit mb-10 overflow-hidden text-xs font-bold">
-                    <button 
-                      onClick={() => setRoomType('Private room')}
-                      className={`px-6 py-2.5 transition-colors ${roomType === 'Private room' ? 'bg-[#f7eedb] text-[#46392b]' : 'text-[#f7eedb]/70 hover:bg-[#f7eedb]/10'}`}
-                    >
-                      Private room
-                    </button>
-                    <button 
-                      onClick={() => setRoomType('Dorm Room')}
-                      className={`px-6 py-2.5 transition-colors ${roomType === 'Dorm Room' ? 'bg-[#f7eedb] text-[#46392b]' : 'text-[#f7eedb]/70 hover:bg-[#f7eedb]/10'}`}
-                    >
-                      Dorm Room
-                    </button>
-                  </div>
-
-                  {/* Duration Dropdown */}
-                  <div className="mb-8 relative">
-                    <select 
-                      value={duration}
-                      onChange={(e) => setDuration(e.target.value)}
-                      className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-sm px-5 py-3.5 rounded-xl appearance-none outline-none pr-10 cursor-pointer shadow-inner"
-                    >
-                      <option>{calculatedDuration} Days {calculatedDuration - 1} Night (Full stay) ${stay.priceUSDC || 100}</option>
-                      <option>3 Days 2 Night (Weekend) ${Math.floor((stay.priceUSDC || 100)/2)}</option>
-                    </select>
-                    <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#46392b] pointer-events-none" />
-                  </div>
-
-                  {/* Occupancy Input */}
-                  <div className="mb-12">
-                    <label className="block text-[11px] font-bold text-[#f7eedb] mb-2 tracking-wide">
-                      No. Occupancy
-                    </label>
-                    <input 
-                      type="number" 
-                      value={occupancy}
-                      onChange={(e) => setOccupancy(e.target.value)}
-                      className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-sm px-5 py-3.5 rounded-xl outline-none shadow-inner"
-                    />
-                  </div>
-
-                  <button 
-                    onClick={() => setStep(2)}
-                    className="inline-flex w-fit items-center justify-center bg-[#f7eedb] text-[#46392b] font-black px-10 py-3.5 rounded-full hover:bg-white transition-colors uppercase tracking-widest text-[11px]"
-                  >
-                    Continue ✦
-                  </button>
-                </div>
-              )}
-
-              {step === 2 && (
-                <div className="animate-fade-in w-full max-w-md space-y-4">
-            
-                  
-                  <div>
-                    <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Name</label>
-                    <input 
-                      type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
-                      className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Mail</label>
-                    <input 
-                      type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
-                      className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Gender</label>
-                      <input 
-                        type="text" name="gender" value={formData.gender} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
-                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Age</label>
-                      <input 
-                        type="text" name="age" value={formData.age} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
-                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Country</label>
-                      <input 
-                        type="text" name="country" value={formData.country} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
-                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 pb-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">Telegram Handle</label>
-                      <input 
-                        type="text" name="telegram" value={formData.telegram} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
-                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#f7eedb] mb-1.5 tracking-wide">X Handle</label>
-                      <input 
-                        type="text" name="xHandle" value={formData.xHandle} onChange={handleInputChange} placeholder={stay.location || "Devcon Mumbai"}
-                        className="w-full bg-[#f7eedb] text-[#46392b] font-bold text-xs px-4 py-3 rounded-lg outline-none placeholder:text-[#46392b]/40"
-                      />
-                    </div>
-                  </div>
-
-                  <button 
-                    onClick={submitApplication}
-                    className="inline-flex w-fit items-center justify-center bg-[#f7eedb] text-[#46392b] font-black px-10 py-3.5 rounded-full hover:bg-white transition-colors uppercase tracking-widest text-[11px]"
-                  >
-                    Continue ✦
-                  </button>
-                </div>
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
+          <div>
+            <div className="inline-block px-3 py-1.5 bg-[#96A476] text-[#3D4331] text-[9px] font-bold tracking-widest uppercase rounded-full mb-5">
+              FEATURED STAY
+            </div>
+            {/* Title using a generic serif that looks like Playfair or PT Serif */}
+            <h1 className="text-4xl md:text-[44px] font-bold text-[#3D4331] mb-4 font-serif" style={{ letterSpacing: '-0.5px' }}>
+              {stay.title}
+            </h1>
+            <div className="flex flex-wrap items-center text-[#585E4B] text-[15px] font-semibold">
+              <MapPin size={16} className="mr-2" strokeWidth={2.5} />
+              {stay.location}
+              {firstLandmark && (
+                <>
+                  <span className="mx-2 text-[#3D4331]/30">•</span>
+                  {firstLandmark.distance} from {firstLandmark.name}
+                </>
               )}
             </div>
+          </div>
 
-            {/* Right: Image Panel */}
-            <div className="relative w-full md:w-[55%] h-72 md:h-full">
+          <div className="flex flex-col items-start md:items-end gap-3 min-w-fit">
+            <div className="text-left md:text-right">
+              <div className="text-sm font-bold text-[#585E4B] mb-0.5">Starting at</div>
+              <div className="text-[40px] font-black text-[#3D4331] leading-none mb-2">
+                ${startingPrice}
+              </div>
+              <div className="text-[10px] uppercase tracking-widest text-[#585E4B] font-semibold">
+                per night • taxes extra
+              </div>
+            </div>
+            <button className="bg-[#3D4331] text-[#F3EDE0] px-8 py-3.5 rounded-full font-bold text-sm tracking-widest hover:bg-[#525942] transition-colors flex items-center gap-2 mt-2 shadow-lg shadow-[#3D4331]/10">
+              Book Stay <span className="text-lg leading-none">+</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Gallery Section */}
+        <div className="flex flex-col md:flex-row gap-5 h-[400px] mb-16">
+          {/* Main Image */}
+          <div className="relative w-full md:w-[65%] h-full rounded-[24px] overflow-hidden bg-[#D5CDBC]">
+            {images[imageIndex] && (
               <Image
                 src={images[imageIndex]}
                 alt={stay.title}
                 fill
                 className="object-cover"
               />
-              {/* Navigation Buttons overlay (functional) */}
+            )}
+            {images.length > 1 && (
               <div className="absolute bottom-6 right-6 flex gap-2">
-                <button 
-                  onClick={prevImage}
-                  className="w-10 h-10 rounded-full bg-[#46392b]/60 text-white flex items-center justify-center hover:bg-[#46392b] transition-colors border border-white/20 backdrop-blur-sm"
-                >
+                <button onClick={prevImage} className="w-10 h-10 rounded-full bg-[#3D4331]/90 text-[#F3EDE0] flex items-center justify-center hover:bg-[#3D4331] transition backdrop-blur-sm">
                   <ArrowLeft size={16} />
                 </button>
-                <button 
-                  onClick={nextImage}
-                  className="w-10 h-10 rounded-full bg-[#f7eedb] text-[#46392b] flex items-center justify-center hover:bg-white transition-colors shadow-sm"
-                >
+                <button onClick={nextImage} className="w-10 h-10 rounded-full bg-[#F3EDE0]/90 text-[#3D4331] flex items-center justify-center hover:bg-white transition backdrop-blur-sm shadow-sm">
                   <ArrowRight size={16} />
                 </button>
               </div>
-            </div>
+            )}
           </div>
-
-          {/* Bottom Amenities Bar */}
-          <div className="w-full bg-[#ebdcc2] rounded-xl py-5 px-6 md:px-12 flex flex-wrap justify-between items-center shadow-sm">
-            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
-              <Home size={22} className="text-[#46392b]/70" strokeWidth={1} />
-              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">Cozy Spaces</span>
+          
+          {/* Side Images */}
+          <div className="hidden md:flex flex-col gap-5 w-[35%] h-full">
+            <div className="relative w-full h-1/2 rounded-[24px] overflow-hidden bg-[#D5CDBC]">
+              {images[1] && <Image src={images[1]} alt="Gallery 2" fill className="object-cover" />}
             </div>
-            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
-            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
-              <Users size={22} className="text-[#46392b]/70" strokeWidth={1} />
-              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">Good People</span>
-            </div>
-            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
-            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[30%] md:w-auto">
-              <Globe size={22} className="text-[#46392b]/70" strokeWidth={1} />
-              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">New Stories</span>
-            </div>
-            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
-            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
-              <Coffee size={22} className="text-[#46392b]/70" strokeWidth={1} />
-              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">Slow Days</span>
-            </div>
-            <div className="hidden md:block w-px h-6 bg-[#46392b]/10"></div>
-            <div className="flex flex-col items-center gap-1.5 mb-2 md:mb-0 w-[45%] md:w-auto mt-2 md:mt-0">
-              <Backpack size={22} className="text-[#46392b]/70" strokeWidth={1} />
-              <span className="text-[8px] font-black text-[#46392b]/70 uppercase tracking-widest">Lasting Memories</span>
+            <div className="relative w-full h-1/2 rounded-[24px] overflow-hidden bg-[#D5CDBC]">
+              {images[2] && <Image src={images[2]} alt="Gallery 3" fill className="object-cover" />}
+              {images.length > 3 && (
+                <div className="absolute bottom-5 right-5 bg-[#3D4331]/90 backdrop-blur-sm text-[#F3EDE0] px-4 py-2 rounded-full text-[10px] font-black tracking-widest uppercase">
+                  +{images.length - 3} PHOTOS
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Two Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-x-16 gap-y-16">
+          
+          {/* LEFT COLUMN: Rooms, Amenities, Notes */}
+          <div className="space-y-14">
+            
+            {/* Types of Room */}
+            <section>
+              <div className="w-8 h-[2px] bg-[#96A476] mb-5"></div>
+              <h2 className="text-[28px] font-serif font-bold mb-8 text-[#3D4331]">Types of Room</h2>
+              
+              <div className="space-y-5">
+                {stay.rooms?.map((room, idx) => (
+                  <div key={idx} className="bg-[#EBE1D0] rounded-[24px] p-5 flex flex-col sm:flex-row gap-6 items-stretch">
+                    {/* Room Thumbnail */}
+                    <div className="w-full sm:w-32 h-40 sm:h-auto rounded-[16px] bg-[#D5CDBC] flex-shrink-0 relative overflow-hidden">
+                      {room.images?.[0] && <Image src={room.images[0]} alt={room.name} fill className="object-cover" />}
+                    </div>
+                    
+                    {/* Room Details */}
+                    <div className="flex-grow flex flex-col justify-center">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-[22px] font-serif font-bold text-[#3D4331] mb-1 leading-tight">{room.name}</h3>
+                          <div className="text-[13px] font-medium text-[#585E4B] flex flex-wrap gap-1.5 items-center">
+                            <span>{room.capacity} Adults</span>
+                            {room.beds && (
+                              <>
+                                <span className="text-[#3D4331]/20">•</span>
+                                <span>{room.beds}</span>
+                              </>
+                            )}
+                            {room.area && (
+                              <>
+                                <span className="text-[#3D4331]/20">•</span>
+                                <span>{room.area}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-4">
+                          <div className="text-[26px] font-black text-[#3D4331] leading-none mb-1">${room.priceUSDC}</div>
+                          <div className="text-[10px] text-[#585E4B] font-semibold">per night</div>
+                          {room.roomsLeft !== undefined && room.roomsLeft > 0 && (
+                            <div className="text-[10px] text-[#96A476] font-semibold mt-1">
+                              {room.roomsLeft} rooms left
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-2 mt-6">
+                        {room.amenities?.map((am, i) => (
+                          <span key={i} className="px-3 py-1.5 bg-[#D5CDBC]/30 rounded-full text-[10px] font-bold text-[#3D4331] tracking-wide">
+                            {am}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {(!stay.rooms || stay.rooms.length === 0) && (
+                  <div className="text-[#585E4B] text-sm italic">No rooms listed for this stay.</div>
+                )}
+              </div>
+            </section>
+
+            {/* Amenities */}
+            <section>
+              <div className="w-8 h-[2px] bg-[#96A476] mb-5"></div>
+              <h2 className="text-[28px] font-serif font-bold mb-8 text-[#3D4331]">Amenities</h2>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-10 gap-x-6">
+                {stay.amenities?.map((am, idx) => (
+                  <div key={idx} className="flex flex-col gap-3">
+                    <div className="text-[#3D4331]">
+                      {getAmenityIcon(am)}
+                    </div>
+                    <div className="text-[13px] font-bold text-[#3D4331] leading-snug pr-2">{am}</div>
+                  </div>
+                ))}
+                {(!stay.amenities || stay.amenities.length === 0) && (
+                  <div className="text-[#585E4B] text-sm italic col-span-2">No amenities listed.</div>
+                )}
+              </div>
+            </section>
+
+            {/* Extra Notes */}
+            <section>
+              <div className="w-8 h-[2px] bg-[#96A476] mb-5"></div>
+              <h2 className="text-[28px] font-serif font-bold mb-8 text-[#3D4331]">Extra Notes</h2>
+              
+              <div className="bg-[#EBE1D0] rounded-[24px] p-8 border border-[#EBE1D0] border-opacity-50 border-dashed">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-5">
+                  {stay.rules?.map((rule, idx) => (
+                    <div key={idx} className="flex items-start gap-3">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#96A476] mt-2 flex-shrink-0"></div>
+                      <span className="text-[13px] font-semibold text-[#585E4B] leading-relaxed">{rule}</span>
+                    </div>
+                  ))}
+                  {(!stay.rules || stay.rules.length === 0) && (
+                    <div className="text-[#585E4B] text-sm italic">No extra notes provided.</div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+          </div>
+          
+          {/* RIGHT COLUMN: Location, Landmarks */}
+          <div className="space-y-14">
+            
+            {/* Location */}
+            <section>
+              <div className="w-8 h-[2px] bg-[#96A476] mb-5"></div>
+              <h2 className="text-[28px] font-serif font-bold mb-6 text-[#3D4331]">Location</h2>
+              
+              <div className="bg-[#EBE1D0] rounded-[24px] mb-6 h-56 relative overflow-hidden flex items-center justify-center">
+                {(() => {
+                  let embedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(stay.address?.fullAddress || stay.location)}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
+                  
+                  if (stay.address?.mapUrl) {
+                    if (stay.address.mapUrl.includes('<iframe') && stay.address.mapUrl.includes('src="')) {
+                      // Extract src from iframe string
+                      const match = stay.address.mapUrl.match(/src="([^"]+)"/);
+                      if (match && match[1]) {
+                        embedUrl = match[1];
+                      }
+                    } else if (stay.address.mapUrl.includes('embed')) {
+                      embedUrl = stay.address.mapUrl;
+                    }
+                  }
+
+                  return (
+                    <iframe
+                      src={embedUrl}
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0 }}
+                      allowFullScreen={true}
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      className="absolute inset-0"
+                    ></iframe>
+                  );
+                })()}
+              </div>
+              
+              <p className="text-[13px] font-medium text-[#585E4B] mb-6 leading-relaxed">
+                {stay.address?.fullAddress || stay.location}
+              </p>
+              
+              <a 
+                href={stay.address?.mapUrl || `https://maps.google.com/?q=${encodeURIComponent(stay.address?.fullAddress || stay.location)}`}
+                target="_blank"
+                rel="noopener noreferrer" 
+                className="inline-flex items-center justify-center gap-2 bg-[#3D4331] text-[#F3EDE0] px-6 py-2.5 rounded-full text-[11px] font-bold tracking-widest hover:bg-[#525942] transition w-fit"
+              >
+                Get Directions <ArrowRight size={14} />
+              </a>
+            </section>
+
+            {/* Nearby Landmarks */}
+            {stay.address?.landmarks && stay.address.landmarks.length > 0 && (
+              <section>
+                <div className="w-8 h-[2px] bg-[#96A476] mb-5"></div>
+                <h2 className="text-[28px] font-serif font-bold mb-6 text-[#3D4331]">Nearby Landmarks</h2>
+                
+                <div className="space-y-0">
+                  {stay.address.landmarks.map((landmark, idx) => (
+                    <div key={idx} className="flex justify-between items-center py-4 border-b border-[#3D4331]/10 last:border-0">
+                      <div className="flex items-center gap-3 text-[#3D4331]">
+                        {getLandmarkIcon(landmark.type)}
+                        <span className="text-[13px] font-bold text-[#3D4331]">{landmark.name}</span>
+                      </div>
+                      <div className="text-[11px] font-bold text-[#96A476]">{landmark.distance}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            
+          </div>
+        </div>
+
       </div>
     </div>
   );

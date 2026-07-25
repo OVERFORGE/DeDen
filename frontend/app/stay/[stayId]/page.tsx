@@ -37,6 +37,8 @@ export default async function StayDetailsPage({
     images: stay.images || [],
     amenities: stay.amenities || [],
     highlights: stay.highlights || [],
+    rules: stay.rules || [], // ✅ Added
+    address: stay.address || null, // ✅ Added
     rooms: stay.rooms || [], // ✅ Rooms are already included
   };
 

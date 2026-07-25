@@ -183,6 +183,13 @@ export async function DELETE(
       );
     }
 
+    // Manually cascade delete related records to avoid Prisma referential integrity errors
+    await db.booking.deleteMany({ where: { stayId: id } });
+    await db.review.deleteMany({ where: { stayId: id } });
+    await db.waitlistEntry.deleteMany({ where: { stayId: id } });
+    await db.addon.deleteMany({ where: { stayId: id } });
+    await db.referralCode.deleteMany({ where: { stayId: id } });
+
     // Delete the stay
     await db.stay.delete({
       where: { id },
