@@ -1,9 +1,5 @@
 "use client";
 
-import { ArrowLeft, Check } from "lucide-react";
-// File: app/booking/[bookingId]/page.tsx
-// ✅ FIXED: Removed extra margins and improved spacing
-
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useAccount, useSendTransaction, useSwitchChain } from "wagmi";
@@ -27,7 +23,9 @@ import {
   ExternalLink,
   Loader2,
   Info,
-  RefreshCw
+  RefreshCw,
+  ArrowLeft,
+  Check
 } from "lucide-react";
 
 type BookingDetails = {
@@ -47,6 +45,10 @@ type BookingDetails = {
   remainingAmount: number | null;
   remainingPaid: boolean;
   numberOfNights: number | null;
+  guestName: string | null;
+  guestEmail: string | null;
+  checkInDate: string | null;
+  checkOutDate: string | null;
   
   stay: {
     title: string;
@@ -249,50 +251,29 @@ export default function PaymentPage() {
 
       if (!lockRes.ok) {
         const { error } = await lockRes.json();
-        throw new Error(
-          error || "Failed to lock payment details. Please refresh."
-        );
+        throw new Error(error || "Failed to lock payment details");
       }
 
-      setBooking((prev) =>
-        prev
-          ? {
-              ...prev,
-              paymentToken: selectedToken,
-              paymentAmount: amount,
-              chainId: selectedChain,
-            }
-          : null
-      );
-
-      if (walletChainId !== selectedChain) {
-        await switchChain({ chainId: selectedChain });
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-      }
-
-      const amountBaseUnits = parseUnits(amount.toString(), tokenInfo.decimals);
-
-      const data = encodeFunctionData({
+      const txData = encodeFunctionData({
         abi: erc20Abi,
         functionName: "transfer",
-        args: [treasuryAddress as `0x${string}`, amountBaseUnits],
+        args: [treasuryAddress as `0x${string}`, parseUnits(amount.toString(), tokenInfo.decimals)],
       });
 
-      const tx = await sendTransactionAsync({
+      const hash = await sendTransactionAsync({
         to: tokenInfo.address as `0x${string}`,
-        data: data,
+        data: txData,
+        value: BigInt(0),
       });
 
       setStatus("verifying");
-      const res = await fetch("/api/payments/submit-payment", {
+
+      const res = await fetch("/api/bookings/verify-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bookingId: booking.bookingId,
-          txHash: tx,
-          chainId: selectedChain,
-          paymentToken: selectedToken,
-          isRemainingPayment: isRemainingPayment,
+          txHash: hash,
         }),
       });
 
@@ -307,46 +288,30 @@ export default function PaymentPage() {
     }
   };
 
-  // ============================================================================
-  // LOADING STATE
-  // ============================================================================
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen bg-[#F3EDE0] flex items-center justify-center text-[#3D4331]">
         <div className="text-center">
-          <Loader2 className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-6" />
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">Loading Payment Details</h3>
-          <p className="text-gray-600">Please wait...</p>
+          <Loader2 className="w-16 h-16 animate-spin mx-auto mb-6" />
+          <h3 className="text-xl font-serif font-bold mb-2">Loading Payment Details</h3>
+          <p className="opacity-70 font-medium">Please wait...</p>
         </div>
       </div>
     );
   }
 
-  // ============================================================================
-  // ERROR STATE
-  // ============================================================================
   if (status === "error") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-50 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full border border-red-100">
+      <div className="min-h-screen bg-[#F3EDE0] flex items-center justify-center p-6 text-[#3D4331]">
+        <div className="bg-[#EBE1D0] p-10 rounded-[20px] shadow-sm max-w-md w-full border border-[#3D4331]/10">
           <div className="flex justify-center mb-6">
             <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center">
               <AlertCircle className="w-12 h-12 text-red-600" />
             </div>
           </div>
-          
-          <h2 className="text-2xl font-bold text-gray-900 text-center mb-4">
-            Payment Error
-          </h2>
-          
-          <p className="text-gray-600 text-center mb-8">
-            {error || "An unexpected error occurred."}
-          </p>
-          
-          
-         <a   href="/dashboard"
-            className="block w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 transition-all text-center"
-          >
+          <h2 className="text-2xl font-serif font-black text-center mb-4">Payment Error</h2>
+          <p className="text-[#3D4331]/70 text-center mb-8 font-medium">{error || "An unexpected error occurred."}</p>
+          <a href="/dashboard" className="block w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-4 rounded-full transition-all text-center uppercase tracking-widest text-sm hover:opacity-90">
             Return to Dashboard
           </a>
         </div>
@@ -356,80 +321,87 @@ export default function PaymentPage() {
 
   if (!booking) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-[#F3EDE0] flex items-center justify-center text-[#3D4331]">
         <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-xl text-gray-600">Booking not found</p>
+          <AlertCircle className="w-16 h-16 opacity-40 mx-auto mb-4" />
+          <p className="text-xl font-serif font-bold">Booking not found</p>
         </div>
       </div>
     );
   }
 
-  // ============================================================================
-  // SUCCESS STATE
-  // ============================================================================
   if (status === "confirmed") {
     const isReservationConfirmed = booking.status === "RESERVED";
-    
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-50 p-4">
-        <div className="bg-white p-10 rounded-2xl shadow-2xl max-w-lg w-full">
-          <div className="flex justify-center mb-6">
-            <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center">
-              <CheckCircle2 className="w-16 h-16 text-green-600" />
+      <div className="min-h-screen bg-[#F3EDE0] flex flex-col font-sans text-[#3D4331] selection:bg-[#3D4331] selection:text-[#F3EDE0]">
+        <div className="max-w-[1400px] mx-auto px-6 md:px-12 py-10 w-full flex-1 flex flex-col">
+          <div className="mb-10">
+            <div className="mt-8">
+              <h1 className="text-4xl md:text-5xl font-black mb-2 font-serif">Book Your Stay</h1>
+              <p className="text-[#3D4331]/70 font-semibold tracking-wider uppercase text-sm">
+                {booking.stay.title}
+              </p>
             </div>
           </div>
-          
-          <h2 className="text-3xl font-bold text-gray-900 text-center mb-3">
-            {isReservationConfirmed ? "🎫 Reservation Secured!" : "✅ Payment Complete!"}
-          </h2>
-
-          <div className="bg-green-50 rounded-xl p-6 mb-6">
-            {isReservationConfirmed ? (
-              <div className="space-y-3 text-center">
-                <p className="text-gray-700">
-                  Your <span className="font-bold text-green-700">${booking.reservationAmount}</span> reservation 
-                  for <span className="font-bold">{booking.stay.title}</span> is confirmed!
-                </p>
-                <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded text-left">
-                  <p className="text-sm text-amber-900">
-                    💰 Remaining: ${booking.remainingAmount} due on check-in
-                  </p>
-                </div>
+          <div className="relative mb-16 max-w-4xl mx-auto w-full">
+            <div className="absolute top-4 left-[15%] right-[15%] h-px bg-[#3D4331]/20 z-0" />
+            <div className="flex justify-between relative z-10">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#3D4331] text-[#F3EDE0] flex items-center justify-center font-bold text-sm"><Check size={16} /></div>
+                <span className="text-xs font-bold uppercase tracking-widest">Stay & Guests</span>
               </div>
-            ) : (
-              <p className="text-center text-gray-700">
-                Your spot for <span className="font-bold">{booking.stay.title}</span> is confirmed!
-              </p>
-            )}
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#3D4331] text-[#F3EDE0] flex items-center justify-center font-bold text-sm"><Check size={16} /></div>
+                <span className="text-xs font-bold uppercase tracking-widest">Payment</span>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#3D4331] text-[#F3EDE0] flex items-center justify-center font-bold text-sm">3</div>
+                <span className="text-xs font-bold uppercase tracking-widest">Confirmation</span>
+              </div>
+            </div>
           </div>
-
-          {booking.txHash && (
-            
-           <a   href={`${chainConfig[selectedChain]?.blockExplorer}/tx/${booking.txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full bg-blue-50 text-blue-700 font-medium py-3 rounded-xl hover:bg-blue-100 transition-all mb-4"
-            >
-              View Transaction
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          )}
-
-          
-          <a  href="/dashboard"
-            className="block w-full bg-gray-900 text-white font-semibold py-3 rounded-xl hover:bg-black transition-all text-center"
-          >
-            Go to Dashboard
-          </a>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="bg-[#EBE1D0] p-12 rounded-[30px] shadow-sm max-w-xl w-full border border-[#3D4331]/10 flex flex-col items-center text-center">
+              <div className="w-24 h-24 bg-[#3D4331] rounded-full flex items-center justify-center mb-8 shadow-xl text-[#F3EDE0]">
+                <CheckCircle2 className="w-12 h-12" />
+              </div>
+              <h2 className="text-3xl font-serif font-black mb-4">
+                {isReservationConfirmed ? "Reservation Secured!" : "Payment Complete!"}
+              </h2>
+              <div className="bg-[#F3EDE0] rounded-2xl p-6 mb-8 w-full border border-[#3D4331]/10">
+                {isReservationConfirmed ? (
+                  <div className="space-y-4">
+                    <p className="font-medium">
+                      Your <strong className="font-black">${booking.reservationAmount}</strong> reservation 
+                      for <strong className="font-black">{booking.stay.title}</strong> is confirmed!
+                    </p>
+                    <div className="bg-[#3D4331]/5 p-4 rounded-xl text-left border border-[#3D4331]/10">
+                      <p className="text-sm font-bold">
+                        ✦ Remaining: ${booking.remainingAmount} due on check-in
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="font-medium text-lg">
+                    Your spot for <strong className="font-black">{booking.stay.title}</strong> is confirmed!
+                  </p>
+                )}
+              </div>
+              {booking.txHash && (
+                <a href={`${chainConfig[selectedChain]?.blockExplorer}/tx/${booking.txHash}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 w-full bg-white text-[#3D4331] font-bold py-4 rounded-full transition-all mb-4 border border-[#3D4331]/20 hover:bg-[#F3EDE0] uppercase tracking-widest text-sm">
+                  View Transaction <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
+              <a href="/dashboard" className="block w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-4 rounded-full hover:bg-black transition-all text-center uppercase tracking-widest text-sm">
+                Go to Dashboard ✦
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  // ============================================================================
-  // PAYMENT STATE - FULL WIDTH LAYOUT
-  // ============================================================================
   const isReservationPayment = booking.requiresReservation && !booking.reservationPaid;
   const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
 
@@ -451,281 +423,310 @@ export default function PaymentPage() {
   }).format(Number(displayAmount));
 
   return (
-    // ✅ REMOVED: py-8 px-4 to eliminate top/side margins
-    <div className="min-h-screen bg-#E7E4DF from-slate-50 to-slate-100">
-      {/* ✅ REMOVED: max-w constraint and added full width */}
-      <div className="w-full">
+    <div className="min-h-screen bg-[#F3EDE0] text-[#3D4331] font-sans selection:bg-[#3D4331] selection:text-[#F3EDE0]">
+      <div className="max-w-[1400px] mx-auto px-6 md:px-12 py-10">
         
-        {/* Header - ✅ Added padding only to content, not container */}
-        <div className="text-center py-6 px-4">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Complete Payment
-          </h1>
-          <p className="text-gray-600">
-            {booking.stay.title}
-          </p>
+        {/* Header */}
+        <div className="mb-10">
+          <button onClick={() => window.history.back()} className="flex items-center gap-3 text-sm font-semibold tracking-widest uppercase hover:opacity-70 transition-opacity">
+            <div className="w-8 h-8 rounded-full bg-[#3D4331] text-[#F3EDE0] flex items-center justify-center">
+              <ArrowLeft size={16} />
+            </div>
+            Live Stays <span className="opacity-50">/ Book Your Stay</span>
+          </button>
+          <div className="mt-8">
+            <h1 className="text-4xl md:text-5xl font-black mb-2 font-serif">Book Your Stay</h1>
+            <p className="text-[#3D4331]/70 font-semibold tracking-wider uppercase text-sm">
+              {booking.stay.title}
+            </p>
+          </div>
         </div>
 
-        {/* ✅ LANDSCAPE LAYOUT: Full width with padding only inside */}
-        <div className="grid lg:grid-cols-2 gap-6 px-6 pb-6">
-          
-          {/* LEFT COLUMN - Payment Details */}
-          <div className="space-y-4">
-            
-            {/* Amount Card */}
-            <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
-              <div className="text-center">
-                <p className="text-sm font-medium text-gray-500 mb-2 uppercase tracking-wide">
-                  {isReservationPayment ? "Reservation Amount" : isRemainingPayment ? "Remaining Amount" : "Total Amount"}
-                </p>
-                <div className="flex items-baseline justify-center gap-2 mb-1">
-                  <span className="text-5xl font-bold text-gray-900">${formattedAmount}</span>
-                  <span className="text-2xl font-semibold text-gray-600">{selectedToken}</span>
-                </div>
-                <p className="text-sm text-gray-500">on {getChainName(selectedChain)}</p>
-              </div>
+        {/* Stepper */}
+        <div className="relative mb-16 max-w-4xl">
+          <div className="absolute top-4 left-[15%] right-[15%] h-px bg-[#3D4331]/20 z-0" />
+          <div className="flex justify-between relative z-10">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-[#3D4331] text-[#F3EDE0] flex items-center justify-center font-bold text-sm"><Check size={16} /></div>
+              <span className="text-xs font-bold uppercase tracking-widest">Stay & Guests</span>
             </div>
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-[#3D4331] text-[#F3EDE0] flex items-center justify-center font-bold text-sm">2</div>
+              <span className="text-xs font-bold uppercase tracking-widest">Payment</span>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-[#F3EDE0] border border-[#3D4331]/20 text-[#3D4331]/40 flex items-center justify-center font-bold text-sm">3</div>
+              <span className="text-xs font-bold uppercase tracking-widest text-[#3D4331]/40">Confirmation</span>
+            </div>
+          </div>
+        </div>
 
-            {/* Expiration Timer */}
-            {booking.expiresAt && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-center gap-3">
-                  <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-amber-900">Payment Expires</p>
-                    <p className="text-xs text-amber-700">
-                      {new Date(booking.expiresAt).toLocaleString()}
-                    </p>
-                  </div>
+        <div className="flex flex-col lg:flex-row gap-12 lg:gap-20 relative">
+          
+          {/* Left Column */}
+          <div className="flex-1 space-y-12">
+            
+            {/* Payment Methods Section */}
+            <section>
+              <h2 className="text-2xl font-serif font-bold mb-4 flex items-center gap-4">
+                Payment Method
+                <div className="h-px bg-[#3D4331]/20 flex-1" />
+              </h2>
+              
+              <div className="bg-white rounded-[30px] p-8 shadow-sm border border-[#3D4331]/10 space-y-8">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-[#3D4331] mb-4">
+                    Select Network
+                  </label>
+                  
+                  {allowedChains.length === 0 ? (
+                    <div className="p-5 bg-red-50 border border-red-100 rounded-2xl text-center">
+                      <AlertCircle className="w-6 h-6 text-red-600 mx-auto mb-2" />
+                      <p className="text-sm font-bold text-red-900">
+                        No networks enabled
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {allowedChains.map((chainId) => (
+                        <button
+                          key={chainId}
+                          onClick={() => {
+                            setSelectedChain(chainId);
+                            const tokens = getSupportedTokens(chainId);
+                            if (!tokens.includes(selectedToken)) {
+                              setSelectedToken(tokens[0] as "USDC" | "USDT");
+                            }
+                          }}
+                          className={`p-4 rounded-2xl font-bold text-sm transition-all ${
+                            selectedChain === chainId
+                              ? "bg-[#3D4331] text-[#F3EDE0]"
+                              : "bg-[#F3EDE0] hover:bg-[#EBE1D0] text-[#3D4331]"
+                          }`}
+                        >
+                          {getChainName(chainId)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
 
-            {/* Reservation Progress */}
-            {booking.requiresReservation && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-start gap-2 mb-3">
-                  <Info className="w-4 h-4 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-blue-900">Two-Step Payment</p>
-                    <p className="text-xs text-blue-700">{booking.numberOfNights} nights</p>
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-[#3D4331] mb-4">
+                    Select Token
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {supportedTokens.map((token) => (
+                      <button
+                        key={token}
+                        onClick={() => setSelectedToken(token as "USDC" | "USDT")}
+                        disabled={isPaymentLocked && selectedToken !== token}
+                        className={`p-4 rounded-2xl font-bold transition-all text-sm ${
+                          selectedToken === token
+                            ? "bg-[#3D4331] text-[#F3EDE0]"
+                            : "bg-[#F3EDE0] hover:bg-[#EBE1D0] text-[#3D4331]"
+                        } ${
+                          isPaymentLocked && selectedToken !== token
+                            ? "opacity-30 cursor-not-allowed"
+                            : ""
+                        }`}
+                      >
+                        {token}
+                      </button>
+                    ))}
                   </div>
+                  {isPaymentLocked && (
+                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-3 text-center">
+                      Locked to {selectedToken}
+                    </p>
+                  )}
+                </div>
+
+                {isWrongNetwork && (
+                  <div className="bg-[#EBE1D0] border border-[#3D4331]/20 rounded-2xl p-5">
+                    <div className="flex items-start gap-3 mb-4">
+                      <AlertCircle className="w-5 h-5 opacity-70 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-bold text-sm mb-1 uppercase tracking-widest">Wrong Network</p>
+                        <p className="text-xs font-medium opacity-70">
+                          Switch to <strong>{getChainName(selectedChain)}</strong> to continue
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSwitchNetwork}
+                      disabled={isSwitchingNetwork}
+                      className="w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-4 rounded-full transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSwitchingNetwork ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Switching...</>
+                      ) : (
+                        <><RefreshCw className="w-4 h-4" /> Switch Network</>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl">
+                    <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs font-bold text-red-800">{error}</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* Right Column - Fixed Sidebar */}
+          <div className="w-full lg:w-[400px]">
+            <div className="sticky top-10 bg-[#EBE1D0] rounded-[30px] p-8 shadow-sm border border-[#3D4331]/10">
+              <h3 className="font-serif text-2xl font-black mb-6">Overview</h3>
+              
+              <div className="space-y-6 text-[#3D4331]/80">
+                {/* Stay Details */}
+                <div className="pb-6 border-b border-[#3D4331]/10">
+                  <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-[#3D4331]/60">Stay</p>
+                  <p className="font-bold text-sm text-[#3D4331]">{booking.stay.title}</p>
+                </div>
+
+                {/* Guest Details */}
+                {booking.guestName && (
+                  <div className="pb-6 border-b border-[#3D4331]/10">
+                    <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-[#3D4331]/60">Primary Guest</p>
+                    <p className="font-bold text-sm text-[#3D4331]">{booking.guestName}</p>
+                    {booking.guestEmail && (
+                      <p className="text-xs font-medium opacity-60 mt-0.5">{booking.guestEmail}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Duration */}
+                {booking.checkInDate && booking.checkOutDate && (
+                  <div className="pb-6 border-b border-[#3D4331]/10">
+                    <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-[#3D4331]/60">Duration</p>
+                    <div className="flex items-center gap-2 text-sm font-bold text-[#3D4331]">
+                      <span>{new Date(booking.checkInDate).toLocaleDateString()}</span>
+                      <ArrowRight className="w-3 h-3 opacity-50" />
+                      <span>{new Date(booking.checkOutDate).toLocaleDateString()}</span>
+                    </div>
+                    {booking.numberOfNights && (
+                      <p className="text-xs font-medium opacity-60 mt-1">{booking.numberOfNights} nights</p>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-[#3D4331]/60">Payment Network</p>
+                  <p className="font-bold text-sm bg-white/40 inline-block px-3 py-1 rounded-lg border border-[#3D4331]/5">{getChainName(selectedChain)}</p>
                 </div>
                 
-                <div className="space-y-2">
-                  <div className={`flex items-center justify-between p-3 rounded-lg ${
-                    !booking.reservationPaid ? 'bg-white border-2 border-blue-500' : 'bg-green-50'
-                  }`}>
-                    <span className="text-sm font-medium">1. Reservation</span>
-                    <span className="text-sm font-bold">
-                      {booking.reservationPaid ? '✅ Paid' : `$${booking.reservationAmount}`}
+                {booking.expiresAt && (
+                  <div className="flex items-start gap-3">
+                    <Clock className="w-5 h-5 opacity-40 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-[#3D4331]/60">Payment Expires</p>
+                      <p className="font-bold text-sm text-[#3D4331]">
+                        {new Date(booking.expiresAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {booking.requiresReservation && (
+                  <div className="pt-4 border-t border-[#3D4331]/10">
+                    <div className="flex items-start gap-2 mb-3">
+                      <Info className="w-4 h-4 opacity-40 mt-0.5" />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-[#3D4331]/60">Two-Step Payment</p>
+                        <p className="text-xs font-bold">{booking.numberOfNights} nights total</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2 mt-3">
+                      <div className={`flex items-center justify-between p-3 rounded-xl ${
+                        !booking.reservationPaid ? 'bg-white shadow-sm border border-[#3D4331]/10' : 'bg-[#3D4331]/5'
+                      }`}>
+                        <span className="text-[10px] font-black uppercase tracking-widest">1. Reservation</span>
+                        <span className="text-sm font-bold">
+                          {booking.reservationPaid ? '✅ Paid' : `$${booking.reservationAmount}`}
+                        </span>
+                      </div>
+                      
+                      <div className={`flex items-center justify-between p-3 rounded-xl ${
+                        booking.reservationPaid && !booking.remainingPaid ? 'bg-white shadow-sm border border-[#3D4331]/10' : 'bg-[#3D4331]/5'
+                      }`}>
+                        <span className="text-[10px] font-black uppercase tracking-widest">2. Remaining Due</span>
+                        <span className="text-sm font-bold">${booking.remainingAmount}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="pt-6 mt-6 border-t border-[#3D4331]/20">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-serif font-bold text-lg text-[#3D4331]">
+                      {isReservationPayment ? "Reservation" : isRemainingPayment ? "Remaining" : "Total"}
                     </span>
+                    <span className="font-black text-4xl text-[#3D4331]">${formattedAmount}</span>
                   </div>
-                  
-                  <div className={`flex items-center justify-between p-3 rounded-lg ${
-                    booking.reservationPaid && !booking.remainingPaid ? 'bg-white border-2 border-blue-500' : 'bg-gray-100'
-                  }`}>
-                    <span className="text-sm font-medium">2. Remaining</span>
-                    <span className="text-sm font-bold">${booking.remainingAmount}</span>
-                  </div>
+                  <p className="text-right text-[10px] font-black uppercase tracking-widest text-[#3D4331]/60">in {selectedToken}</p>
                 </div>
               </div>
-            )}
 
-            {/* Security Badge */}
-            <div className="flex items-center justify-center gap-2 text-gray-500 text-xs">
-              <Shield className="w-4 h-4" />
-              <span>Secure payment • Funds sent directly to treasury</span>
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN - Payment Controls */}
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 space-y-5">
-            
-            {/* Network Selector */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-3">
-                Select Network
-              </label>
-              
-              {allowedChains.length > 0 && allowedChains.length < SUPPORTED_CHAINS.length && (
-                <div className="mb-3 flex items-start gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                  <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-blue-900">
-                    {allowedChains.length} network{allowedChains.length !== 1 ? 's' : ''} available
-                  </p>
-                </div>
-              )}
-              
-              {allowedChains.length === 0 ? (
-                <div className="p-4 bg-red-50 border border-red-300 rounded-xl text-center">
-                  <AlertCircle className="w-6 h-6 text-red-600 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-red-900">
-                    No networks enabled
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {allowedChains.map((chainId) => (
-                    <button
-                      key={chainId}
-                      onClick={() => {
-                        setSelectedChain(chainId);
-                        const tokens = getSupportedTokens(chainId);
-                        if (!tokens.includes(selectedToken)) {
-                          setSelectedToken(tokens[0] as "USDC" | "USDT");
-                        }
-                      }}
-                      className={`p-3 rounded-xl border-2 font-medium text-sm transition-all ${
-                        selectedChain === chainId
-                          ? "border-blue-600 bg-blue-50 text-blue-700"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                      }`}
-                    >
-                      {getChainName(chainId)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Token Selector */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-3">
-                Select Token
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {supportedTokens.map((token) => (
+              {/* ACTION BUTTON */}
+              <div className="mt-8">
+                {!isConnected ? (
+                  <div className="flex justify-center">
+                    <ConnectKitButton />
+                  </div>
+                ) : (
                   <button
-                    key={token}
-                    onClick={() => setSelectedToken(token as "USDC" | "USDT")}
-                    disabled={isPaymentLocked && selectedToken !== token}
-                    className={`p-3 rounded-xl border-2 font-bold transition-all ${
-                      selectedToken === token
-                        ? "border-blue-600 bg-blue-50 text-blue-700"
-                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                    } ${
-                      isPaymentLocked && selectedToken !== token
-                        ? "opacity-40 cursor-not-allowed"
-                        : ""
+                    onClick={handlePay}
+                    disabled={
+                      status === "sending" || 
+                      status === "verifying" || 
+                      !selectedToken || 
+                      allowedChains.length === 0 ||
+                      isWrongNetwork
+                    }
+                    className={`w-full py-5 rounded-full font-bold transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-sm shadow-xl ${
+                      status === "sending" || status === "verifying" || allowedChains.length === 0 || isWrongNetwork
+                        ? "bg-white text-[#3D4331]/40 cursor-not-allowed border border-[#3D4331]/10"
+                        : "bg-[#3D4331] hover:bg-black text-[#F3EDE0]"
                     }`}
                   >
-                    {token}
+                    {status === "sending" && <><Loader2 className="w-5 h-5 animate-spin" /> Check Wallet</>}
+                    {status === "verifying" && <><Loader2 className="w-5 h-5 animate-spin" /> Verifying</>}
+                    {status === "ready" && !isWrongNetwork && (
+                      <>
+                        Pay ${formattedAmount} ✦
+                      </>
+                    )}
+                    {isWrongNetwork && "Switch Network First"}
                   </button>
-                ))}
+                )}
               </div>
-              {isPaymentLocked && (
-                <div className="mt-2 flex items-start gap-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <AlertCircle className="w-4 h-4 text-yellow-700 mt-0.5" />
-                  <p className="text-xs text-yellow-900">
-                    Locked to <strong>{selectedToken}</strong>
-                  </p>
-                </div>
-              )}
-            </div>
 
-            {/* Network Switch Button */}
-            {isWrongNetwork && (
-              <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
-                <div className="flex items-start gap-3 mb-3">
-                  <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-semibold text-orange-900 text-sm mb-1">Wrong Network</p>
-                    <p className="text-xs text-orange-800">
-                      Switch to <strong>{getChainName(selectedChain)}</strong> to continue
-                    </p>
+              <div className="mt-6 flex flex-col gap-2">
+                <div className="flex items-center justify-center gap-2 text-[10px] font-bold opacity-60 text-center uppercase tracking-widest">
+                  <Shield className="w-3 h-3" />
+                  <span>Secure smart contract payment</span>
+                </div>
+                <details className="bg-transparent mt-2">
+                  <summary className="cursor-pointer text-center text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity outline-none">
+                    View Destination
+                  </summary>
+                  <div className="mt-2 p-3 bg-white/50 rounded-lg border border-[#3D4331]/5 text-center">
+                    <code className="text-[9px] font-mono break-all font-bold opacity-70">
+                      {treasuryAddress}
+                    </code>
                   </div>
-                </div>
-                <button
-                  onClick={handleSwitchNetwork}
-                  disabled={isSwitchingNetwork}
-                  className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSwitchingNetwork ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Switching...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-4 h-4" />
-                      Switch to {getChainName(selectedChain)}
-                    </>
-                  )}
-                </button>
+                </details>
               </div>
-            )}
-
-            {/* Error Message */}
-            {error && (
-              <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
-                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-red-800">{error}</p>
-              </div>
-            )}
-
-            {/* Payment Button */}
-            {!isConnected ? (
-              <div className="pt-2">
-                <ConnectKitButton />
-              </div>
-            ) : (
-              <button
-                onClick={handlePay}
-                disabled={
-                  status === "sending" || 
-                  status === "verifying" || 
-                  !selectedToken || 
-                  allowedChains.length === 0 ||
-                  isWrongNetwork
-                }
-                className={`w-full py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${
-                  status === "sending" || status === "verifying" || allowedChains.length === 0 || isWrongNetwork
-                    ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                    : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg"
-                }`}
-              >
-                {status === "sending" && (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Check Wallet
-                  </>
-                )}
-                {status === "verifying" && (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Verifying...
-                  </>
-                )}
-                {status === "ready" && !isWrongNetwork && (
-                  <>
-                    {isReservationPayment
-                      ? `Pay $${displayAmount} Reservation`
-                      : isRemainingPayment
-                      ? `Pay $${displayAmount} Remaining`
-                      : `Pay $${displayAmount} ${selectedToken}`}
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-                {isWrongNetwork && "Switch Network First"}
-              </button>
-            )}
+            </div>
           </div>
+
         </div>
-
-        {/* Treasury Address - ✅ Added horizontal padding */}
-        <details className="mx-6 mb-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <summary className="px-6 py-3 cursor-pointer hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700">
-            View Payment Destination
-          </summary>
-          <div className="px-6 py-4 bg-gray-50 border-t">
-            <p className="text-xs font-semibold text-gray-600 mb-2">Treasury:</p>
-            <code className="block p-2 bg-white rounded border text-xs font-mono break-all">
-              {treasuryAddress}
-            </code>
-          </div>
-        </details>
-
       </div>
     </div>
   );

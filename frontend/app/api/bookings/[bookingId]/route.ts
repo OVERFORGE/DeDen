@@ -52,6 +52,12 @@ export async function GET(
                 remainingPaid: true,
                 numberOfNights: true,
 
+                // Guest and Date info for overview
+                guestName: true,
+                guestEmail: true,
+                checkInDate: true,
+                checkOutDate: true,
+
                 // ✅ Stay relation with enabledChains
                 stay: {
                     select: {

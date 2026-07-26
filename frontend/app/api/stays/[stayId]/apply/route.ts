@@ -287,18 +287,19 @@ const reservationAmount = requiresReservation
     });
 
     if (existingBooking) {
-      const isTerminalStatus =
+      const isUpdateableStatus =
+        existingBooking.status === BookingStatus.PENDING ||
         existingBooking.status === BookingStatus.FAILED ||
         existingBooking.status === BookingStatus.EXPIRED ||
         existingBooking.status === BookingStatus.CANCELLED ||
         existingBooking.status === BookingStatus.REFUNDED;
 
-      if (isTerminalStatus) {
+      if (isUpdateableStatus) {
         // Update old booking
         const updatedBooking = await db.booking.update({
           where: { id: existingBooking.id },
           data: {
-            status: BookingStatus.WAITLISTED,
+            status: BookingStatus.PENDING,
             preferredRoomId: selectedRoomId || null,
             selectedRoomId: selectedRoomId || null,
             numberOfNights,
@@ -390,7 +391,7 @@ const reservationAmount = requiresReservation
     const newBooking = await db.booking.create({
       data: {
         bookingId: randomId,
-        status: BookingStatus.WAITLISTED,
+        status: BookingStatus.PENDING,
         userId: user.id,
         stayId: stay.id,
         guestName: user.displayName,
