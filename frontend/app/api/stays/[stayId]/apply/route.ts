@@ -5,6 +5,19 @@
 // ✅ Goes straight to PENDING (not WAITLISTED) — matches the payment page,
 // which redirects here immediately after apply. A fresh PENDING booking
 // gets a 24h payment window so it's eligible for lazy expiry.
+// ✅ EXTEND: re-applying while a booking already exists for this stay no
+// longer hard-blocks with 409 (unless a payment is actively verifying).
+// Instead the newly submitted guest(s) are ADDED to the existing booking:
+//   - WAITLISTED/PENDING (nothing paid yet): merge guests in place, recompute
+//     price, keep the same status.
+//   - RESERVED (reservation paid, remaining outstanding): merge guests, add
+//     the extra cost onto the existing remainingAmount.
+//   - CONFIRMED (fully paid): merge guests, open a fresh "remaining due" leg
+//     for just the incremental cost — reuses the reservation/remaining-leg
+//     UI and payment flow the frontend already has, so no frontend change
+//     is needed to pay the top-up.
+// Extra slots for the added guests are held immediately (and checked for
+// availability) the same way the original reservation flow does.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
@@ -12,10 +25,18 @@ import { BookingStatus } from '@prisma/client';
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { computeBookingTotals, incrementReferralUsage, PricingError } from '@/lib/pricing';
+import { hasAvailableSlots, holdStaySlots } from '@/lib/inventory';
 import { z } from 'zod';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const DEFAULT_PAYMENT_WINDOW_HOURS = 24;
+
+const ACTIVE_NON_TERMINAL_STATUSES: BookingStatus[] = [
+  BookingStatus.WAITLISTED,
+  BookingStatus.PENDING,
+  BookingStatus.RESERVED,
+  BookingStatus.CONFIRMED,
+];
 
 const guestSchema = z.object({
   fullName: z.string().trim().optional().default(''),
@@ -114,7 +135,7 @@ export async function POST(
       );
     }
 
-    const guestCount = body.guests.length;
+    const submittedGuestCount = body.guests.length;
 
     // Wallet is optional at apply time — reject the placeholder zero
     // address rather than persisting it as a real wallet.
@@ -154,37 +175,6 @@ export async function POST(
       );
     }
 
-    // 4. Server-authoritative pricing (loyalty + referral + reservation split)
-    let pricing;
-    try {
-      pricing = await computeBookingTotals({
-        stay: {
-          id: stay.id,
-          priceUSDC: stay.priceUSDC,
-          priceUSDT: stay.priceUSDT,
-          rooms: stay.rooms,
-          requiresReservation: stay.requiresReservation,
-          reservationAmount: stay.reservationAmount,
-          minNightsForReservation: stay.minNightsForReservation,
-        },
-        roomId: body.selectedRoomId || null,
-        nights: numberOfNights,
-        guestCount,
-        referralCode: body.referralCode || null,
-        userId,
-      });
-    } catch (err) {
-      if (err instanceof PricingError) {
-        return NextResponse.json({ error: err.message }, { status: err.status });
-      }
-      throw err;
-    }
-
-    console.log(`[Apply] Guests: ${guestCount} | Nights: ${numberOfNights} | Discount: ${pricing.discountPercent}% (${pricing.discountType})`);
-    if (pricing.requiresReservation) {
-      console.log(`[Apply] Requires reservation: $${pricing.reservationAmount}`);
-    }
-
     // 5. Get & Update Authenticated User
     const emailConflict = await db.user.findFirst({
       where: {
@@ -218,37 +208,19 @@ export async function POST(
       },
     });
 
-    // Guests persisted as-is (JSON) — this is what makes the guest roster
-    // visible to admin and what the confirmation email/tickets are built from.
-    const guestsJson = body.guests as any;
-
-    // 6. Check for existing booking (unique(userId, stayId))
+    // 6. Check for an existing booking for this stay
     const existingBooking = await db.booking.findFirst({
-      where: {
-        userId: user.id,
-        stayId: stay.id,
-      },
-      select: {
-        id: true,
-        bookingId: true,
-        status: true,
-      },
+      where: { userId: user.id, stayId: stay.id },
     });
 
-    // A booking can be (re-)applied over if it isn't actively
-    // waitlisted/reserved/confirmed already.
-    const isUpdateableStatus =
-      !existingBooking ||
-      existingBooking.status === BookingStatus.PENDING ||
-      existingBooking.status === BookingStatus.FAILED ||
-      existingBooking.status === BookingStatus.EXPIRED ||
-      existingBooking.status === BookingStatus.CANCELLED ||
-      existingBooking.status === BookingStatus.REFUNDED;
+    const isExtendable = !!existingBooking && ACTIVE_NON_TERMINAL_STATUSES.includes(existingBooking.status);
 
-    if (existingBooking && !isUpdateableStatus) {
+    // Block only when a payment is actively mid-verification — extending
+    // while a tx is in flight would race with that confirmation.
+    if (existingBooking?.status === BookingStatus.PENDING && existingBooking.txHash) {
       return NextResponse.json(
         {
-          error: `You have an active application for this stay. Status: ${existingBooking.status}`,
+          error: 'A payment for this booking is currently being verified. Please wait for it to complete before adding more guests.',
           bookingId: existingBooking.bookingId,
           status: existingBooking.status,
         },
@@ -256,85 +228,232 @@ export async function POST(
       );
     }
 
-    const paymentWindowExpiresAt = new Date(Date.now() + DEFAULT_PAYMENT_WINDOW_HOURS * 60 * 60 * 1000);
+    // Combined guest list: existing guests (if extending) + newly submitted.
+    const existingGuests = isExtendable ? ((existingBooking!.guests as any[]) || []) : [];
+    const combinedGuests = [...existingGuests, ...body.guests];
+    const combinedGuestCount = combinedGuests.length;
+    const previousGuestCount = existingGuests.length;
+    const addedGuestCount = combinedGuestCount - previousGuestCount;
 
-    const commonBookingFields = {
-      preferredRoomId: body.selectedRoomId || null,
-      selectedRoomId: body.selectedRoomId || null,
-      numberOfNights,
-      checkInDate: new Date(body.checkInDate),
-      checkOutDate: new Date(body.checkOutDate),
-      pricePerNightUSDC: pricing.pricePerNightUSDC,
-      pricePerNightUSDT: pricing.pricePerNightUSDT,
-      originalPrice: pricing.subtotalUSDC,
-      discountPercent: pricing.discountPercent,
-      discountAmount: pricing.discountAmountUSDC,
-      finalPrice: pricing.finalTotalUSDC,
-      isLoyaltyDiscount: pricing.isLoyaltyDiscount,
-      referralCodeId: pricing.validatedReferralCode?.id || null,
-      referralCodeUsed: pricing.validatedReferralCode?.code || null,
-      selectedRoomPriceUSDC: pricing.finalTotalUSDC,
-      selectedRoomPriceUSDT: pricing.finalTotalUSDT,
-      selectedRoomName: pricing.roomName,
-      guestCount,
-      guests: guestsJson,
-      requiresReservation: pricing.requiresReservation,
-      reservationAmount: pricing.reservationAmount,
-      remainingAmount: pricing.remainingAmountUSDC,
-      remainingDueDate: pricing.requiresReservation ? new Date(body.checkInDate) : null,
-      expiresAt: paymentWindowExpiresAt,
-    };
-
-    let resultBooking;
-
-    if (existingBooking) {
-      resultBooking = await db.booking.update({
-        where: { id: existingBooking.id },
-        data: {
-          status: BookingStatus.PENDING,
-          ...commonBookingFields,
-          guestName: user.displayName,
-          guestEmail: user.email,
-          guestGender: body.gender,
-          guestAge: age,
-          guestMobile: body.mobileNumber,
-          reservationPaid: false,
-          remainingPaid: false,
-          // Reset payment fields on re-application
-          paymentToken: null,
-          paymentAmount: null,
-          amountBaseUnits: null,
-          chainId: null,
-          txHash: null,
-          senderAddress: null,
-          confirmedAt: null,
+    // 4. Server-authoritative pricing for the FULL (combined) guest count.
+    // Referral codes are only honored on a brand-new or terminal-status
+    // booking — an extension doesn't re-consume/re-validate one.
+    let pricing;
+    try {
+      pricing = await computeBookingTotals({
+        stay: {
+          id: stay.id,
+          priceUSDC: stay.priceUSDC,
+          priceUSDT: stay.priceUSDT,
+          rooms: stay.rooms,
+          requiresReservation: stay.requiresReservation,
+          reservationAmount: stay.reservationAmount,
+          minNightsForReservation: stay.minNightsForReservation,
         },
+        roomId: body.selectedRoomId || existingBooking?.selectedRoomId || null,
+        nights: numberOfNights,
+        guestCount: combinedGuestCount,
+        referralCode: isExtendable ? null : body.referralCode || null,
+        userId,
       });
-    } else {
-      resultBooking = await db.booking.create({
-        data: {
-          bookingId: `${stayId}-${Date.now()}`,
-          status: BookingStatus.PENDING,
-          userId: user.id,
-          stayId: stay.id,
-          guestName: user.displayName,
-          guestEmail: user.email,
-          guestGender: body.gender,
-          guestAge: age,
-          guestMobile: body.mobileNumber,
-          ...commonBookingFields,
-          reservationPaid: false,
-          remainingPaid: false,
-          optInGuestList: false,
-          shareContactInfo: false,
-          contentReuseConsent: false,
-          needsTravelHelp: false,
-        },
-      });
+    } catch (err) {
+      if (err instanceof PricingError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      throw err;
     }
 
-    if (pricing.validatedReferralCode) {
-      await incrementReferralUsage(pricing.validatedReferralCode.id);
+    console.log(`[Apply] ${isExtendable ? 'Extending' : 'New'} — guests: ${combinedGuestCount} (+${addedGuestCount}) | nights: ${numberOfNights} | discount: ${pricing.discountPercent}%`);
+
+    const paymentWindowExpiresAt = new Date(Date.now() + DEFAULT_PAYMENT_WINDOW_HOURS * 60 * 60 * 1000);
+    let resultBooking;
+    let extensionDelta: number | null = null;
+
+    if (isExtendable && existingBooking) {
+      // Extra slots are claimed the moment the extension is requested, same
+      // as the initial reservation flow claims a slot before the remaining
+      // leg is paid.
+      if (addedGuestCount > 0 && (existingBooking.status === BookingStatus.RESERVED || existingBooking.status === BookingStatus.CONFIRMED)) {
+        const slotsOk = await hasAvailableSlots(stay.id, addedGuestCount);
+        if (!slotsOk) {
+          return NextResponse.json(
+            { error: `Not enough slots remaining for ${addedGuestCount} additional guest(s).` },
+            { status: 409 }
+          );
+        }
+      }
+
+      const sharedFields = {
+        numberOfNights,
+        checkInDate: new Date(body.checkInDate),
+        checkOutDate: new Date(body.checkOutDate),
+        pricePerNightUSDC: pricing.pricePerNightUSDC,
+        pricePerNightUSDT: pricing.pricePerNightUSDT,
+        originalPrice: pricing.subtotalUSDC,
+        discountPercent: pricing.discountPercent,
+        discountAmount: pricing.discountAmountUSDC,
+        finalPrice: pricing.finalTotalUSDC,
+        isLoyaltyDiscount: pricing.isLoyaltyDiscount,
+        selectedRoomPriceUSDC: pricing.finalTotalUSDC,
+        selectedRoomPriceUSDT: pricing.finalTotalUSDT,
+        selectedRoomName: pricing.roomName,
+        guestCount: combinedGuestCount,
+        guests: combinedGuests as any,
+      };
+
+      if (existingBooking.status === BookingStatus.WAITLISTED || existingBooking.status === BookingStatus.PENDING) {
+        // Nothing paid yet — just merge in place, recompute price, keep status.
+        resultBooking = await db.booking.update({
+          where: { id: existingBooking.id },
+          data: {
+            ...sharedFields,
+            requiresReservation: pricing.requiresReservation,
+            reservationAmount: pricing.reservationAmount,
+            remainingAmount: pricing.remainingAmountUSDC,
+            remainingDueDate: pricing.requiresReservation ? new Date(body.checkInDate) : null,
+            expiresAt: paymentWindowExpiresAt,
+            // Clear any stale payment lock so it's recomputed against the new total.
+            paymentToken: null,
+            paymentAmount: null,
+            amountBaseUnits: null,
+            chainId: null,
+            txHash: null,
+            senderAddress: null,
+          },
+        });
+      } else if (existingBooking.status === BookingStatus.RESERVED) {
+        // Reservation already paid; the extra cost is added to the
+        // still-outstanding remaining amount.
+        extensionDelta = parseFloat((pricing.finalTotalUSDC - (existingBooking.finalPrice ?? 0)).toFixed(2));
+        const newRemaining = parseFloat(((existingBooking.remainingAmount ?? 0) + extensionDelta).toFixed(2));
+
+        if (addedGuestCount > 0) {
+          await holdStaySlots(stay.id, addedGuestCount);
+        }
+
+        resultBooking = await db.booking.update({
+          where: { id: existingBooking.id },
+          data: {
+            ...sharedFields,
+            requiresReservation: true,
+            reservationAmount: existingBooking.reservationAmount,
+            remainingAmount: newRemaining,
+          },
+        });
+      } else {
+        // CONFIRMED — fully paid already. Open a fresh "remaining due" leg
+        // for just the incremental cost, reusing the existing
+        // reservation/remaining-payment UI and lock-payment/submit-payment
+        // flow so no frontend change is needed to collect the top-up.
+        const previousTotalPaid = existingBooking.totalPaid ?? existingBooking.finalPrice ?? existingBooking.selectedRoomPriceUSDC ?? 0;
+        extensionDelta = parseFloat((pricing.finalTotalUSDC - previousTotalPaid).toFixed(2));
+
+        if (extensionDelta <= 0) {
+          return NextResponse.json(
+            { error: 'Could not compute a positive amount due for the added guest(s).' },
+            { status: 400 }
+          );
+        }
+
+        if (addedGuestCount > 0) {
+          await holdStaySlots(stay.id, addedGuestCount);
+        }
+
+        resultBooking = await db.booking.update({
+          where: { id: existingBooking.id },
+          data: {
+            ...sharedFields,
+            status: BookingStatus.RESERVED,
+            requiresReservation: true,
+            reservationPaid: true,
+            remainingPaid: false,
+            remainingAmount: extensionDelta,
+            remainingDueDate: new Date(),
+            remainingTxHash: null,
+            remainingToken: null,
+            remainingChainId: null,
+          },
+        });
+      }
+    } else {
+      // Fresh booking — either no prior booking, or the prior one is in a
+      // terminal state (FAILED/EXPIRED/CANCELLED/REFUNDED) and this is a
+      // clean re-application, not an extension.
+      const commonBookingFields = {
+        preferredRoomId: body.selectedRoomId || null,
+        selectedRoomId: body.selectedRoomId || null,
+        numberOfNights,
+        checkInDate: new Date(body.checkInDate),
+        checkOutDate: new Date(body.checkOutDate),
+        pricePerNightUSDC: pricing.pricePerNightUSDC,
+        pricePerNightUSDT: pricing.pricePerNightUSDT,
+        originalPrice: pricing.subtotalUSDC,
+        discountPercent: pricing.discountPercent,
+        discountAmount: pricing.discountAmountUSDC,
+        finalPrice: pricing.finalTotalUSDC,
+        isLoyaltyDiscount: pricing.isLoyaltyDiscount,
+        referralCodeId: pricing.validatedReferralCode?.id || null,
+        referralCodeUsed: pricing.validatedReferralCode?.code || null,
+        selectedRoomPriceUSDC: pricing.finalTotalUSDC,
+        selectedRoomPriceUSDT: pricing.finalTotalUSDT,
+        selectedRoomName: pricing.roomName,
+        guestCount: submittedGuestCount,
+        guests: body.guests as any,
+        requiresReservation: pricing.requiresReservation,
+        reservationAmount: pricing.reservationAmount,
+        remainingAmount: pricing.remainingAmountUSDC,
+        remainingDueDate: pricing.requiresReservation ? new Date(body.checkInDate) : null,
+        expiresAt: paymentWindowExpiresAt,
+      };
+
+      if (existingBooking) {
+        resultBooking = await db.booking.update({
+          where: { id: existingBooking.id },
+          data: {
+            status: BookingStatus.PENDING,
+            ...commonBookingFields,
+            guestName: user.displayName,
+            guestEmail: user.email,
+            guestGender: body.gender,
+            guestAge: age,
+            guestMobile: body.mobileNumber,
+            reservationPaid: false,
+            remainingPaid: false,
+            paymentToken: null,
+            paymentAmount: null,
+            amountBaseUnits: null,
+            chainId: null,
+            txHash: null,
+            senderAddress: null,
+            confirmedAt: null,
+          },
+        });
+      } else {
+        resultBooking = await db.booking.create({
+          data: {
+            bookingId: `${stayId}-${Date.now()}`,
+            status: BookingStatus.PENDING,
+            userId: user.id,
+            stayId: stay.id,
+            guestName: user.displayName,
+            guestEmail: user.email,
+            guestGender: body.gender,
+            guestAge: age,
+            guestMobile: body.mobileNumber,
+            ...commonBookingFields,
+            reservationPaid: false,
+            remainingPaid: false,
+            optInGuestList: false,
+            shareContactInfo: false,
+            contentReuseConsent: false,
+            needsTravelHelp: false,
+          },
+        });
+      }
+
+      if (pricing.validatedReferralCode) {
+        await incrementReferralUsage(pricing.validatedReferralCode.id);
+      }
     }
 
     // 7. Log Activity
@@ -342,7 +461,7 @@ export async function POST(
       data: {
         userId: user.id,
         bookingId: resultBooking.id,
-        action: existingBooking ? 'application_resubmitted' : 'application_submitted',
+        action: isExtendable ? 'booking_extended' : (existingBooking ? 'application_resubmitted' : 'application_submitted'),
         entity: 'booking',
         entityId: resultBooking.id,
         details: {
@@ -352,26 +471,29 @@ export async function POST(
           selectedRoomId: body.selectedRoomId,
           selectedRoomName: pricing.roomName,
           numberOfNights,
-          guestCount,
+          previousGuestCount,
+          addedGuestCount,
+          guestCount: combinedGuestCount,
           checkInDate: body.checkInDate,
           checkOutDate: body.checkOutDate,
-          originalPrice: pricing.subtotalUSDC,
-          discountPercent: pricing.discountPercent,
-          discountAmount: pricing.discountAmountUSDC,
           finalPrice: pricing.finalTotalUSDC,
-          discountType: pricing.discountType,
+          extensionDelta,
           requiresReservation: pricing.requiresReservation,
-          reservationAmount: pricing.reservationAmount,
-          remainingAmount: pricing.remainingAmountUSDC,
         },
       },
     });
 
-    // 8. Respond — booking is PENDING immediately, so the frontend can
-    // proceed straight to the payment page.
-    const responseMessage = pricing.requiresReservation
-      ? `Application submitted! ${pricing.discountPercent > 0 ? `${pricing.discountPercent}% discount applied.` : ''} Reservation payment ($${pricing.reservationAmount}) required.`
-      : `Application submitted successfully! ${pricing.discountPercent > 0 ? `${pricing.discountPercent}% discount applied.` : ''}`;
+    // 8. Respond
+    let responseMessage: string;
+    if (isExtendable && extensionDelta !== null) {
+      responseMessage = `Added ${addedGuestCount} guest(s)! An extra $${extensionDelta} is due — you'll be taken to pay it.`;
+    } else if (isExtendable) {
+      responseMessage = `Added ${addedGuestCount} guest(s) to your application.`;
+    } else {
+      responseMessage = pricing.requiresReservation
+        ? `Application submitted! ${pricing.discountPercent > 0 ? `${pricing.discountPercent}% discount applied.` : ''} Reservation payment ($${pricing.reservationAmount}) required.`
+        : `Application submitted successfully! ${pricing.discountPercent > 0 ? `${pricing.discountPercent}% discount applied.` : ''}`;
+    }
 
     return NextResponse.json(
       {
@@ -384,18 +506,16 @@ export async function POST(
           stayTitle: stay.title,
           selectedRoomName: pricing.roomName,
           numberOfNights,
-          guestCount,
+          guestCount: combinedGuestCount,
           checkInDate: body.checkInDate,
           checkOutDate: body.checkOutDate,
-          originalPrice: pricing.subtotalUSDC,
-          discountPercent: pricing.discountPercent,
-          discountAmount: pricing.discountAmountUSDC,
           finalPriceUSDC: pricing.finalTotalUSDC,
           finalPriceUSDT: pricing.finalTotalUSDT,
           discountType: pricing.discountType,
-          requiresReservation: pricing.requiresReservation,
-          reservationAmount: pricing.reservationAmount,
-          remainingAmount: pricing.remainingAmountUSDC,
+          requiresReservation: resultBooking.requiresReservation,
+          reservationAmount: resultBooking.reservationAmount,
+          remainingAmount: resultBooking.remainingAmount,
+          extensionDelta,
         },
       },
       { status: 201 }

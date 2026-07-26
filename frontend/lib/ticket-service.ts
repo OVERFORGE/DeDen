@@ -67,9 +67,10 @@ export function verifyQrToken(qrToken: string): VerifiedQrToken {
 }
 
 /**
- * Issues one Ticket per guest on a booking. Idempotent — safe to call
- * multiple times (e.g. if verification retries); existing tickets for the
- * booking are returned as-is rather than duplicated.
+ * Issues one Ticket per guest on a booking. Idempotent AND additive: guest
+ * indices that already have a ticket are left alone, and only newly added
+ * guests (e.g. from extending an already-CONFIRMED booking with more
+ * guests, whose top-up payment just confirmed) get a new ticket.
  */
 export async function issueTicketsForBooking(bookingId: string) {
   const booking = await db.booking.findUnique({
@@ -82,10 +83,7 @@ export async function issueTicketsForBooking(bookingId: string) {
   }
 
   const existing = await db.ticket.findMany({ where: { bookingId: booking.id } });
-  if (existing.length > 0) {
-    console.log(`[Tickets] ${existing.length} ticket(s) already issued for booking ${bookingId}, skipping`);
-    return existing;
-  }
+  const alreadyTicketedIndices = new Set(existing.map((t) => t.guestIndex));
 
   const guests = (booking.guests as any[]) || [];
   // Fall back to a single ticket from the primary guest snapshot if the
@@ -95,8 +93,15 @@ export async function issueTicketsForBooking(bookingId: string) {
     ? guests
     : [{ fullName: booking.guestName, email: booking.guestEmail }];
 
-  const tickets = [];
+  if (existing.length > 0 && guestList.every((_, i) => alreadyTicketedIndices.has(i))) {
+    console.log(`[Tickets] All ${existing.length} guest(s) already ticketed for booking ${bookingId}, skipping`);
+    return existing;
+  }
+
+  const tickets = [...existing];
   for (let i = 0; i < guestList.length; i++) {
+    if (alreadyTicketedIndices.has(i)) continue;
+
     const guest = guestList[i];
     const ticketCode = `TKT-${booking.stay.stayId}-${booking.bookingId.split('-').pop()}-${i + 1}`;
     const qrToken = signQrToken(ticketCode);
