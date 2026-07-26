@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { verifyManualPayment } from '@/lib/manual-verification';
 import { BookingStatus } from '@prisma/client';
+import { requireBookingOwner, authErrorResponse } from '@/lib/api-auth';
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +15,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Only the booking's owner (or an admin) may register a sender address
+    // for manual verification.
+    await requireBookingOwner(bookingId);
 
     const booking = await db.booking.findUnique({
       where: { bookingId },
@@ -40,6 +45,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, message: 'Verification initiated' });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error initiating verification:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

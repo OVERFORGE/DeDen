@@ -5,14 +5,20 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
 import { sendPaymentExpiryEmail } from '@/lib/email';
+import { requireAdminOrJob, authErrorResponse } from '@/lib/api-auth';
 
 /**
  * POST /api/bookings/check-expiry
- * Checks for expired bookings and sends emails
- * Should be called by a cron job every 5-10 minutes
+ * Checks for expired bookings and sends emails.
+ * Callable from the admin panel, or by an external scheduler using
+ * `Authorization: Bearer JOB_SECRET` (no Vercel Cron available yet — see
+ * lib/booking-lifecycle.ts for the per-read lazy check that covers the
+ * common case without needing a scheduler at all).
  */
 export async function POST(request: Request) {
   try {
+    await requireAdminOrJob(request);
+
     const now = new Date();
     
     // Find all PENDING bookings that have expired
@@ -100,6 +106,9 @@ export async function POST(request: Request) {
       results,
     });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[Expiry Check] Error:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: (error as Error).message },

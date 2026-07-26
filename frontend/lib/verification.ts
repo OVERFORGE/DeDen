@@ -8,6 +8,7 @@ import { chainConfig, treasuryAddress } from './config';
 import { parseUnits } from 'viem';
 import { sendConfirmationEmail, sendReservationConfirmedEmail } from './email';
 import { mintBookingNFT } from './nft-service'; // ✅ NEW: Import NFT service
+import { holdStaySlots } from './inventory';
 
 /**
  * Check if a transaction hash has already been used
@@ -297,6 +298,11 @@ export async function verifyPayment(
               },
             });
 
+            // ✅ Slot is secured the moment the reservation is paid — hold it
+            // now so it isn't double-booked while the remaining payment is
+            // still outstanding.
+            await holdStaySlots(booking.stayId, booking.guestCount || 1);
+
             // Log activity
             await db.activityLog.create({
               data: {
@@ -531,6 +537,9 @@ export async function verifyPayment(
                 totalPaid: booking.paymentAmount,
               },
             });
+
+            // ✅ Non-reservation stays hold the slot at full-payment confirmation.
+            await holdStaySlots(booking.stayId, booking.guestCount || 1);
 
             // Log activity
             await db.activityLog.create({

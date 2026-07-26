@@ -1,17 +1,26 @@
 // File: app/api/admin/bookings/[bookingId]/approve/route.ts
-// ✅ FIXED: Uses '??' to allow small decimals like 0.001 instead of forcing 30
+// ✅ requireAdmin guard (this route had zero server-side auth before).
+// ✅ Reservation split now goes through lib/pricing.ts instead of inline
+//    math duplicated across this file.
+// ✅ Guards against overbooking — refuses to approve if the stay no longer
+//    has enough open slots for this booking's guest count.
 
 import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/database";
 import { BookingStatus } from "@prisma/client";
 import { sendApprovalEmail } from "@/lib/email";
 import { Prisma } from "@prisma/client";
+import { requireAdmin, authErrorResponse } from "@/lib/api-auth";
+import { computeReservationSplit } from "@/lib/pricing";
+import { hasAvailableSlots } from "@/lib/inventory";
 
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ bookingId: string }> }
 ) {
   try {
+    await requireAdmin();
+
     const { bookingId } = await context.params;
     const body = await request.json();
     const { sessionExpiryMinutes = 15 } = body;
@@ -48,39 +57,41 @@ export async function POST(
       );
     }
 
-    // ✅ FIXED: Use admin's stay configuration
-    const numberOfNights = booking.numberOfNights || 0;
-    const minNightsRequired = booking.stay.minNightsForReservation || 2;
-    
-    // Check if this stay has reservation system enabled AND meets minimum nights
-    const shouldBeReservation = 
-      booking.stay.requiresReservation && 
-      numberOfNights >= minNightsRequired;
-
-    let requiresReservation = shouldBeReservation;
-    
-    // ✅ CRITICAL FIX: Changed || to ?? so it respects 0.001
-    let reservationAmount = shouldBeReservation 
-      ? (booking.stay.reservationAmount ?? 30) 
-      : null;
-      
-    let remainingAmount: number | null = null;
-
-    if (shouldBeReservation) {
-      const totalPrice = booking.selectedRoomPriceUSDC || booking.stay.priceUSDC;
-      const calculatedTotal = totalPrice || (booking.stay.priceUSDC * numberOfNights);
-      // Ensure floating point math doesn't create weird decimals like 29.99999999
-      remainingAmount = parseFloat((calculatedTotal - (reservationAmount!)).toFixed(2));
+    // ✅ Overbooking guard — the stay may have filled up since this
+    // application was submitted.
+    const guestCount = booking.guestCount || 1;
+    const slotsOk = await hasAvailableSlots(booking.stayId, guestCount);
+    if (!slotsOk) {
+      return NextResponse.json(
+        { error: `Not enough slots remaining for this stay (need ${guestCount}).` },
+        { status: 409 }
+      );
     }
 
-    // Determine payment amount user needs to pay now
-    const paymentAmount = requiresReservation 
-      ? reservationAmount! 
-      : (booking.selectedRoomPriceUSDC || booking.stay.priceUSDC);
+    const numberOfNights = booking.numberOfNights || 0;
+
+    // Final total was already computed (with discount) at apply time.
+    const finalTotalUSDC = booking.selectedRoomPriceUSDC ?? booking.stay.priceUSDC * numberOfNights;
+    const finalTotalUSDT = booking.selectedRoomPriceUSDT ?? booking.stay.priceUSDT * numberOfNights;
+
+    const { requiresReservation, reservationAmount, remainingAmountUSDC } = computeReservationSplit({
+      stay: {
+        requiresReservation: booking.stay.requiresReservation,
+        reservationAmount: booking.stay.reservationAmount,
+        minNightsForReservation: booking.stay.minNightsForReservation,
+      },
+      nights: numberOfNights,
+      finalTotalUSDC,
+      finalTotalUSDT,
+    });
+
+    const remainingAmount = remainingAmountUSDC;
+
+    // Amount the guest must pay right now.
+    const paymentAmount = requiresReservation ? reservationAmount! : finalTotalUSDC;
 
     console.log(`[Approve] Stay has reservation enabled: ${booking.stay.requiresReservation}`);
-    console.log(`[Approve] Min nights required: ${minNightsRequired}`);
-    console.log(`[Approve] Booking nights: ${numberOfNights}`);
+    console.log(`[Approve] Booking nights: ${numberOfNights}, guests: ${guestCount}`);
     console.log(`[Approve] Mode: ${requiresReservation ? `Reservation ($${reservationAmount})` : 'Full Payment'}`);
     console.log(`[Approve] Payment Amount: $${paymentAmount}`);
 
@@ -113,11 +124,7 @@ export async function POST(
           expiresAt: expiresAt,
           isReservation: requiresReservation,
           paymentAmount: paymentAmount,
-          stayReservationSettings: {
-            enabled: booking.stay.requiresReservation,
-            minNights: minNightsRequired,
-            amount: booking.stay.reservationAmount,
-          },
+          guestCount,
         },
       },
     });
@@ -128,8 +135,6 @@ export async function POST(
     let emailError = null;
 
     try {
-      const fullAmount = booking.selectedRoomPriceUSDC || booking.stay.priceUSDC;
-      
       await sendApprovalEmail({
         recipientEmail: booking.user.email!,
         recipientName: booking.user.displayName || "Guest",
@@ -144,7 +149,7 @@ export async function POST(
         expiresAt,
         isReservation: requiresReservation,
         numberOfNights: numberOfNights,
-        fullAmount: fullAmount,
+        fullAmount: finalTotalUSDC,
       });
 
       emailSent = true;
@@ -155,7 +160,7 @@ export async function POST(
     }
 
     const successMessage = requiresReservation
-      ? `Booking approved! User needs to pay $${paymentAmount} reservation (${numberOfNights} nights ≥ ${minNightsRequired} min nights).`
+      ? `Booking approved! User needs to pay $${paymentAmount} reservation.`
       : `Booking approved! User needs to pay full amount ($${paymentAmount}).`;
 
     return NextResponse.json({
@@ -175,6 +180,9 @@ export async function POST(
       },
     });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error("[API] Error approving booking:", error);
     return NextResponse.json(
       { error: "Internal server error", details: (error as Error).message },

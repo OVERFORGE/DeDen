@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
+import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
 
 /**
  * GET /api/admin/stays/[id]
@@ -12,6 +13,8 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAdmin();
+
     const { id } = await context.params;
 
     const stay = await db.stay.findUnique({
@@ -34,6 +37,9 @@ export async function GET(
 
     return NextResponse.json(stay);
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error fetching stay:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: (error as Error).message },
@@ -51,6 +57,8 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAdmin();
+
     const { id } = await context.params;
     const body = await request.json();
 
@@ -155,6 +163,9 @@ export async function PATCH(
 
     return NextResponse.json(updatedStay);
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error updating stay:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: (error as Error).message },
@@ -172,6 +183,8 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAdmin();
+
     const { id } = await context.params;
 
     // Check if stay exists
@@ -203,6 +216,9 @@ export async function DELETE(
       message: 'Stay deleted successfully' 
     });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error deleting stay:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: (error as Error).message },

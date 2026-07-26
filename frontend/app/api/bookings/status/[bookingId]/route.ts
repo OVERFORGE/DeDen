@@ -1,8 +1,16 @@
 // File: app/api/bookings/status/[bookingId]/route.ts
+// ✅ Requires ownership — this is the endpoint the payment page polls while
+// verifying, so it was leaking live payment status to anyone who guessed a
+// bookingId.
+// ✅ Also settles stale PENDING bookings on read, and keeps the manual
+// verification trigger: if the booking is PENDING with a senderAddress set
+// (user clicked "I have paid" without a captured tx hash), each poll kicks
+// off a background scan for a matching on-chain transfer.
 
-// 1. IMPORT 'NextRequest' HERE
 import { NextResponse, NextRequest } from 'next/server';
 import { db } from '@/lib/database';
+import { requireBookingOwner, authErrorResponse } from '@/lib/api-auth';
+import { settleBookingIfStale } from '@/lib/booking-lifecycle';
 
 /**
  * Get the current status of a booking
@@ -21,6 +29,9 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    await requireBookingOwner(bookingId);
+    await settleBookingIfStale(bookingId);
 
     const booking = await db.booking.findUnique({
       where: { bookingId },
@@ -47,23 +58,23 @@ export async function GET(
       );
     }
 
-    // ✅ NEW: If the booking is PENDING but has a senderAddress, 
-    // it means the user clicked "I have paid". We should trigger a scan here
-    // so that the frontend's 10-second polling acts as our verification cron loop!
+    // If the booking is PENDING but has a senderAddress, the user clicked
+    // "I have paid" without a captured tx hash. Trigger a scan here so the
+    // frontend's polling doubles as a verification retry loop.
     if (booking.status === 'PENDING' && booking.senderAddress) {
-        const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
-        
-        // Fire asynchronously so we don't block the status response
-        // Note: In strict Serverless environments this might get killed,
-        // but since we poll every 10s, it gets retried constantly.
-        import('@/lib/manual-verification').then(({ verifyManualPayment }) => {
-            verifyManualPayment(
-                booking.bookingId, 
-                booking.senderAddress as string, 
-                booking.chainId || 1, // Fallback chain
-                isRemainingPayment
-            ).catch(e => console.error("Manual verify error:", e));
-        });
+      const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
+
+      // Fire asynchronously so we don't block the status response. In a
+      // strict serverless environment this might get killed early, but
+      // since the client polls repeatedly, it gets retried constantly.
+      import('@/lib/manual-verification').then(({ verifyManualPayment }) => {
+        verifyManualPayment(
+          booking.bookingId,
+          booking.senderAddress as string,
+          booking.chainId || 1,
+          isRemainingPayment
+        ).catch((e) => console.error('Manual verify error:', e));
+      });
     }
 
     return NextResponse.json({
@@ -78,10 +89,13 @@ export async function GET(
     });
 
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error fetching booking status:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
   }
-}
+}

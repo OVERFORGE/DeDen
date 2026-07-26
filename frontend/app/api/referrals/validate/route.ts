@@ -1,11 +1,17 @@
 // File: app/api/referrals/validate/route.ts
+// ✅ Moved from app/api/admin/referrals/validate/ — this is a public
+// endpoint (the header comment always said so) meant to be called live from
+// the apply form to check a referral code before submitting. It was
+// misplaced under /api/admin/ and unused; moving it out makes it reachable
+// for the referral-code input the apply UI needs to add back.
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 /**
  * GET /api/referrals/validate?code=XXX&stayId=YYY
  * Validate a referral code for a specific stay
- * 
+ *
  * This is called by the apply form to check if a referral code is valid
  * before the user submits their application
  */
@@ -18,9 +24,9 @@ export async function GET(request: NextRequest) {
     // Validation
     if (!code || !stayId) {
       return NextResponse.json(
-        { 
+        {
           valid: false,
-          error: 'Code and stayId are required' 
+          error: 'Code and stayId are required'
         },
         { status: 400 }
       );
@@ -45,9 +51,9 @@ export async function GET(request: NextRequest) {
 
     if (!referralCode) {
       return NextResponse.json(
-        { 
+        {
           valid: false,
-          error: 'Invalid referral code for this stay' 
+          error: 'Invalid referral code for this stay'
         },
         { status: 404 }
       );
@@ -56,9 +62,9 @@ export async function GET(request: NextRequest) {
     // Check if expired
     if (referralCode.expiresAt && new Date(referralCode.expiresAt) < new Date()) {
       return NextResponse.json(
-        { 
+        {
           valid: false,
-          error: 'This referral code has expired' 
+          error: 'This referral code has expired'
         },
         { status: 410 }
       );
@@ -67,9 +73,9 @@ export async function GET(request: NextRequest) {
     // Check usage limit
     if (referralCode.maxUsage && referralCode.usageCount >= referralCode.maxUsage) {
       return NextResponse.json(
-        { 
+        {
           valid: false,
-          error: 'This referral code has reached its usage limit' 
+          error: 'This referral code has reached its usage limit'
         },
         { status: 410 }
       );
@@ -92,9 +98,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('[Validate Referral] Error:', error);
     return NextResponse.json(
-      { 
+      {
         valid: false,
-        error: 'Failed to validate referral code' 
+        error: 'Failed to validate referral code'
       },
       { status: 500 }
     );

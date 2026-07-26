@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
+import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
 
 /**
  * GET /api/admin/bookings
@@ -12,6 +13,8 @@ import { BookingStatus } from '@prisma/client';
  */
 export async function GET(request: Request) {
   try {
+    await requireAdmin();
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const stayId = searchParams.get('stayId');
@@ -109,9 +112,12 @@ export async function GET(request: Request) {
 
     return NextResponse.json(transformedBookings);
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error fetching admin bookings:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
         details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
       },

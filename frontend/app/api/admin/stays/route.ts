@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
+import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
 
 /**
  * GET /api/admin/stays
@@ -9,6 +10,8 @@ import { db } from '@/lib/database';
  */
 export async function GET() {
   try {
+    await requireAdmin();
+
     const stays = await db.stay.findMany({
       orderBy: {
         createdAt: 'desc',
@@ -34,6 +37,9 @@ export async function GET() {
 
     return NextResponse.json(stays);
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error fetching stays:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -48,6 +54,8 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
+
     const body = await request.json();
 
     // ✅ FIX: Process and validate the data before creating
@@ -118,8 +126,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(newStay, { status: 201 });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error creating stay:', error);
-    
+
     // Handle unique constraint violations
     if ((error as any).code === 'P2002') {
       const field = (error as any).meta?.target?.[0] || 'field';

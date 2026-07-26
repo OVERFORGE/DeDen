@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { verifyPayment } from '@/lib/verification';
+import { requireBookingOwner, authErrorResponse } from '@/lib/api-auth';
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +14,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Only the booking's owner (or an admin) may trigger verification for it.
+    await requireBookingOwner(bookingId);
 
     const booking = await db.booking.findUnique({
       where: { bookingId },
@@ -29,6 +33,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, message: 'Verification initiated' });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error initiating popup verification:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

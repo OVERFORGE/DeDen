@@ -5,24 +5,28 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { verifyPayment, checkTransactionUsed } from '@/lib/verification';
 import { BookingStatus } from '@prisma/client';
+import { requireBookingOwner, authErrorResponse } from '@/lib/api-auth';
 
 /**
  * Updated API to submit payment for a booking with reservation support
  * POST /api/payments/submit-payment
- * Body: { bookingId: string, txHash: string, chainId: number, paymentToken: string, isRemainingPayment?: boolean }
+ * Body: { bookingId: string, txHash: string, chainId: number, paymentToken: string }
+ *
+ * ✅ isRemainingPayment is no longer trusted from the client — it's derived
+ * from the booking's actual state (requiresReservation/reservationPaid/
+ * remainingPaid) below, so a forged flag can't change which leg is verified.
  */
 export async function POST(request: Request) {
   try {
     // 1. Read the request body
     const body = await request.json();
-    const { bookingId, txHash, chainId, paymentToken, isRemainingPayment = false } = body;
+    const { bookingId, txHash, chainId, paymentToken } = body;
 
-    console.log('[API] Payment submission received:', { 
-      bookingId, 
-      txHash, 
-      chainId, 
+    console.log('[API] Payment submission received:', {
+      bookingId,
+      txHash,
+      chainId,
       paymentToken,
-      isRemainingPayment 
     });
 
     // 2. Basic Validation
@@ -40,6 +44,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // 2.6 Ownership check — only the booking's owner (or an admin) may
+    //     submit a payment for it.
+    await requireBookingOwner(bookingId);
 
     // 3. Check if this transaction hash has already been used
     const isUsed = await checkTransactionUsed(txHash);
@@ -80,6 +88,11 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
+
+    // ✅ Derived from booking state, not the client — a reservation booking
+    // whose reservation is already paid (and remaining isn't) is always on
+    // its remaining leg; there is no other valid interpretation.
+    const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
 
     // ✅ NEW: Determine payment type and validate status
     if (booking.requiresReservation) {
@@ -248,6 +261,9 @@ export async function POST(request: Request) {
     });
 
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error submitting payment:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

@@ -1,158 +1,172 @@
-// File: app/api/bookings/lock-payment/route.ts (CORRECTED with Base Unit Calculation)
+// File: app/api/bookings/lock-payment/route.ts
+// ✅ SECURITY FIX: The amount is now derived entirely server-side from the
+// booking's already-computed price (set at apply/approve time via
+// lib/pricing.ts). The client can no longer dictate paymentAmount — any
+// value it sends is ignored. Also validates the chain is actually enabled
+// for the stay, and supports the reservation "remaining payment" leg
+// (previously blocked because only status PENDING was accepted).
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
-import { parseUnits } from 'viem'; // Import viem's utility for base unit calculation
-import { chainConfig } from '@/lib/config'; // Import config to get decimals
+import { parseUnits } from 'viem';
+import { chainConfig } from '@/lib/config';
+import { requireBookingOwner, authErrorResponse } from '@/lib/api-auth';
 
-/**
- * POST /api/bookings/lock-payment
- * * Locks the user's chosen payment details (Token, Amount, Chain) 
- * to the booking record immediately before they execute the on-chain transaction.
- * * Body: { bookingId: string, paymentToken: "USDC" | "USDT", paymentAmount: number, chainId: number }
- */
 export async function POST(request: Request) {
-  try {
-    // 1. Read the request body
-    const body = await request.json();
-    const { bookingId, paymentToken, paymentAmount, chainId } = body;
+  try {
+    const body = await request.json();
+    const { bookingId, paymentToken, chainId } = body;
 
-    console.log('[API/LockPayment] Request to lock payment details:', { bookingId, paymentToken, paymentAmount, chainId });
+    if (!bookingId || !paymentToken || !chainId) {
+      return NextResponse.json(
+        { error: 'Missing required fields: bookingId, paymentToken, chainId' },
+        { status: 400 }
+      );
+    }
 
-    // 2. Basic Validation (Kept as is)
-    if (!bookingId || !paymentToken || paymentAmount === undefined || !chainId) {
-      return NextResponse.json(
-        { error: 'Missing required fields: bookingId, paymentToken, paymentAmount, chainId' },
-        { status: 400 }
-      );
-    }
+    if (paymentToken !== 'USDC' && paymentToken !== 'USDT') {
+      return NextResponse.json(
+        { error: 'Invalid paymentToken. Must be USDC or USDT.' },
+        { status: 400 }
+      );
+    }
 
-    if (paymentToken !== 'USDC' && paymentToken !== 'USDT') {
-      return NextResponse.json(
-        { error: 'Invalid paymentToken. Must be USDC or USDT.' },
-        { status: 400 }
-      );
-    }
-    
-    if (typeof paymentAmount !== 'number' || paymentAmount <= 0) {
-      return NextResponse.json(
-        { error: 'Invalid paymentAmount.' },
-        { status: 400 }
-      );
-    }
-    
-    // --- 🔑 CRITICAL CALCULATION ---
+    // 1. Ownership check — only the booking's owner (or an admin) may lock
+    //    payment details for it.
+    const { booking: ownedBooking } = await requireBookingOwner(bookingId);
+
+    const booking = await db.booking.findUnique({
+      where: { bookingId },
+      include: { stay: true },
+    });
+
+    if (!booking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+
+    // 2. Status must be lockable: PENDING (full payment or reservation leg)
+    //    or RESERVED (remaining-payment leg, after reservation is paid).
+    const isRemainingLeg =
+      booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
+
+    const isLockable =
+      booking.status === BookingStatus.PENDING ||
+      (booking.status === BookingStatus.RESERVED && isRemainingLeg);
+
+    if (!isLockable) {
+      return NextResponse.json(
+        {
+          error: `Cannot lock payment. Booking status is: ${booking.status}`,
+          currentStatus: booking.status,
+        },
+        { status: 409 }
+      );
+    }
+
+    // 3. Chain must be enabled for this stay (or, if the stay has no
+    //    restriction configured, any globally supported chain).
+    const stayEnabledChains = booking.stay.enabledChains;
+    const chainAllowed =
+      !stayEnabledChains || stayEnabledChains.length === 0 || stayEnabledChains.includes(chainId);
+
+    if (!chainAllowed) {
+      return NextResponse.json(
+        { error: `Chain ${chainId} is not enabled for this stay` },
+        { status: 400 }
+      );
+    }
+
     const chain = chainConfig[chainId];
     if (!chain) {
-        return NextResponse.json(
-            { error: `Unsupported chain ID: ${chainId}` },
-            { status: 400 }
-        );
+      return NextResponse.json({ error: `Unsupported chain ID: ${chainId}` }, { status: 400 });
     }
-    
+
     const tokenInfo = chain.tokens[paymentToken];
     if (!tokenInfo) {
-        return NextResponse.json(
-            { error: `Token ${paymentToken} not supported on chain ${chain.name}` },
-            { status: 400 }
-        );
+      return NextResponse.json(
+        { error: `Token ${paymentToken} not supported on chain ${chain.name}` },
+        { status: 400 }
+      );
     }
 
-    // ✅ Convert human amount (0.01) to base units (e.g., 10000)
-    const amountBaseUnits = parseUnits(
-        paymentAmount.toString(),
-        tokenInfo.decimals
-    ).toString(); // Save as string to avoid floating point issues in DB
-    
-    console.log(`[API/LockPayment] Calculated Base Units: ${amountBaseUnits} for ${paymentAmount} ${paymentToken}`);
-    // --- END CRITICAL CALCULATION ---
+    // 4. Derive the amount server-side — never trust a client-supplied number.
+    let amount: number | null;
 
+    if (isRemainingLeg) {
+      amount = booking.remainingAmount;
+    } else if (booking.requiresReservation && !booking.reservationPaid) {
+      amount = booking.reservationAmount;
+    } else if (!booking.requiresReservation) {
+      amount =
+        paymentToken === 'USDC'
+          ? booking.selectedRoomPriceUSDC ?? booking.stay.priceUSDC
+          : booking.selectedRoomPriceUSDT ?? booking.stay.priceUSDT;
+    } else {
+      // requiresReservation but both legs already paid — nothing left to lock.
+      return NextResponse.json(
+        { error: 'This booking has already been fully paid' },
+        { status: 409 }
+      );
+    }
 
-    // 3. Find and check the booking status
-    const booking = await db.booking.findUnique({
-      where: { bookingId },
-      select: {
-        id: true,
-        status: true,
-        paymentToken: true,
-      },
-    });
+    if (!amount || amount <= 0) {
+      return NextResponse.json(
+        { error: 'Could not determine a valid payment amount for this booking' },
+        { status: 500 }
+      );
+    }
 
-    if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
-    }
+    const amountBaseUnits = parseUnits(amount.toString(), tokenInfo.decimals).toString();
 
-    // 4. Check if the booking is in a lockable state (e.g., PENDING)
-    if (booking.status !== BookingStatus.PENDING) {
-      return NextResponse.json(
-        { 
-          error: `Cannot lock payment. Booking status is: ${booking.status}`,
-          currentStatus: booking.status 
-        },
-        { status: 409 } // Conflict
-      );
-    }
+    // 5. Idempotent re-lock: if already locked to the same token, no-op.
+    if (booking.paymentToken === paymentToken && booking.chainId === chainId && booking.paymentAmount === amount) {
+      return NextResponse.json({ success: true, message: 'Payment details already locked' });
+    }
 
-    // 5. Check if payment is already locked (optional check for redundant requests)
-    if (booking.paymentToken && booking.paymentToken === paymentToken) {
-        console.log('[API/LockPayment] Details already locked, returning success.');
-        return NextResponse.json({ success: true, message: 'Payment details already locked' });
-    }
+    const updatedBooking = await db.booking.update({
+      where: { id: booking.id },
+      data: {
+        paymentToken,
+        paymentAmount: amount,
+        amountBaseUnits,
+        chainId,
+        txHash: null,
+        confirmedAt: null,
+      },
+      select: { bookingId: true, paymentToken: true, paymentAmount: true, chainId: true },
+    });
 
+    await db.activityLog.create({
+      data: {
+        bookingId: booking.id,
+        userId: ownedBooking.userId,
+        action: 'payment_details_locked',
+        entity: 'booking',
+        entityId: booking.id,
+        details: {
+          token: paymentToken,
+          amount,
+          amountBaseUnits,
+          chainId,
+          isRemainingLeg,
+        },
+      },
+    });
 
-    // 6. Lock the payment details in the database
-    const updatedBooking = await db.booking.update({
-      where: { id: booking.id },
-      data: {
-        paymentToken: paymentToken,
-        paymentAmount: paymentAmount, // Store the human-readable amount (0.01)
-        amountBaseUnits: amountBaseUnits, // ✅ CRITICAL: Store the base units (e.g., 10000)
-        chainId: chainId,
-        // Optional: Reset txHash and confirmedAt if re-locking a failed payment
-        txHash: null,
-        confirmedAt: null,
-      },
-      select: { bookingId: true, paymentToken: true, paymentAmount: true, chainId: true }
-    });
-    
-    console.log('[API/LockPayment] Successfully locked booking details:', updatedBooking);
-
-    // 7. Log activity (Kept as is)
-    await db.activityLog.create({
-      data: {
-        bookingId: booking.id,
-        action: 'payment_details_locked',
-        entity: 'booking',
-        entityId: booking.id,
-        details: {
-          token: paymentToken,
-          amount: paymentAmount,
-          amountBaseUnits: amountBaseUnits, // Log base units too
-          chainId: chainId,
-        },
-      },
-    });
-
-    // 8. Return success
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Payment details locked successfully',
-      lockedDetails: updatedBooking
-    });
-
-  } catch (error) {
-    console.error('[API/LockPayment] Error locking payment details:', error);
-    // Handle Prisma validation errors specifically
-    if ((error as any).code === 'P2025') { 
-        return NextResponse.json(
-            { error: 'Booking record not found during update' },
-            { status: 404 }
-        );
-    }
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    return NextResponse.json({
+      success: true,
+      message: 'Payment details locked successfully',
+      lockedDetails: updatedBooking,
+    });
+  } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
+    console.error('[API/LockPayment] Error locking payment details:', error);
+    if ((error as any).code === 'P2025') {
+      return NextResponse.json({ error: 'Booking record not found during update' }, { status: 404 });
+    }
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 }

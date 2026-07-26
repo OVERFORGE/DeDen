@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { SUPPORTED_CHAINS } from '@/lib/config';
+import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
 
 // ✅ FIXED: Properly handle async params
 export async function PATCH(
@@ -10,6 +11,8 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAdmin();
+
     // ✅ Await the entire params object first
     const params = await context.params;
     const stayId = params.id;
@@ -75,8 +78,11 @@ export async function PATCH(
       }
     });
   } catch (error: any) {
+    if (error.status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error updating enabled chains:', error);
-    
+
     // Handle Prisma-specific errors
     if (error.code === 'P2025') {
       return NextResponse.json(
@@ -98,6 +104,8 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAdmin();
+
     // ✅ Await the entire params object first
     const params = await context.params;
     const stayId = params.id;
@@ -131,6 +139,9 @@ export async function GET(
       stay 
     });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error fetching stay chains:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

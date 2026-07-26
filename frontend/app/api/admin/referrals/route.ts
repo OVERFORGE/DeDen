@@ -1,8 +1,7 @@
 // File: app/api/admin/referrals/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
 
 /**
  * Generate a random referral code
@@ -30,19 +29,7 @@ function generateReferralCode(communityName: string, stayId: string): string {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // TODO: Add admin role check
-    // if (session.user.role !== 'ADMIN') {
-    //   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    // }
+    await requireAdmin();
 
     // Fetch all referral codes with related data
     const referralCodes = await prisma.referralCode.findMany({
@@ -105,6 +92,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(codesWithStats);
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[Admin Referrals GET] Error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch referral codes' },
@@ -119,19 +109,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // TODO: Add admin role check
-    // if (session.user.role !== 'ADMIN') {
-    //   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    // }
+    const { userId } = await requireAdmin();
 
     const body = await request.json();
     const {
@@ -227,7 +205,7 @@ export async function POST(request: NextRequest) {
     try {
       await prisma.activityLog.create({
         data: {
-          userId: (session.user as any).id,
+          userId,
           action: 'CREATE_REFERRAL_CODES',
           entity: 'ReferralCode',
           entityId: stayId,
@@ -253,6 +231,9 @@ export async function POST(request: NextRequest) {
       codes: createdCodes,
     });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[Admin Referrals POST] Error:', error);
     return NextResponse.json(
       { error: 'Failed to create referral codes' },

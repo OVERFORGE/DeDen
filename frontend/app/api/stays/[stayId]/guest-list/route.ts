@@ -1,21 +1,23 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
+import { requireUser, authErrorResponse } from '@/lib/api-auth';
 
 /**
- * GET /api/stay/[stayId]/guest-list
+ * GET /api/stays/[stayId]/guest-list
  *
- * Fetches the public, opt-in guest list for a specific stay.
- * This list only includes confirmed guests who have set 'optInGuestList' to true.
- *
- * TODO: This endpoint should be protected to only allow
- * authenticated users (ideally, confirmed guests) to call it.
+ * Fetches the opt-in guest list for a specific stay (name, role, socials —
+ * never email/phone). Only includes CONFIRMED guests who set
+ * optInGuestList: true. Requires authentication, per the TODO this route
+ * previously shipped with unaddressed.
  */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ stayId: string }> }
 ) {
   try {
+    await requireUser();
+
     const { stayId } = await params;
 
     if (!stayId) {
@@ -73,6 +75,9 @@ export async function GET(
 
     return NextResponse.json(guestList);
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error('[API] Error fetching guest list:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

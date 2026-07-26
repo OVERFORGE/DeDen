@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/database";
 import { BookingStatus } from "@prisma/client";
+import { requireAdmin, authErrorResponse } from "@/lib/api-auth";
 
 /**
  * Reject a waitlisted booking
@@ -11,6 +12,8 @@ export async function POST(
   context: { params: Promise<{ bookingId: string }> }
 ) {
   try {
+    await requireAdmin();
+
     const { bookingId } = await context.params;
     const body = await request.json();
     const { reason = "Application rejected by admin" } = body;
@@ -107,6 +110,9 @@ export async function POST(
       },
     });
   } catch (error) {
+    if ((error as any).status) {
+      return authErrorResponse(error);
+    }
     console.error("[API] Error rejecting booking:", error);
     return NextResponse.json(
       { error: "Internal server error", details: (error as Error).message },
