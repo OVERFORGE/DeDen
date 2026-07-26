@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { ApproveWaitlistButton } from "@/components/ApproveWaitlistButton";
+import { chainConfig, getChainName } from "@/lib/config";
 import { 
   Users, 
   DollarSign, 
@@ -89,13 +90,12 @@ type Booking = {
 type TabType = "WAITLISTED" | "PENDING" | "RESERVED" | "CONFIRMED" | "ALL";
 
 // Helper function
-const getChainName = (chainId?: number): string => {
-  const chains: Record<number, string> = {
-    42161: 'Arbitrum',
-    56: 'BNB Chain',
-    8453: 'Base',
-  };
-  return chainId ? (chains[chainId] || `Chain ${chainId}`) : 'Unknown';
+// Wraps the shared, always-up-to-date chain registry (lib/config.ts) —
+// this used to be a local hardcoded list that went stale the moment the
+// supported chain set changed (it still said "Arbitrum" after Arbitrum was
+// briefly removed, and didn't know about newer chains at all).
+const getBookingChainName = (chainId?: number): string => {
+  return chainId ? getChainName(chainId) : 'Unknown';
 };
 
 export default function AdminDashboard() {
@@ -178,7 +178,7 @@ export default function AdminDashboard() {
     byChain: bookings
       .filter(b => b.status === 'CONFIRMED')
       .reduce((acc, b) => {
-        const chain = getChainName(b.chainId);
+        const chain = getBookingChainName(b.chainId);
         if (!acc[chain]) {
           acc[chain] = { USDC: 0, USDT: 0 };
         }
@@ -247,7 +247,7 @@ export default function AdminDashboard() {
       b.numberOfNights || '',
       b.paymentAmount || '',
       b.paymentToken || '',
-      getChainName(b.chainId),
+      getBookingChainName(b.chainId),
       b.txHash || '',
       b.user.walletAddress || '',
       b.user.socialTwitter || '',
@@ -632,12 +632,12 @@ export default function AdminDashboard() {
                             
                             {booking.chainId && (
                               <p className="text-[10px] font-bold text-[#2c331f] flex items-center uppercase tracking-widest">
-                                <LinkIcon size={10} className="mr-1" /> {getChainName(booking.chainId)}
+                                <LinkIcon size={10} className="mr-1" /> {getBookingChainName(booking.chainId)}
                               </p>
                             )}
                             {booking.txHash && (
                               <a
-                                href={`https://arbiscan.io/tx/${booking.txHash}`}
+                                href={`${(booking.chainId && chainConfig[booking.chainId]?.blockExplorer) || 'https://etherscan.io'}/tx/${booking.txHash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-[10px] font-bold text-blue-600 hover:text-[#5a6b3a] underline font-mono block truncate max-w-[150px]"

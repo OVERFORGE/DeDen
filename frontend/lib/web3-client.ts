@@ -1,7 +1,5 @@
 // lib/web3-client.ts
-// EVM read clients for on-chain payment verification. Tron (chain id
-// 728126428) is intentionally excluded here — it isn't EVM/viem-compatible
-// and is verified separately via TronGrid in lib/manual-verification.ts.
+// EVM read clients for on-chain payment verification.
 //
 // ✅ RESILIENCE: every chain uses viem's `fallback()` transport, combining
 // the primary RPC (Alchemy where configured) with a public backup. If the
@@ -12,7 +10,7 @@
 // instead of failing the whole verification attempt.
 
 import { createPublicClient, http, fallback, type PublicClient } from 'viem';
-import { mainnet, bsc, base } from 'viem/chains';
+import { mainnet, bsc, base, arbitrum } from 'viem/chains';
 import type { Chain } from 'viem/chains';
 
 // Public (no-key) backup RPCs per chain — used automatically if the primary
@@ -22,10 +20,15 @@ const PUBLIC_RPCS: Record<number, string[]> = {
   1: ['https://eth.llamarpc.com', 'https://cloudflare-eth.com'],
   56: ['https://bsc-dataseed.binance.org'],
   8453: ['https://mainnet.base.org'],
+  42161: ['https://arb1.arbitrum.io/rpc'],
 };
 
 function getAlchemyRpcUrl(chainId: number): string | undefined {
   switch (chainId) {
+    case 42161:
+      return process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_ARBITRUM
+        ? `https://arb-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_ARBITRUM}`
+        : undefined;
     case 56:
       return process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BNB
         ? `https://bnb-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BNB}`
@@ -70,6 +73,7 @@ const chainDefs: { id: number; chain: Chain }[] = [
   { id: 1, chain: mainnet },
   { id: 56, chain: bsc },
   { id: 8453, chain: base },
+  { id: 42161, chain: arbitrum },
 ];
 
 for (const { id, chain } of chainDefs) {

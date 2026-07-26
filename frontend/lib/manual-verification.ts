@@ -1,15 +1,14 @@
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
-import { chainConfig, treasuryAddress, tronTreasuryAddress } from './config';
+import { chainConfig, treasuryAddress } from './config';
 import { verifyPayment } from './verification';
-import { sendConfirmationEmail, sendReservationConfirmedEmail } from './email';
-import { mintBookingNFT } from './nft-service';
 import { parseUnits } from 'viem';
-import { holdStaySlots } from './inventory';
-import { issueTicketsForBooking, getTicketEmailPayload } from './ticket-service';
 
 /**
- * Initiates the verification process for a manually submitted payment.
+ * Initiates the verification process for a manually submitted payment
+ * (a sender address was registered without a captured tx hash). Scans the
+ * chain for a matching Transfer log and, if found, delegates to the
+ * standard verifyPayment() flow to confirm it.
  */
 export async function verifyManualPayment(
   bookingId: string,
@@ -48,92 +47,28 @@ export async function verifyManualPayment(
     const chain = chainConfig[chainId];
     const tokenInfo = chain.tokens[paymentToken];
 
-    if (chainId === 728126428) {
-      // TRON (TRC20) Verification
-      const txHash = await scanTronGrid(
-        senderAddress, 
-        tronTreasuryAddress, 
-        expectedAmount, 
-        tokenInfo.address, 
-        tokenInfo.decimals,
-        booking.createdAt
-      );
+    const txHash = await scanEVMLogs(
+      chainId,
+      senderAddress,
+      treasuryAddress,
+      expectedAmount,
+      tokenInfo.address,
+      tokenInfo.decimals,
+      chain.rpcUrl,
+      booking.createdAt
+    );
 
-      if (txHash) {
-        console.log(`[Manual Verification] Found Tron Tx: ${txHash}`);
-        await confirmTronPayment(booking, txHash, isReservationPayment, isRemainingPayment, expectedAmount, paymentToken);
-      } else {
-        console.log(`[Manual Verification] No Tron Tx found yet.`);
-      }
+    if (txHash) {
+       console.log(`[Manual Verification] Found EVM Tx: ${txHash}`);
+       // Delegate to existing verification logic which will validate logs and trigger confirmation
+       await verifyPayment(bookingId, txHash, chainId, isRemainingPayment, 1, 1000);
     } else {
-      // EVM Verification (BNB, Base, ETH)
-      const txHash = await scanEVMLogs(
-        chainId,
-        senderAddress,
-        treasuryAddress,
-        expectedAmount,
-        tokenInfo.address,
-        tokenInfo.decimals,
-        chain.rpcUrl,
-        booking.createdAt
-      );
-
-      if (txHash) {
-         console.log(`[Manual Verification] Found EVM Tx: ${txHash}`);
-         // Delegate to existing verification logic which will validate logs and trigger confirmation
-         await verifyPayment(bookingId, txHash, chainId, isRemainingPayment, 1, 1000);
-      } else {
-         console.log(`[Manual Verification] No EVM Tx found yet.`);
-      }
+       console.log(`[Manual Verification] No EVM Tx found yet.`);
     }
 
   } catch (error) {
     console.error('[Manual Verification] Error:', error);
   }
-}
-
-async function scanTronGrid(
-    senderAddress: string,
-    receiverAddress: string,
-    expectedAmount: number,
-    contractAddress: string,
-    decimals: number,
-    minTimestamp: Date
-): Promise<string | null> {
-    try {
-        if (!receiverAddress || receiverAddress === "") return null;
-        
-        // TronGrid API to get TRC20 transfers for the receiver address
-        const url = `https://api.trongrid.io/v1/accounts/${receiverAddress}/transactions/trc20?contract_address=${contractAddress}&limit=50`;
-        
-        const response = await fetch(url);
-        if (!response.ok) return null;
-
-        const data = await response.json();
-        if (!data.data || data.data.length === 0) return null;
-
-        const expectedValue = Math.floor(expectedAmount * Math.pow(10, decimals)).toString();
-        const minTimeMs = minTimestamp.getTime();
-
-        for (const tx of data.data) {
-            // Check if from sender, to receiver, exact amount, and occurred after booking was created
-            if (
-                tx.from.toLowerCase() === senderAddress.toLowerCase() &&
-                tx.to.toLowerCase() === receiverAddress.toLowerCase() &&
-                tx.value === expectedValue &&
-                tx.block_timestamp >= minTimeMs
-            ) {
-                // Check if this tx is already used
-                const used = await checkTransactionUsed(tx.transaction_id);
-                if (!used) {
-                    return tx.transaction_id;
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Tron scan error", e);
-    }
-    return null;
 }
 
 async function scanEVMLogs(
@@ -211,100 +146,3 @@ async function checkTransactionUsed(txHash: string): Promise<boolean> {
   return !!existingBooking;
 }
 
-// Tron specific confirmation since verifyPayment depends on viem and EVM receipts
-async function confirmTronPayment(booking: any, txHash: string, isReservationPayment: boolean, isRemainingPayment: boolean, expectedAmount: number, paymentToken: string) {
-    const bookingId = booking.bookingId;
-    
-    // Copy the confirmation logic from verifyPayment but stripped of EVM-specific stuff
-    if (isReservationPayment) {
-        await db.booking.update({
-            where: { bookingId },
-            data: {
-              status: BookingStatus.RESERVED,
-              reservationPaid: true,
-              reservationTxHash: txHash,
-              reservationPaidAt: new Date(),
-              reservationChainId: 728126428,
-              reservationToken: paymentToken as any,
-            },
-        });
-
-        // Reservation secures the slot immediately, same as the EVM path.
-        await holdStaySlots(booking.stayId, booking.guestCount || 1);
-
-        if (booking.user?.email && booking.stay) {
-            try {
-              await sendReservationConfirmedEmail({
-                recipientEmail: booking.user.email,
-                recipientName: booking.user.name || booking.guestName || 'Guest',
-                bookingId: booking.bookingId,
-                stayTitle: booking.stay.title,
-                stayLocation: booking.stay.location,
-                startDate: booking.stay.startDate,
-                endDate: booking.stay.endDate,
-                reservationAmount: expectedAmount,
-                reservationToken: paymentToken as 'USDC' | 'USDT',
-                remainingAmount: booking.remainingAmount!,
-                txHash: txHash,
-                chainId: 728126428,
-                numberOfNights: booking.numberOfNights || 0,
-              });
-            } catch (e) {
-                console.error(e);
-            }
-        }
-    } else {
-        await db.booking.update({
-            where: { bookingId },
-            data: {
-              status: BookingStatus.CONFIRMED,
-              txHash: txHash,
-              chainId: 728126428,
-              paymentToken: paymentToken as any,
-              confirmedAt: new Date(),
-              senderAddress: booking.senderAddress,
-              receiverAddress: tronTreasuryAddress,
-              totalPaid: expectedAmount,
-              ...(isRemainingPayment ? {
-                remainingPaid: true,
-                remainingTxHash: txHash,
-                remainingPaidAt: new Date(),
-                remainingChainId: 728126428,
-                remainingToken: paymentToken as any,
-                totalPaid: (booking.reservationAmount || 0) + expectedAmount,
-              } : {})
-            },
-        });
-
-        // Non-reservation bookings hold the slot at full confirmation
-        // (reservation bookings already held it when the reservation was paid).
-        if (!isRemainingPayment) {
-          await holdStaySlots(booking.stayId, booking.guestCount || 1);
-        }
-
-        try {
-          await issueTicketsForBooking(booking.bookingId);
-        } catch (ticketError) {
-          console.error('[Manual Verification] Ticket issuance failed:', ticketError);
-        }
-
-        if (booking.user?.email && booking.stay) {
-            try {
-              await sendConfirmationEmail({
-                recipientEmail: booking.user.email,
-                recipientName: booking.user.name || booking.guestName || 'Guest',
-                bookingId: booking.bookingId,
-                stayTitle: booking.stay.title,
-                stayLocation: booking.stay.location,
-                startDate: booking.stay.startDate,
-                endDate: booking.stay.endDate,
-                paidAmount: isRemainingPayment ? ((booking.reservationAmount || 0) + expectedAmount) : expectedAmount,
-                paidToken: paymentToken as 'USDC' | 'USDT',
-                txHash: txHash,
-                chainId: 728126428,
-                tickets: await getTicketEmailPayload(booking.bookingId),
-              });
-            } catch (e) {}
-        }
-    }
-}

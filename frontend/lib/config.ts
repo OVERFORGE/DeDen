@@ -32,12 +32,39 @@ function getEnvVar(key: string): string {
 }
 
 export const treasuryAddress = "0x8895691124df317aBa77549843f257F61a7C911a";
-export const tronTreasuryAddress = ""; // TO BE ADDED BY ADMIN
 
+const arbitrumApiKey = getEnvVar('NEXT_PUBLIC_ALCHEMY_API_KEY_ARBITRUM');
 const bnbApiKey = getEnvVar('NEXT_PUBLIC_ALCHEMY_API_KEY_BNB');
 const baseApiKey = getEnvVar('NEXT_PUBLIC_ALCHEMY_API_KEY_BASE');
 
 export const chainConfig: { [key: number]: ChainConfig } = {
+  // Arbitrum One (Mainnet)
+  42161: {
+    name: "Arbitrum One",
+    chainId: 42161,
+    rpcUrl: `https://arb-mainnet.g.alchemy.com/v2/${arbitrumApiKey}`,
+    blockExplorer: "https://arbiscan.io",
+    nativeCurrency: {
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
+    },
+    tokens: {
+      USDC: {
+        address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        decimals: 6,
+        symbol: "USDC",
+        name: "USD Coin",
+      },
+      USDT: {
+        address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+        decimals: 6,
+        symbol: "USDT",
+        name: "Tether USD",
+      },
+    },
+  },
+
   // BNB Smart Chain (Mainnet)
   56: {
     name: "BNB Smart Chain",
@@ -113,26 +140,6 @@ export const chainConfig: { [key: number]: ChainConfig } = {
     },
   },
 
-  // Tron (Mainnet)
-  728126428: {
-    name: "Tron (TRC20)",
-    chainId: 728126428,
-    rpcUrl: "https://api.trongrid.io",
-    blockExplorer: "https://tronscan.org",
-    nativeCurrency: {
-      name: "TRON",
-      symbol: "TRX",
-      decimals: 6,
-    },
-    tokens: {
-      USDT: {
-        address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-        decimals: 6,
-        symbol: "USDT",
-        name: "Tether USD",
-      },
-    },
-  },
 };
 
 export function getSupportedTokens(chainId: number): string[] {
@@ -183,7 +190,7 @@ function validateConfiguration(): void {
     }
     
     Object.values(chain.tokens).forEach(token => {
-      if (chainId !== 728126428 && !/^0x[a-fA-F0-9]{40}$/i.test(token.address)) {
+      if (!/^0x[a-fA-F0-9]{40}$/i.test(token.address)) {
         errors.push(`Invalid token address ${token.address} on chain ${chainId}`);
       }
     });
