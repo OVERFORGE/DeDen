@@ -33,6 +33,10 @@ export async function GET(
         expiresAt: true,
         paymentToken: true,
         paymentAmount: true,
+        senderAddress: true,
+        requiresReservation: true,
+        reservationPaid: true,
+        remainingPaid: true,
       },
     });
 
@@ -41,6 +45,25 @@ export async function GET(
         { error: 'Booking not found' },
         { status: 404 }
       );
+    }
+
+    // ✅ NEW: If the booking is PENDING but has a senderAddress, 
+    // it means the user clicked "I have paid". We should trigger a scan here
+    // so that the frontend's 10-second polling acts as our verification cron loop!
+    if (booking.status === 'PENDING' && booking.senderAddress) {
+        const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
+        
+        // Fire asynchronously so we don't block the status response
+        // Note: In strict Serverless environments this might get killed,
+        // but since we poll every 10s, it gets retried constantly.
+        import('@/lib/manual-verification').then(({ verifyManualPayment }) => {
+            verifyManualPayment(
+                booking.bookingId, 
+                booking.senderAddress as string, 
+                booking.chainId || 1, // Fallback chain
+                isRemainingPayment
+            ).catch(e => console.error("Manual verify error:", e));
+        });
     }
 
     return NextResponse.json({
@@ -61,4 +84,4 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+}

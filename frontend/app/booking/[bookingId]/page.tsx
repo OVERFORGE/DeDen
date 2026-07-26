@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useAccount, useSendTransaction, useSwitchChain } from "wagmi";
-import { parseUnits, encodeFunctionData } from "viem";
 import { ConnectKitButton } from "connectkit";
+import { parseUnits, encodeFunctionData } from "viem";
 import { erc20Abi } from "@/lib/erc20abi";
 import {
   chainConfig,
   treasuryAddress,
+  tronTreasuryAddress,
   getSupportedTokens,
   getChainName,
   SUPPORTED_CHAINS,
@@ -25,7 +26,8 @@ import {
   Info,
   RefreshCw,
   ArrowLeft,
-  Check
+  Check,
+  Copy
 } from "lucide-react";
 
 type BookingDetails = {
@@ -70,17 +72,19 @@ export default function PaymentPage() {
   const params = useParams();
   const bookingId = params.bookingId as string;
 
-  const { address, isConnected, chainId: walletChainId } = useAccount();
-  const { sendTransactionAsync } = useSendTransaction();
-  const { switchChain } = useSwitchChain();
-  
   const [allowedChains, setAllowedChains] = useState<number[]>([]);
   const [booking, setBooking] = useState<BookingDetails | null>(null);
-  const [selectedChain, setSelectedChain] = useState<number>(42161);
+  const [selectedChain, setSelectedChain] = useState<number>(1);
   const [selectedToken, setSelectedToken] = useState<"USDC" | "USDT">("USDC");
+  const [senderAddress, setSenderAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<PaymentStatus>("loading");
-  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Web3 hooks
+  const { address, isConnected } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const { sendTransactionAsync } = useSendTransaction();
 
   useEffect(() => {
     if (!bookingId) return;
@@ -126,13 +130,13 @@ export default function PaymentPage() {
         }
 
         if (data.status === "CONFIRMED") {
-          if (data.paymentToken) setSelectedToken(data.paymentToken);
+          if (data.paymentToken) setSelectedToken(data.paymentToken as "USDC" | "USDT");
           setStatus("confirmed");
         } else if (data.status === "RESERVED") {
           setStatus("ready");
         } else if (data.status === "PENDING") {
           if (data.paymentToken) {
-            setSelectedToken(data.paymentToken);
+            setSelectedToken(data.paymentToken as "USDC" | "USDT");
           } else {
             const supported = getSupportedTokens(defaultChain);
             if (!supported.includes(selectedToken)) {
@@ -181,29 +185,15 @@ export default function PaymentPage() {
       } catch (err) {
         console.error("Polling error:", err);
       }
-    }, 3000);
+    }, 10000); // Polling every 10 seconds
 
     return () => clearInterval(interval);
   }, [status, bookingId]);
 
-  const handleSwitchNetwork = async () => {
-    if (!switchChain) return;
-    
-    setIsSwitchingNetwork(true);
-    setError(null);
-    
-    try {
-      await switchChain({ chainId: selectedChain });
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } catch (err: any) {
-      setError(`Failed to switch network: ${err.message}`);
-    } finally {
-      setIsSwitchingNetwork(false);
-    }
-  };
-
   const handlePay = async () => {
-    if (!booking || !address || !isConnected) return;
+    if (!booking) return;
+
+    if (selectedChain === 728126428 && !senderAddress) return;
 
     setError(null);
     setStatus("sending");
@@ -233,11 +223,14 @@ export default function PaymentPage() {
       if (!tokenInfo) {
         throw new Error(`${selectedToken} not supported on ${chain.name}`);
       }
+      
+      const currentTreasury = selectedChain === 728126428 ? tronTreasuryAddress : treasuryAddress;
 
-      if (!treasuryAddress || !/^0x[a-fA-F0-9]{40}$/i.test(treasuryAddress)) {
-        throw new Error("Invalid treasury address configuration");
+      if (!currentTreasury || currentTreasury.includes('PLACEHOLDER') || currentTreasury.trim() === "") {
+        throw new Error("Treasury address is not configured for this network");
       }
 
+      // First lock the payment details
       const lockRes = await fetch("/api/bookings/lock-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -254,38 +247,74 @@ export default function PaymentPage() {
         throw new Error(error || "Failed to lock payment details");
       }
 
-      const txData = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: "transfer",
-        args: [treasuryAddress as `0x${string}`, parseUnits(amount.toString(), tokenInfo.decimals)],
-      });
+      if (selectedChain === 728126428) {
+        // TRC20 Manual Flow
+        const verifyRes = await fetch("/api/bookings/verify-incoming", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bookingId: booking.bookingId,
+            senderAddress: senderAddress,
+            chainId: selectedChain,
+            paymentToken: selectedToken,
+            isRemainingPayment: isRemainingPayment
+          }),
+        });
 
-      const hash = await sendTransactionAsync({
-        to: tokenInfo.address as `0x${string}`,
-        data: txData,
-        value: BigInt(0),
-      });
+        if (!verifyRes.ok) {
+          const { error } = await verifyRes.json();
+          throw new Error(error || "Failed to initiate verification");
+        }
+      } else {
+        // EVM Wagmi Flow
+        if (!address) {
+          throw new Error("Please connect your wallet first");
+        }
+        
+        await switchChainAsync({ chainId: selectedChain });
+
+        const amountBaseUnits = parseUnits(amount.toString(), tokenInfo.decimals);
+        const data = encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [treasuryAddress as `0x${string}`, amountBaseUnits],
+        });
+
+        const txHash = await sendTransactionAsync({
+          to: tokenInfo.address as `0x${string}`,
+          data,
+          value: BigInt(0),
+        });
+
+        const verifyRes = await fetch("/api/bookings/verify-popup-tx", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bookingId: booking.bookingId,
+            txHash: txHash,
+            chainId: selectedChain,
+            isRemainingPayment: isRemainingPayment
+          }),
+        });
+
+        if (!verifyRes.ok) {
+          const { error } = await verifyRes.json();
+          throw new Error(error || "Failed to initiate tx verification");
+        }
+      }
 
       setStatus("verifying");
-
-      const res = await fetch("/api/bookings/verify-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookingId: booking.bookingId,
-          txHash: hash,
-        }),
-      });
-
-      if (!res.ok) {
-        const { error } = await res.json();
-        throw new Error(error || "Failed to submit transaction");
-      }
     } catch (err: any) {
       console.error("Payment error:", err);
       setError(err.message || "Payment failed");
       setStatus("ready");
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (status === "loading") {
@@ -325,6 +354,39 @@ export default function PaymentPage() {
         <div className="text-center">
           <AlertCircle className="w-16 h-16 opacity-40 mx-auto mb-4" />
           <p className="text-xl font-serif font-bold">Booking not found</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (status === "verifying") {
+    return (
+      <div className="min-h-screen bg-[#F3EDE0] flex flex-col font-sans text-[#3D4331] selection:bg-[#3D4331] selection:text-[#F3EDE0]">
+        <div className="max-w-[1400px] mx-auto px-6 md:px-12 py-10 w-full flex-1 flex flex-col">
+          <div className="flex-1 flex items-center justify-center">
+            <div className="bg-[#EBE1D0] p-12 rounded-[30px] shadow-sm max-w-xl w-full border border-[#3D4331]/10 flex flex-col items-center text-center">
+              <div className="w-24 h-24 bg-[#3D4331]/10 rounded-full flex items-center justify-center mb-8 shadow-xl text-[#3D4331]">
+                <Loader2 className="w-12 h-12 animate-spin" />
+              </div>
+              <h2 className="text-3xl font-serif font-black mb-4">
+                Verifying Payment
+              </h2>
+              <p className="font-medium text-lg mb-8 opacity-70">
+                Scanning the blockchain for your transaction...
+                {selectedChain === 1 && " This can take up to 10-15 minutes on Ethereum."}
+              </p>
+              <div className="bg-[#F3EDE0] rounded-2xl p-6 mb-8 w-full border border-[#3D4331]/10 text-sm font-bold text-left">
+                <p className="opacity-60 text-xs mb-1 uppercase tracking-widest">Awaiting transfer from:</p>
+                <p className="truncate mb-4">{senderAddress}</p>
+                
+                <p className="opacity-60 text-xs mb-1 uppercase tracking-widest">Network:</p>
+                <p className="mb-4">{getChainName(selectedChain)}</p>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-50">
+                You can leave this page. We'll email you once confirmed.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -387,8 +449,13 @@ export default function PaymentPage() {
                   </p>
                 )}
               </div>
-              {booking.txHash && (
+              {booking.txHash && selectedChain !== 728126428 && (
                 <a href={`${chainConfig[selectedChain]?.blockExplorer}/tx/${booking.txHash}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 w-full bg-white text-[#3D4331] font-bold py-4 rounded-full transition-all mb-4 border border-[#3D4331]/20 hover:bg-[#F3EDE0] uppercase tracking-widest text-sm">
+                  View Transaction <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
+              {booking.txHash && selectedChain === 728126428 && (
+                <a href={`https://tronscan.org/#/transaction/${booking.txHash}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 w-full bg-white text-[#3D4331] font-bold py-4 rounded-full transition-all mb-4 border border-[#3D4331]/20 hover:bg-[#F3EDE0] uppercase tracking-widest text-sm">
                   View Transaction <ExternalLink className="w-4 h-4" />
                 </a>
               )}
@@ -415,12 +482,13 @@ export default function PaymentPage() {
 
   const isPaymentLocked = !!booking.paymentToken;
   const supportedTokens = getSupportedTokens(selectedChain);
-  const isWrongNetwork = isConnected && walletChainId !== selectedChain;
 
   const formattedAmount = new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 4,
   }).format(Number(displayAmount));
+  
+  const currentTreasury = selectedChain === 728126428 ? tronTreasuryAddress : treasuryAddress;
 
   return (
     <div className="min-h-screen bg-[#F3EDE0] text-[#3D4331] font-sans selection:bg-[#3D4331] selection:text-[#F3EDE0]">
@@ -535,36 +603,52 @@ export default function PaymentPage() {
                       </button>
                     ))}
                   </div>
-                  {isPaymentLocked && (
-                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-3 text-center">
-                      Locked to {selectedToken}
-                    </p>
-                  )}
                 </div>
-
-                {isWrongNetwork && (
-                  <div className="bg-[#EBE1D0] border border-[#3D4331]/20 rounded-2xl p-5">
-                    <div className="flex items-start gap-3 mb-4">
-                      <AlertCircle className="w-5 h-5 opacity-70 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="font-bold text-sm mb-1 uppercase tracking-widest">Wrong Network</p>
-                        <p className="text-xs font-medium opacity-70">
-                          Switch to <strong>{getChainName(selectedChain)}</strong> to continue
-                        </p>
-                      </div>
+                
+                {selectedChain === 728126428 && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-widest text-[#3D4331] mb-4">
+                        Your Wallet Address
+                      </label>
+                      <input
+                        type="text"
+                        value={senderAddress}
+                        onChange={(e) => setSenderAddress(e.target.value)}
+                        placeholder="Enter the address you are sending from..."
+                        className="w-full bg-[#F3EDE0] border border-[#3D4331]/20 rounded-2xl p-4 text-sm font-bold text-[#3D4331] outline-none focus:border-[#3D4331] transition-all"
+                      />
+                      <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-3 flex items-center gap-1">
+                        <Info size={12}/> Must match exactly where you send from.
+                      </p>
                     </div>
-                    <button
-                      onClick={handleSwitchNetwork}
-                      disabled={isSwitchingNetwork}
-                      className="w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-4 rounded-full transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSwitchingNetwork ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" /> Switching...</>
+                    
+                    <div className="bg-[#EBE1D0] p-6 rounded-2xl border border-[#3D4331]/20">
+                      <label className="block text-xs font-black uppercase tracking-widest text-[#3D4331] mb-2">
+                        Send Exactly {formattedAmount} {selectedToken} to:
+                      </label>
+                      
+                      {currentTreasury ? (
+                        <div className="flex items-center gap-3 bg-white p-3 rounded-xl shadow-inner border border-[#3D4331]/10">
+                          <span className="font-mono text-sm font-bold truncate flex-1">{currentTreasury}</span>
+                          <button 
+                            onClick={() => copyToClipboard(currentTreasury)}
+                            className="bg-[#3D4331] text-white p-2 rounded-lg hover:bg-black transition-all flex items-center justify-center shrink-0"
+                          >
+                            {copied ? <Check size={16} /> : <Copy size={16} />}
+                          </button>
+                        </div>
                       ) : (
-                        <><RefreshCw className="w-4 h-4" /> Switch Network</>
+                        <p className="text-sm font-bold text-red-600 bg-red-100 p-3 rounded-xl">
+                          Treasury Address missing for this network.
+                        </p>
                       )}
-                    </button>
-                  </div>
+                      
+                      <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-4 leading-relaxed">
+                        Make sure to select the correct network ({getChainName(selectedChain)}) in your wallet/exchange.
+                      </p>
+                    </div>
+                  </>
                 )}
 
                 {error && (
@@ -572,6 +656,56 @@ export default function PaymentPage() {
                     <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                     <p className="text-xs font-bold text-red-800">{error}</p>
                   </div>
+                )}
+                
+                {selectedChain === 728126428 ? (
+                  <button
+                    onClick={handlePay}
+                    disabled={status === "sending" || !senderAddress || !currentTreasury}
+                    className="w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-5 rounded-full transition-all flex justify-center items-center gap-3 uppercase tracking-widest text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                  >
+                    {status === "sending" ? (
+                      <><Loader2 className="w-5 h-5 animate-spin" /> Preparing...</>
+                    ) : (
+                      <><Wallet className="w-5 h-5" /> I Have Sent The Payment</>
+                    )}
+                  </button>
+                ) : (
+                  <ConnectKitButton.Custom>
+                    {({ isConnected, show, address: connectedAddress }) => {
+                      if (!isConnected) {
+                        return (
+                          <button
+                            onClick={show}
+                            disabled={status === "sending"}
+                            className="w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-5 rounded-full transition-all flex justify-center items-center gap-3 uppercase tracking-widest text-sm hover:opacity-90 disabled:opacity-50 shadow-lg"
+                          >
+                            <Wallet className="w-5 h-5" /> Connect Wallet to Pay
+                          </button>
+                        );
+                      }
+                      
+                      return (
+                        <div className="space-y-4">
+                          <div className="bg-[#EBE1D0] p-4 rounded-xl border border-[#3D4331]/20 flex justify-between items-center text-sm font-bold">
+                            <span className="opacity-60 uppercase tracking-widest text-[10px]">Connected Wallet</span>
+                            <span className="truncate max-w-[200px]">{connectedAddress}</span>
+                          </div>
+                          <button
+                            onClick={handlePay}
+                            disabled={status === "sending"}
+                            className="w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-5 rounded-full transition-all flex justify-center items-center gap-3 uppercase tracking-widest text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                          >
+                            {status === "sending" ? (
+                              <><Loader2 className="w-5 h-5 animate-spin" /> Confirming in Wallet...</>
+                            ) : (
+                              <><CheckCircle2 className="w-5 h-5" /> Confirm Payment</>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    }}
+                  </ConnectKitButton.Custom>
                 )}
               </div>
             </section>
@@ -631,97 +765,26 @@ export default function PaymentPage() {
                     </div>
                   </div>
                 )}
+              </div>
 
-                {booking.requiresReservation && (
-                  <div className="pt-4 border-t border-[#3D4331]/10">
-                    <div className="flex items-start gap-2 mb-3">
-                      <Info className="w-4 h-4 opacity-40 mt-0.5" />
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-[#3D4331]/60">Two-Step Payment</p>
-                        <p className="text-xs font-bold">{booking.numberOfNights} nights total</p>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2 mt-3">
-                      <div className={`flex items-center justify-between p-3 rounded-xl ${
-                        !booking.reservationPaid ? 'bg-white shadow-sm border border-[#3D4331]/10' : 'bg-[#3D4331]/5'
-                      }`}>
-                        <span className="text-[10px] font-black uppercase tracking-widest">1. Reservation</span>
-                        <span className="text-sm font-bold">
-                          {booking.reservationPaid ? '✅ Paid' : `$${booking.reservationAmount}`}
-                        </span>
-                      </div>
-                      
-                      <div className={`flex items-center justify-between p-3 rounded-xl ${
-                        booking.reservationPaid && !booking.remainingPaid ? 'bg-white shadow-sm border border-[#3D4331]/10' : 'bg-[#3D4331]/5'
-                      }`}>
-                        <span className="text-[10px] font-black uppercase tracking-widest">2. Remaining Due</span>
-                        <span className="text-sm font-bold">${booking.remainingAmount}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div className="mt-8 bg-[#3D4331] text-[#F3EDE0] p-6 rounded-2xl relative overflow-hidden group">
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+                <div className="absolute -inset-1/2 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transform -rotate-45 translate-x-[-100%] group-hover:translate-x-[100%] transition-all duration-1000 ease-in-out"></div>
                 
-                <div className="pt-6 mt-6 border-t border-[#3D4331]/20">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-serif font-bold text-lg text-[#3D4331]">
-                      {isReservationPayment ? "Reservation" : isRemainingPayment ? "Remaining" : "Total"}
-                    </span>
-                    <span className="font-black text-4xl text-[#3D4331]">${formattedAmount}</span>
-                  </div>
-                  <p className="text-right text-[10px] font-black uppercase tracking-widest text-[#3D4331]/60">in {selectedToken}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">
+                  {isReservationPayment ? "Reservation Due" : isRemainingPayment ? "Remaining Due" : "Total Due"}
+                </p>
+                <div className="flex items-baseline gap-2 relative z-10">
+                  <span className="text-3xl font-black">${formattedAmount}</span>
+                  <span className="text-sm font-bold opacity-70">{selectedToken}</span>
                 </div>
               </div>
 
-              {/* ACTION BUTTON */}
-              <div className="mt-8">
-                {!isConnected ? (
-                  <div className="flex justify-center">
-                    <ConnectKitButton />
-                  </div>
-                ) : (
-                  <button
-                    onClick={handlePay}
-                    disabled={
-                      status === "sending" || 
-                      status === "verifying" || 
-                      !selectedToken || 
-                      allowedChains.length === 0 ||
-                      isWrongNetwork
-                    }
-                    className={`w-full py-5 rounded-full font-bold transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-sm shadow-xl ${
-                      status === "sending" || status === "verifying" || allowedChains.length === 0 || isWrongNetwork
-                        ? "bg-white text-[#3D4331]/40 cursor-not-allowed border border-[#3D4331]/10"
-                        : "bg-[#3D4331] hover:bg-black text-[#F3EDE0]"
-                    }`}
-                  >
-                    {status === "sending" && <><Loader2 className="w-5 h-5 animate-spin" /> Check Wallet</>}
-                    {status === "verifying" && <><Loader2 className="w-5 h-5 animate-spin" /> Verifying</>}
-                    {status === "ready" && !isWrongNetwork && (
-                      <>
-                        Pay ${formattedAmount} ✦
-                      </>
-                    )}
-                    {isWrongNetwork && "Switch Network First"}
-                  </button>
-                )}
-              </div>
-
-              <div className="mt-6 flex flex-col gap-2">
-                <div className="flex items-center justify-center gap-2 text-[10px] font-bold opacity-60 text-center uppercase tracking-widest">
-                  <Shield className="w-3 h-3" />
-                  <span>Secure smart contract payment</span>
-                </div>
-                <details className="bg-transparent mt-2">
-                  <summary className="cursor-pointer text-center text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity outline-none">
-                    View Destination
-                  </summary>
-                  <div className="mt-2 p-3 bg-white/50 rounded-lg border border-[#3D4331]/5 text-center">
-                    <code className="text-[9px] font-mono break-all font-bold opacity-70">
-                      {treasuryAddress}
-                    </code>
-                  </div>
-                </details>
+              <div className="mt-6 flex items-start gap-3 opacity-60">
+                <Shield className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <p className="text-[10px] font-bold uppercase tracking-widest leading-relaxed">
+                  Payments are secure and processed directly on-chain.
+                </p>
               </div>
             </div>
           </div>

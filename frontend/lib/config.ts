@@ -1,4 +1,4 @@
-// lib/config.ts - Updated with Mantle Sepolia
+// lib/config.ts
 
 interface TokenConfig {
   address: string;
@@ -20,7 +20,7 @@ interface ChainConfig {
   tokens: {
     [symbol: string]: TokenConfig;
   };
-  testnet?: boolean; // ✅ ADD THIS LINE
+  testnet?: boolean;
 }
 
 function getEnvVar(key: string): string {
@@ -32,40 +32,12 @@ function getEnvVar(key: string): string {
 }
 
 export const treasuryAddress = "0x8895691124df317aBa77549843f257F61a7C911a";
+export const tronTreasuryAddress = ""; // TO BE ADDED BY ADMIN
 
-const arbitrumApiKey = getEnvVar('NEXT_PUBLIC_ALCHEMY_API_KEY_ARBITRUM');
 const bnbApiKey = getEnvVar('NEXT_PUBLIC_ALCHEMY_API_KEY_BNB');
 const baseApiKey = getEnvVar('NEXT_PUBLIC_ALCHEMY_API_KEY_BASE');
-const mantleTestnetApiKey = getEnvVar('NEXT_PUBLIC_ALCHEMY_API_KEY_MANTLE_TESTNET');
 
 export const chainConfig: { [key: number]: ChainConfig } = {
-  // Arbitrum One (Mainnet)
-  42161: {
-    name: "Arbitrum One",
-    chainId: 42161,
-    rpcUrl: `https://arb-mainnet.g.alchemy.com/v2/${arbitrumApiKey}`,
-    blockExplorer: "https://arbiscan.io",
-    nativeCurrency: {
-      name: "Ethereum",
-      symbol: "ETH",
-      decimals: 18,
-    },
-    tokens: {
-      USDC: {
-        address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-        decimals: 6,
-        symbol: "USDC",
-        name: "USD Coin",
-      },
-      USDT: {
-        address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
-        decimals: 6,
-        symbol: "USDT",
-        name: "Tether USD",
-      },
-    },
-  },
-
   // BNB Smart Chain (Mainnet)
   56: {
     name: "BNB Smart Chain",
@@ -114,34 +86,53 @@ export const chainConfig: { [key: number]: ChainConfig } = {
     },
   },
 
-  // ✅ NEW: Mantle Sepolia Testnet
-5003: {
-  name: "Mantle Sepolia",
-  chainId: 5003,
-  rpcUrl: "https://rpc.sepolia.mantle.xyz",
-  blockExplorer: "https://explorer.sepolia.mantle.xyz",
-  nativeCurrency: {
-    name: "MNT",
-    symbol: "MNT",
-    decimals: 18,
-  },
-  tokens: {
-    USDC: {
-      address: "0xE4e422626a10246C8B19Bd0e0eA0535257BBF91c",
-      decimals: 6, // ✅ FIXED: Changed from 18 to 6
-      symbol: "USDC",
-      name: "USD Coin",
+  // Ethereum (Mainnet)
+  1: {
+    name: "Ethereum",
+    chainId: 1,
+    rpcUrl: "https://eth.llamarpc.com",
+    blockExplorer: "https://etherscan.io",
+    nativeCurrency: {
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
     },
-    USDT: {
-      address: "0xbd47D8dF6964ef6042f40900ea8274aD88c796d9",
-      decimals: 6, // ✅ FIXED: Changed from 18 to 6
-      symbol: "USDT",
-      name: "Tether USD",
+    tokens: {
+      USDC: {
+        address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        decimals: 6,
+        symbol: "USDC",
+        name: "USD Coin",
+      },
+      USDT: {
+        address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        decimals: 6,
+        symbol: "USDT",
+        name: "Tether USD",
+      },
     },
   },
-    testnet: true, // ✅ ADD THIS LINE
 
-},
+  // Tron (Mainnet)
+  728126428: {
+    name: "Tron (TRC20)",
+    chainId: 728126428,
+    rpcUrl: "https://api.trongrid.io",
+    blockExplorer: "https://tronscan.org",
+    nativeCurrency: {
+      name: "TRON",
+      symbol: "TRX",
+      decimals: 6,
+    },
+    tokens: {
+      USDT: {
+        address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+        decimals: 6,
+        symbol: "USDT",
+        name: "Tether USD",
+      },
+    },
+  },
 };
 
 export function getSupportedTokens(chainId: number): string[] {
@@ -191,20 +182,20 @@ function validateConfiguration(): void {
       errors.push(`No tokens configured for chain ${chainId}`);
     }
     
-    Object.entries(chain.tokens).forEach(([symbol, token]) => {
-      if (!/^0x[a-fA-F0-9]{40}$/i.test(token.address)) {
-        errors.push(`Invalid token address for ${symbol} on chain ${chainId}`);
+    Object.values(chain.tokens).forEach(token => {
+      if (chainId !== 728126428 && !/^0x[a-fA-F0-9]{40}$/i.test(token.address)) {
+        errors.push(`Invalid token address ${token.address} on chain ${chainId}`);
       }
     });
   });
-  
+
   if (errors.length > 0) {
-    console.error('❌ Configuration validation failed:');
-    errors.forEach(e => console.error(`   - ${e}`));
-    if (typeof window !== 'undefined') {
-      throw new Error('Configuration validation failed - check console for details');
+    if (process.env.NODE_ENV === 'development') {
+      console.warn("⚠️ Configuration Warnings:\n" + errors.join('\n'));
+    } else {
+      console.error("❌ Invalid Configuration:\n" + errors.join('\n'));
     }
-  } else if (typeof window === 'undefined' && !isTreasuryPlaceholder) {
+  } else {
     console.log(`✅ Config validated: ${SUPPORTED_CHAINS.length} chains, treasury: ${treasuryAddress}`);
   }
 }
