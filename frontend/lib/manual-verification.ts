@@ -5,6 +5,8 @@ import { verifyPayment } from './verification';
 import { sendConfirmationEmail, sendReservationConfirmedEmail } from './email';
 import { mintBookingNFT } from './nft-service';
 import { parseUnits } from 'viem';
+import { holdStaySlots } from './inventory';
+import { issueTicketsForBooking, getTicketEmailPayload } from './ticket-service';
 
 /**
  * Initiates the verification process for a manually submitted payment.
@@ -226,7 +228,10 @@ async function confirmTronPayment(booking: any, txHash: string, isReservationPay
               reservationToken: paymentToken as any,
             },
         });
-        
+
+        // Reservation secures the slot immediately, same as the EVM path.
+        await holdStaySlots(booking.stayId, booking.guestCount || 1);
+
         if (booking.user?.email && booking.stay) {
             try {
               await sendReservationConfirmedEmail({
@@ -271,6 +276,18 @@ async function confirmTronPayment(booking: any, txHash: string, isReservationPay
             },
         });
 
+        // Non-reservation bookings hold the slot at full confirmation
+        // (reservation bookings already held it when the reservation was paid).
+        if (!isRemainingPayment) {
+          await holdStaySlots(booking.stayId, booking.guestCount || 1);
+        }
+
+        try {
+          await issueTicketsForBooking(booking.bookingId);
+        } catch (ticketError) {
+          console.error('[Manual Verification] Ticket issuance failed:', ticketError);
+        }
+
         if (booking.user?.email && booking.stay) {
             try {
               await sendConfirmationEmail({
@@ -285,6 +302,7 @@ async function confirmTronPayment(booking: any, txHash: string, isReservationPay
                 paidToken: paymentToken as 'USDC' | 'USDT',
                 txHash: txHash,
                 chainId: 728126428,
+                tickets: await getTicketEmailPayload(booking.bookingId),
               });
             } catch (e) {}
         }

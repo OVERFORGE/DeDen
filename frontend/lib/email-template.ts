@@ -176,6 +176,40 @@ export function calloutBox(opts: { tone: CalloutTone; title: string; bodyHtml: s
 </div>`;
 }
 
+export interface TicketSectionItem {
+  ticketCode: string;
+  guestName: string;
+  qrDataUrl: string;
+}
+
+export function ticketSection(tickets: TicketSectionItem[]): string {
+  const cards = tickets
+    .map(
+      (t) => `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${brand.header}; border-radius:16px; margin: 0 0 16px;">
+      <tr>
+        <td style="padding:24px; text-align:center;">
+          <img src="${t.qrDataUrl}" width="140" height="140" alt="Ticket QR" style="display:block; margin:0 auto 14px; border-radius:8px; background:${brand.bg};" />
+          <div style="font-family:${fontSans}; font-size:15px; font-weight:700; color:${brand.headerText};">${t.guestName || "Guest"}</div>
+          <div style="font-family:${fontSans}; font-size:12px; letter-spacing:0.5px; color:${brand.accent}; margin-top:4px;">${t.ticketCode}</div>
+        </td>
+      </tr>
+    </table>`
+    )
+    .join("");
+
+  return `
+<div style="margin: 28px 0;">
+  <div style="font-family:${fontSans}; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:${brand.textMuted}; margin-bottom:14px;">
+    Your Ticket${tickets.length > 1 ? "s" : ""}
+  </div>
+  ${cards}
+  <div style="font-family:${fontSans}; font-size:12px; color:${brand.textMuted}; text-align:center; margin-top:4px;">
+    Show this QR code at check-in. Each guest has their own ticket.
+  </div>
+</div>`;
+}
+
 export function stepList(steps: string[]): string {
   const items = steps
     .map(

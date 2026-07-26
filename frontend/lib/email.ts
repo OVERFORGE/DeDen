@@ -2,7 +2,7 @@ import { Resend } from "resend";
 import { db } from "@/lib/database";
 import { PaymentToken } from "@prisma/client";
 import { chainConfig } from "@/lib/config";
-import { renderEmailShell, ctaButton, amountCard, detailsCard, calloutBox, stepList } from "@/lib/email-template";
+import { renderEmailShell, ctaButton, amountCard, detailsCard, calloutBox, stepList, ticketSection } from "@/lib/email-template";
 
 // Initialize the Resend client
 if (!process.env.RESEND_API_KEY) {
@@ -497,6 +497,12 @@ export async function sendRemainingPaymentReminder(
 }
 
 // --- Email Template: Payment Confirmed (FULL PAYMENT - existing template) ---
+interface ConfirmationEmailTicket {
+  ticketCode: string;
+  guestName: string;
+  qrDataUrl: string;
+}
+
 interface ConfirmationEmailProps {
   recipientEmail: string;
   recipientName: string;
@@ -509,6 +515,7 @@ interface ConfirmationEmailProps {
   paidToken: PaymentToken;
   txHash: string;
   chainId: number;
+  tickets?: ConfirmationEmailTicket[];
 }
 
 export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
@@ -524,6 +531,7 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
     paidToken,
     txHash,
     chainId,
+    tickets,
   } = props;
 
   const subject = `✅ Payment Confirmed - ${stayTitle}`;
@@ -561,6 +569,8 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
       { label: "Amount paid", value: `$${paidAmount} ${paidToken}` },
       { label: "Transaction", value: `${txHash.slice(0, 10)}...${txHash.slice(-8)}`, href: explorerUrl },
     ])}
+
+    ${tickets && tickets.length > 0 ? ticketSection(tickets) : ""}
 
     ${ctaButton(dashboardUrl, "View Dashboard")}
   `;
@@ -758,5 +768,71 @@ export async function sendPaymentExpiryEmail(props: {
       error: error?.message || error,
     });
     throw error;
+  }
+}
+
+// --- Email Template: Refund Processed ---
+export async function sendRefundConfirmedEmail(props: {
+  recipientEmail: string;
+  recipientName: string;
+  bookingId: string;
+  stayTitle: string;
+  amount: number;
+  token: string;
+  reason?: string;
+}) {
+  const { recipientEmail, recipientName, bookingId, stayTitle, amount, token, reason } = props;
+
+  const subject = `Refund Processed - ${stayTitle}`;
+
+  const bodyHtml = `
+    <p style="margin:0 0 18px;">
+      Your booking for <strong>${stayTitle}</strong> has been refunded.
+    </p>
+
+    ${amountCard({ label: "Refund amount", amount: `$${amount} ${token}` })}
+
+    ${reason ? calloutBox({ tone: "info", title: "Reason", bodyHtml: reason }) : ""}
+
+    <p style="margin-top:24px;">
+      Refunds are sent manually by our team — if you don't see the funds within a few business days, contact support with your booking ID above.
+    </p>
+  `;
+
+  const htmlBody = renderEmailShell({
+    preheader: `Your refund for ${stayTitle} has been processed.`,
+    eyebrow: "Refund Processed",
+    title: "Refund confirmed",
+    subtitle: `Hi ${recipientName}`,
+    bodyHtml,
+    bookingId,
+    supportEmail,
+    year: new Date().getFullYear(),
+  });
+
+  try {
+    const response = await resend.emails.send({
+      from: fromEmail,
+      to: recipientEmail,
+      subject,
+      html: htmlBody,
+    });
+
+    await logEmailToDb(recipientEmail, subject, response.data ? "refund_confirmed" : "refund_confirmed_failed", {
+      bookingId,
+      amount,
+      token,
+      resendId: response.data?.id,
+    });
+
+    if (response.error) throw response.error;
+    return true;
+  } catch (error: any) {
+    console.error("[EmailLib] Failed to send refund confirmed email:", error);
+    await logEmailToDb(recipientEmail, subject, "refund_confirmed_failed", {
+      bookingId,
+      error: error?.message || error,
+    });
+    return false;
   }
 }

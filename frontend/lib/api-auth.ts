@@ -99,3 +99,30 @@ export async function requireBookingOwner(bookingId: string) {
 
   return { booking, userId: session.user.id as string, isAdmin };
 }
+
+/**
+ * Requires the current session user to either own the ticket or be an admin.
+ */
+export async function requireTicketOwner(ticketCode: string) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    throw new ApiAuthError(401, "Not authenticated");
+  }
+
+  const ticket = await db.ticket.findUnique({
+    where: { ticketCode },
+  });
+
+  if (!ticket) {
+    throw new ApiAuthError(404, "Ticket not found");
+  }
+
+  const isOwner = ticket.userId === session.user.id;
+  const isAdmin = session.user.userRole === "ADMIN";
+
+  if (!isOwner && !isAdmin) {
+    throw new ApiAuthError(403, "You do not have access to this ticket");
+  }
+
+  return { ticket, userId: session.user.id as string, isAdmin };
+}

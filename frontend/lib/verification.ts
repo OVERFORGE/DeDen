@@ -9,6 +9,7 @@ import { parseUnits } from 'viem';
 import { sendConfirmationEmail, sendReservationConfirmedEmail } from './email';
 import { mintBookingNFT } from './nft-service'; // ✅ NEW: Import NFT service
 import { holdStaySlots } from './inventory';
+import { issueTicketsForBooking, getTicketEmailPayload } from './ticket-service';
 
 /**
  * Check if a transaction hash has already been used
@@ -406,7 +407,15 @@ export async function verifyPayment(
                 },
               },
             });
-            
+
+            // ✅ Issue real tickets (one per guest) before attempting the
+            // NFT mint, so a failed/slow mint never blocks ticket issuance.
+            try {
+              await issueTicketsForBooking(booking.bookingId);
+            } catch (ticketError) {
+              console.error('[Verification] ⚠️ Ticket issuance failed:', ticketError);
+            }
+
             // ✅ ✅ ✅ MINT NFT AFTER FULL PAYMENT ✅ ✅ ✅
             console.log('[Verification] 🎫 Starting NFT minting process...');
             try {
@@ -508,8 +517,9 @@ export async function verifyPayment(
                   paidToken: paymentToken as 'USDC' | 'USDT',
                   txHash: txHash,
                   chainId: chainId,
+                  tickets: await getTicketEmailPayload(booking.bookingId),
                 });
-                
+
                 console.log(`[Verification] ✅ Full confirmation email sent!`);
               } catch (emailError) {
                 console.error('[Verification] ⚠️ Failed to send confirmation email:', emailError);
@@ -560,7 +570,15 @@ export async function verifyPayment(
                 },
               },
             });
-            
+
+            // ✅ Issue real tickets (one per guest) before attempting the
+            // NFT mint, so a failed/slow mint never blocks ticket issuance.
+            try {
+              await issueTicketsForBooking(booking.bookingId);
+            } catch (ticketError) {
+              console.error('[Verification] ⚠️ Ticket issuance failed:', ticketError);
+            }
+
             // ✅ ✅ ✅ MINT NFT AFTER FULL PAYMENT ✅ ✅ ✅
             console.log('[Verification] 🎫 Starting NFT minting process...');
             try {
@@ -662,8 +680,9 @@ export async function verifyPayment(
                   paidToken: booking.paymentToken as 'USDC' | 'USDT',
                   txHash: txHash,
                   chainId: chainId,
+                  tickets: await getTicketEmailPayload(booking.bookingId),
                 });
-                
+
                 console.log(`[Verification] ✅ Confirmation email sent successfully!`);
               } catch (emailError) {
                 console.error('[Verification] ⚠️ Failed to send confirmation email:', emailError);
