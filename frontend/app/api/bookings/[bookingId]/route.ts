@@ -61,13 +61,52 @@ export async function GET(
                 // Guest and Date info for overview
                 guestName: true,
                 guestEmail: true,
+                guestMobile: true,
+                guestCount: true,
+                guests: true,
                 checkInDate: true,
                 checkOutDate: true,
+                optInGuestList: true,
+
+                // Authoritative totals + audit info (booking detail page)
+                pricePerNightUSDC: true,
+                pricePerNightUSDT: true,
+                finalPrice: true,
+                originalPrice: true,
+                totalPaid: true,
+                discountPercent: true,
+                referralCodeUsed: true,
+                blockNumber: true,
+                confirmedAt: true,
+                createdAt: true,
+
+                // NFT
+                nftMinted: true,
+                nftTokenId: true,
+                nftContractAddress: true,
+                nftTxHash: true,
 
                 // ✅ Stay relation with enabledChains
                 stay: {
                     select: {
+                        stayId: true,
                         title: true,
+                        slug: true,
+                        location: true,
+                        venue: true,
+                        description: true,
+                        shortDescription: true,
+                        startDate: true,
+                        endDate: true,
+                        images: true,
+                        heroImage: true,
+                        amenities: true,
+                        highlights: true,
+                        rules: true,
+                        address: true,
+                        checkInTime: true,
+                        checkOutTime: true,
+                        guestListEnabled: true,
                         priceUSDC: true,
                         priceUSDT: true,
                         enabledChains: true, // ✅ CRITICAL: Added for chain filtering

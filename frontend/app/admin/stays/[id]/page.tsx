@@ -49,6 +49,7 @@ type Stay = {
     reservationAmount: number;
     minNightsForReservation: number;
     enabledChains: number[];  // ✅ ADD THIS LINE
+    guestListEnabled: boolean;
 };
 
 export default function EditStayPage() {
@@ -366,7 +367,15 @@ export default function EditStayPage() {
                                 <input type="checkbox" {...register('allowWaitlist')} className="h-4 w-4 text-[#96A476] border-[#96A476]/40 rounded" />
                                 Allow Applications
                             </label>
+                            <label className="flex items-center gap-2 text-[#3D4331]/80 text-sm font-medium">
+                                <input type="checkbox" {...register('guestListEnabled')} className="h-4 w-4 text-[#96A476] border-[#96A476]/40 rounded" />
+                                Show "Who's Coming" to guests
+                            </label>
                         </div>
+                        <p className="text-xs text-[#3D4331]/60 -mt-2">
+                            When on, confirmed/reserved guests can see the names and X handles of other
+                            guests who've opted in — each guest chooses individually whether to appear.
+                        </p>
                     </div>
                 )}
 

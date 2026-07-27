@@ -68,6 +68,13 @@ export async function GET(request: Request) {
       remainingAmount: booking.remainingAmount,
       remainingPaid: booking.remainingPaid,
 
+      // Authoritative totals — `paymentAmount` only holds the most recently
+      // locked leg, so the dashboard needs these to show a correct figure.
+      finalPrice: booking.finalPrice,
+      totalPaid: booking.totalPaid,
+      discountPercent: booking.discountPercent,
+      guests: booking.guests,
+
       paymentAmount: booking.paymentAmount,
       paymentToken: booking.paymentToken,
       txHash: booking.txHash,

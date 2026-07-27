@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
+import { getChainName } from '@/lib/config';
 import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
 
 export async function GET(request: Request) {
@@ -14,21 +15,38 @@ export async function GET(request: Request) {
     await requireAdmin();
 
     const { searchParams } = new URL(request.url);
-    const stayId = searchParams.get('stayId') || undefined;
+    const stayIdParam = searchParams.get('stayId') || undefined;
 
-    const baseWhere = stayId ? { stayId } : {};
+    // Accept the human-readable Stay.stayId (what the admin UI filters by)
+    // and resolve it to the ObjectId that Booking.stayId actually holds.
+    let baseWhere: any = {};
+    if (stayIdParam && stayIdParam !== 'ALL') {
+      const stay = await db.stay.findUnique({
+        where: { stayId: stayIdParam },
+        select: { id: true },
+      });
+      baseWhere.stayId = stay?.id ?? stayIdParam;
+    }
 
-    const [statusCounts, confirmedByToken] = await Promise.all([
+    const [statusCounts, confirmedRows] = await Promise.all([
       db.booking.groupBy({
         by: ['status'],
         where: baseWhere,
         _count: { _all: true },
       }),
-      db.booking.groupBy({
-        by: ['paymentToken'],
+      // Revenue is reduced in JS rather than via groupBy _sum because the
+      // correct per-booking figure is `totalPaid ?? paymentAmount` — a
+      // groupBy sum can't express that fallback and would silently drop
+      // rows where only one of the two is populated. Scoped to CONFIRMED
+      // and 4 tiny fields, so it stays cheap.
+      db.booking.findMany({
         where: { ...baseWhere, status: BookingStatus.CONFIRMED },
-        _sum: { totalPaid: true, paymentAmount: true },
-        _count: { _all: true },
+        select: {
+          chainId: true,
+          paymentToken: true,
+          totalPaid: true,
+          paymentAmount: true,
+        },
       }),
     ]);
 
@@ -40,15 +58,23 @@ export async function GET(request: Request) {
       counts[row.status.toLowerCase()] = row._count._all;
     }
 
-    const revenue = confirmedByToken.reduce(
-      (acc, row) => {
-        const token = row.paymentToken || 'UNKNOWN';
-        const amount = row._sum.totalPaid ?? row._sum.paymentAmount ?? 0;
-        acc[token] = (acc[token] || 0) + amount;
-        return acc;
-      },
-      {} as Record<string, number>
-    );
+    const revenue: Record<string, number> = {};
+    const byChain: Record<string, { USDC: number; USDT: number }> = {};
+
+    for (const row of confirmedRows) {
+      const token = row.paymentToken || 'UNKNOWN';
+      const amount = row.totalPaid ?? row.paymentAmount ?? 0;
+
+      revenue[token] = (revenue[token] || 0) + amount;
+
+      const chainLabel = row.chainId ? getChainName(row.chainId) : 'Unknown';
+      if (!byChain[chainLabel]) {
+        byChain[chainLabel] = { USDC: 0, USDT: 0 };
+      }
+      if (token === 'USDC' || token === 'USDT') {
+        byChain[chainLabel][token] += amount;
+      }
+    }
 
     const totalBookings = statusCounts.reduce((sum, row) => sum + row._count._all, 0);
 
@@ -56,6 +82,7 @@ export async function GET(request: Request) {
       totalBookings,
       counts,
       revenue,
+      byChain,
     });
   } catch (error) {
     if ((error as any).status) {

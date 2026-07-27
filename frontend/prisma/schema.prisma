@@ -217,6 +217,9 @@ model Stay {
   isFeatured      Boolean   @default(false)
   allowWaitlist   Boolean   @default(true)
   autoConfirm     Boolean   @default(false)
+  // When on, guests with an accepted booking can see who else is attending
+  // (name + X handle only, and only for guests who opted in themselves).
+  guestListEnabled Boolean  @default(false)
   status          String    @default("UPCOMING") // UPCOMING, ONGOING, DONE
   
   // Past Event Details
