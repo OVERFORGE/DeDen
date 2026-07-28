@@ -20,6 +20,7 @@ const baseStay = {
   requiresReservation: true,
   reservationAmount: 30,
   minNightsForReservation: 2,
+  loyaltyDiscountEnabled: true,
 };
 
 beforeEach(() => {
@@ -88,6 +89,19 @@ describe("computeBookingTotals", () => {
     expect(result.discountPercent).toBe(20);
     expect(result.isLoyaltyDiscount).toBe(true);
     expect(result.finalTotalUSDC).toBe(160); // 200 - 20%
+  });
+
+  it("skips the loyalty discount entirely when the stay has opted out", async () => {
+    bookingCount.mockResolvedValue(3);
+    const result = await computeBookingTotals({
+      stay: { ...baseStay, loyaltyDiscountEnabled: false },
+      nights: 2,
+      guestCount: 1,
+      userId: "user-1",
+    });
+    expect(bookingCount).not.toHaveBeenCalled();
+    expect(result.discountPercent).toBe(0);
+    expect(result.finalTotalUSDC).toBe(200);
   });
 
   it("applies a referral discount for a first-time guest with a valid code", async () => {

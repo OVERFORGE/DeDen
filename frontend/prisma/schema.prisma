@@ -220,6 +220,14 @@ model Stay {
   // When on, guests with an accepted booking can see who else is attending
   // (name + X handle only, and only for guests who opted in themselves).
   guestListEnabled Boolean  @default(false)
+
+  // When off, the flat 20% returning-guest loyalty discount (lib/pricing.ts)
+  // never applies to this stay, regardless of the guest's booking history —
+  // e.g. for a sponsored/already-discounted or capacity-constrained event
+  // where stacking loyalty on top doesn't make sense. On by default so
+  // existing stays keep today's behavior.
+  loyaltyDiscountEnabled Boolean @default(true)
+
   status          String    @default("UPCOMING") // UPCOMING, ONGOING, DONE
   
   // Past Event Details

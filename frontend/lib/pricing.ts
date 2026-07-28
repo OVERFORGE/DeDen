@@ -22,6 +22,7 @@ export interface PricingStayInput {
   requiresReservation: boolean;
   reservationAmount: number | null;
   minNightsForReservation: number | null;
+  loyaltyDiscountEnabled: boolean;
 }
 
 export interface ComputeBookingTotalsInput {
@@ -137,10 +138,11 @@ export async function computeBookingTotals(
   const subtotalUSDC = pricePerNightUSDC * nights * guestCount;
   const subtotalUSDT = pricePerNightUSDT * nights * guestCount;
 
-  // 3. Loyalty discount — 20% for anyone with a prior CONFIRMED booking.
-  const previousBookings = await db.booking.count({
-    where: { userId, status: BookingStatus.CONFIRMED },
-  });
+  // 3. Loyalty discount — 20% for anyone with a prior CONFIRMED booking,
+  //    unless this specific stay has opted out of loyalty pricing.
+  const previousBookings = stay.loyaltyDiscountEnabled
+    ? await db.booking.count({ where: { userId, status: BookingStatus.CONFIRMED } })
+    : 0;
   const loyaltyDiscountPercent = previousBookings > 0 ? LOYALTY_DISCOUNT_PERCENT : 0;
 
   // 4. Referral discount — validated against this stay.

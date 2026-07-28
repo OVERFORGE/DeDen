@@ -23,6 +23,7 @@ type StayData = {
   requiresReservation?: boolean;
   reservationAmount?: number;
   minNightsForReservation?: number;
+  loyaltyDiscountEnabled?: boolean;
 };
 
 type GuestData = {
@@ -214,7 +215,8 @@ export default function ApplyPage() {
 
   // Loyalty beats referral when both apply — mirrors lib/pricing.ts, which
   // is the actual source of truth server-side; this is just a preview.
-  const loyaltyPercent = loyaltyInfo?.discountPercent || 0;
+  // Gated by the stay's own loyaltyDiscountEnabled flag, same as pricing.ts.
+  const loyaltyPercent = stayData?.loyaltyDiscountEnabled !== false ? loyaltyInfo?.discountPercent || 0 : 0;
   const referralPercent = referralStatus === "valid" ? referralInfo?.discountPercent || 0 : 0;
   const effectiveDiscountPercent = Math.max(loyaltyPercent, referralPercent);
   const isLoyaltyDiscount = effectiveDiscountPercent === loyaltyPercent && loyaltyPercent > 0;
@@ -672,7 +674,7 @@ export default function ApplyPage() {
                   {referralStatus === "invalid" && referralError && (
                     <p className="text-[11px] text-red-400 mt-2">{referralError}</p>
                   )}
-                  {loyaltyInfo?.isEligible && (
+                  {loyaltyInfo?.isEligible && stayData?.loyaltyDiscountEnabled !== false && (
                     <p className="text-[11px] text-[#F3EDE0]/60 mt-2 flex items-center gap-1.5">
                       <Sparkles size={12} /> Welcome back — {loyaltyInfo.discountPercent}% loyalty discount applied automatically.
                     </p>

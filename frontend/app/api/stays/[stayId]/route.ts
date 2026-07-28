@@ -54,6 +54,7 @@ export async function GET(
         requiresReservation: true,
         reservationAmount: true,
         minNightsForReservation: true,
+        loyaltyDiscountEnabled: true,
       },
     });
 

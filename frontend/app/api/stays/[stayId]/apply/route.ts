@@ -249,6 +249,7 @@ export async function POST(
           requiresReservation: stay.requiresReservation,
           reservationAmount: stay.reservationAmount,
           minNightsForReservation: stay.minNightsForReservation,
+          loyaltyDiscountEnabled: stay.loyaltyDiscountEnabled,
         },
         roomId: body.selectedRoomId || existingBooking?.selectedRoomId || null,
         nights: numberOfNights,
