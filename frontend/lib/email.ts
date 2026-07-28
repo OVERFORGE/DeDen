@@ -2,7 +2,7 @@ import { Resend } from "resend";
 import { db } from "@/lib/database";
 import { PaymentToken } from "@prisma/client";
 import { chainConfig } from "@/lib/config";
-import { renderEmailShell, ctaButton, amountCard, detailsCard, calloutBox, stepList, ticketSection } from "@/lib/email-template";
+import { renderEmailShell, ctaButton, amountCard, detailsCard, calloutBox, stepList, ticketNote } from "@/lib/email-template";
 
 // Initialize the Resend client
 if (!process.env.RESEND_API_KEY) {
@@ -10,7 +10,7 @@ if (!process.env.RESEND_API_KEY) {
 }
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const fromEmail = "bookings@deden.space";
+const fromEmail = "DeDen <bookings@deden.space>";
 const supportEmail = "bookings@deden.space";
 
 // ✅ FIXED: Get base URL with proper environment handling
@@ -500,7 +500,7 @@ export async function sendRemainingPaymentReminder(
 interface ConfirmationEmailTicket {
   ticketCode: string;
   guestName: string;
-  qrDataUrl: string;
+  pdfBase64: string;
 }
 
 interface ConfirmationEmailProps {
@@ -570,7 +570,7 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
       { label: "Transaction", value: `${txHash.slice(0, 10)}...${txHash.slice(-8)}`, href: explorerUrl },
     ])}
 
-    ${tickets && tickets.length > 0 ? ticketSection(tickets) : ""}
+    ${tickets && tickets.length > 0 ? ticketNote(tickets) : ""}
 
     ${ctaButton(dashboardUrl, "View Dashboard")}
   `;
@@ -592,6 +592,10 @@ export async function sendConfirmationEmail(props: ConfirmationEmailProps) {
       to: recipientEmail,
       subject: subject,
       html: htmlBody,
+      attachments: (tickets || []).map((t) => ({
+        filename: `${t.ticketCode}.pdf`,
+        content: t.pdfBase64,
+      })),
     });
 
     console.log("[EmailLib] Confirmation email sent:", response);

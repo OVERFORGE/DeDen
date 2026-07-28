@@ -7,6 +7,7 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import QRCode from 'qrcode';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { db } from '@/lib/database';
 import { TicketStatus } from '@prisma/client';
 
@@ -140,12 +141,95 @@ export async function renderTicketQr(qrToken: string): Promise<string> {
   });
 }
 
+interface TicketPdfParams {
+  ticketCode: string;
+  guestName: string;
+  qrToken: string;
+  stayTitle: string;
+  stayLocation: string;
+  checkInDate: Date;
+  checkOutDate: Date;
+}
+
 /**
- * Fetches a booking's tickets with rendered QR codes, in the shape
+ * Renders a single ticket as a standalone PDF (voucher-style: header, event
+ * details, QR, guest/ticket code) — sent as an email attachment rather than
+ * embedded inline, since inline QR images render inconsistently across mail
+ * clients and get stripped by some image-blocking defaults.
+ */
+export async function renderTicketPdf(params: TicketPdfParams): Promise<Buffer> {
+  const { ticketCode, guestName, qrToken, stayTitle, stayLocation, checkInDate, checkOutDate } = params;
+
+  const qrPngBuffer = await QRCode.toBuffer(qrToken, {
+    color: { dark: '#1F2328', light: '#FFFFFF' },
+    width: 400,
+    margin: 1,
+    errorCorrectionLevel: 'H',
+  });
+
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([360, 560]);
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const textDark = rgb(0.12, 0.14, 0.16);
+  const textMuted = rgb(0.42, 0.44, 0.47);
+  const accent = rgb(0.24, 0.26, 0.19); // #3D4331
+  const border = rgb(0.89, 0.9, 0.92);
+
+  let y = 560;
+
+  // Header bar
+  page.drawRectangle({ x: 0, y: y - 56, width: 360, height: 56, color: accent });
+  page.drawText('DeDen', { x: 24, y: y - 36, size: 18, font: bold, color: rgb(1, 1, 1) });
+  y -= 56;
+
+  // Event title + location + dates
+  y -= 32;
+  page.drawText(stayTitle, { x: 24, y, size: 15, font: bold, color: textDark, maxWidth: 312 });
+  y -= 20;
+  page.drawText(stayLocation, { x: 24, y, size: 11, font, color: textMuted });
+  y -= 16;
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  page.drawText(`${fmt(checkInDate)} - ${fmt(checkOutDate)}`, { x: 24, y, size: 11, font, color: textMuted });
+
+  // Divider
+  y -= 24;
+  page.drawLine({ start: { x: 24, y }, end: { x: 336, y }, thickness: 1, color: border });
+
+  // QR block, centered
+  const qrImage = await pdfDoc.embedPng(qrPngBuffer);
+  const qrSize = 200;
+  const qrX = (360 - qrSize) / 2;
+  y -= 24 + qrSize;
+  page.drawRectangle({ x: qrX - 16, y: y - 16, width: qrSize + 32, height: qrSize + 32, borderColor: border, borderWidth: 1, color: rgb(1, 1, 1) });
+  page.drawImage(qrImage, { x: qrX, y, width: qrSize, height: qrSize });
+
+  // Guest name + ticket code, centered
+  y -= 36;
+  const guestLine = guestName || 'Guest';
+  const guestWidth = bold.widthOfTextAtSize(guestLine, 14);
+  page.drawText(guestLine, { x: (360 - guestWidth) / 2, y, size: 14, font: bold, color: textDark });
+  y -= 18;
+  const codeWidth = font.widthOfTextAtSize(ticketCode, 10);
+  page.drawText(ticketCode, { x: (360 - codeWidth) / 2, y, size: 10, font, color: textMuted });
+
+  // Footer note
+  y -= 40;
+  const note = 'Present this QR code at check-in. Each guest has their own ticket.';
+  const noteWidth = font.widthOfTextAtSize(note, 9);
+  page.drawText(note, { x: Math.max(24, (360 - noteWidth) / 2), y, size: 9, font, color: textMuted });
+
+  const bytes = await pdfDoc.save();
+  return Buffer.from(bytes);
+}
+
+/**
+ * Fetches a booking's tickets with rendered PDF attachments, in the shape
  * sendConfirmationEmail expects. Call after issueTicketsForBooking.
  */
 export async function getTicketEmailPayload(bookingId: string) {
-  const booking = await db.booking.findUnique({ where: { bookingId } });
+  const booking = await db.booking.findUnique({ where: { bookingId }, include: { stay: true } });
   if (!booking) return [];
 
   const tickets = await db.ticket.findMany({
@@ -154,11 +238,22 @@ export async function getTicketEmailPayload(bookingId: string) {
   });
 
   return Promise.all(
-    tickets.map(async (t) => ({
-      ticketCode: t.ticketCode,
-      guestName: t.guestName || 'Guest',
-      qrDataUrl: await renderTicketQr(t.qrToken),
-    }))
+    tickets.map(async (t) => {
+      const pdfBuffer = await renderTicketPdf({
+        ticketCode: t.ticketCode,
+        guestName: t.guestName || 'Guest',
+        qrToken: t.qrToken,
+        stayTitle: booking.stay.title,
+        stayLocation: booking.stay.location,
+        checkInDate: booking.checkInDate || booking.stay.startDate,
+        checkOutDate: booking.checkOutDate || booking.stay.endDate,
+      });
+      return {
+        ticketCode: t.ticketCode,
+        guestName: t.guestName || 'Guest',
+        pdfBase64: pdfBuffer.toString('base64'),
+      };
+    })
   );
 }
 
