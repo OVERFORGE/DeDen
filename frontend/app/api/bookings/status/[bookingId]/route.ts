@@ -2,10 +2,7 @@
 // ✅ Requires ownership — this is the endpoint the payment page polls while
 // verifying, so it was leaking live payment status to anyone who guessed a
 // bookingId.
-// ✅ Also settles stale PENDING bookings on read, and keeps the manual
-// verification trigger: if the booking is PENDING with a senderAddress set
-// (user clicked "I have paid" without a captured tx hash), each poll kicks
-// off a background scan for a matching on-chain transfer.
+// ✅ Also settles stale PENDING bookings on read.
 
 import { NextResponse, NextRequest } from 'next/server';
 import { db } from '@/lib/database';
@@ -44,10 +41,6 @@ export async function GET(
         expiresAt: true,
         paymentToken: true,
         paymentAmount: true,
-        senderAddress: true,
-        requiresReservation: true,
-        reservationPaid: true,
-        remainingPaid: true,
       },
     });
 
@@ -56,25 +49,6 @@ export async function GET(
         { error: 'Booking not found' },
         { status: 404 }
       );
-    }
-
-    // If the booking is PENDING but has a senderAddress, the user clicked
-    // "I have paid" without a captured tx hash. Trigger a scan here so the
-    // frontend's polling doubles as a verification retry loop.
-    if (booking.status === 'PENDING' && booking.senderAddress) {
-      const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
-
-      // Fire asynchronously so we don't block the status response. In a
-      // strict serverless environment this might get killed early, but
-      // since the client polls repeatedly, it gets retried constantly.
-      import('@/lib/manual-verification').then(({ verifyManualPayment }) => {
-        verifyManualPayment(
-          booking.bookingId,
-          booking.senderAddress as string,
-          booking.chainId || 1,
-          isRemainingPayment
-        ).catch((e) => console.error('Manual verify error:', e));
-      });
     }
 
     return NextResponse.json({

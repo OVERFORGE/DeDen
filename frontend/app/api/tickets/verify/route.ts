@@ -8,10 +8,21 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
 import { verifyQrToken } from '@/lib/ticket-service';
+import { isRateLimited, getRequestIp } from '@/lib/rate-limit';
+
+// 60 scans per admin/IP per minute — a scanner rapid-firing bad reads
+// shouldn't be able to hammer the DB, but this shouldn't ever bind a real
+// door-staff workflow (a few scans/second at most).
+const RATE_LIMIT = 60;
+const RATE_WINDOW_MS = 60 * 1000;
 
 export async function POST(request: Request) {
   try {
-    await requireAdmin();
+    const { userId } = await requireAdmin();
+
+    if (isRateLimited(`ticket-verify:${userId || getRequestIp(request)}`, RATE_LIMIT, RATE_WINDOW_MS)) {
+      return NextResponse.json({ valid: false, error: 'Too many requests, slow down' }, { status: 429 });
+    }
 
     const body = await request.json();
     const { qrToken } = body;

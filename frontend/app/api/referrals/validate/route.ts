@@ -32,11 +32,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // `stayId` here is the business-facing Stay.stayId (from the /stay/[stayId]
+    // URL), but ReferralCode.stayId stores the Mongo _id it relates to — so
+    // it must be resolved first, or every code lookup silently misses.
+    const stay = await prisma.stay.findUnique({
+      where: { stayId },
+      select: { id: true },
+    });
+
+    if (!stay) {
+      return NextResponse.json({ valid: false, error: 'Stay not found' }, { status: 404 });
+    }
+
     // Find the referral code
     const referralCode = await prisma.referralCode.findFirst({
       where: {
         code: code.trim().toUpperCase(),
-        stayId: stayId,
+        stayId: stay.id,
         isActive: true,
       },
       include: {

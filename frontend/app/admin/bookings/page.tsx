@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { ApproveWaitlistButton } from "@/components/ApproveWaitlistButton";
+import { BookingActionsMenu } from "@/components/admin/BookingActionsMenu";
 import { chainConfig, getChainName } from "@/lib/config";
 import { 
   Users, 
@@ -924,6 +925,8 @@ export default function AdminDashboard() {
 
                       {/* Action */}
                       <td className="px-6 py-5">
+                        <div className="flex items-start gap-2">
+                        <div className="flex-1">
                         {booking.status === 'WAITLISTED' ? (
                           <ApproveWaitlistButton 
                             bookingId={booking.bookingId}
@@ -971,6 +974,13 @@ export default function AdminDashboard() {
                         ) : (
                           <span className="text-[#2c331f]/50 text-sm font-bold">—</span>
                         )}
+                        </div>
+                        <BookingActionsMenu
+                          bookingId={booking.bookingId}
+                          status={booking.status}
+                          onDone={() => { fetchBookings(); fetchStats(); }}
+                        />
+                        </div>
                       </td>
                     </tr>
                   ))

@@ -5,7 +5,9 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useAccount } from "wagmi";
-import { ArrowLeft, Minus, Plus, Calendar, Check, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Minus, Plus, Calendar, Check, AlertCircle, Loader2, Tag, Sparkles, Info } from "lucide-react";
+
+const ACTIVE_NON_TERMINAL_STATUSES = ["WAITLISTED", "PENDING", "RESERVED", "CONFIRMED"];
 
 type StayData = {
   id: string;
@@ -55,6 +57,23 @@ export default function ApplyPage() {
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
   const [guests, setGuests] = useState<GuestData[]>([]);
 
+  // Loyalty (silent, based on the signed-in user's booking history)
+  const [loyaltyInfo, setLoyaltyInfo] = useState<{ isEligible: boolean; discountPercent: number; previousBookingsCount: number } | null>(null);
+
+  // If the user already has an active (non-terminal) booking for this exact
+  // stay, submitting here extends it (adds guests, delta pricing) rather
+  // than creating a duplicate — apply/route.ts already handles that merge,
+  // but nothing told the user that's what's about to happen.
+  const [existingBooking, setExistingBooking] = useState<{ bookingId: string; status: string; guestCount: number } | null>(null);
+
+  // Referral code (live-validated against this stay before it's ever sent
+  // with the application — an unvalidated/invalid code would otherwise make
+  // the whole apply request fail server-side)
+  const [referralInput, setReferralInput] = useState("");
+  const [referralStatus, setReferralStatus] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  const [referralInfo, setReferralInfo] = useState<{ discountPercent: number; communityName: string } | null>(null);
+  const [referralError, setReferralError] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchStayData = async () => {
       try {
@@ -75,6 +94,72 @@ export default function ApplyPage() {
     };
     if (stayId) fetchStayData();
   }, [stayId]);
+
+  useEffect(() => {
+    if (!session || !stayId) return;
+    fetch("/api/user/bookings")
+      .then((res) => res.json())
+      .then((bookings) => {
+        if (!Array.isArray(bookings)) return;
+        const match = bookings.find(
+          (b: any) => b.stay?.stayId === stayId && ACTIVE_NON_TERMINAL_STATUSES.includes(b.status)
+        );
+        if (match) {
+          setExistingBooking({ bookingId: match.bookingId, status: match.status, guestCount: match.guestCount || 1 });
+        }
+      })
+      .catch(() => {});
+  }, [session, stayId]);
+
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/user/check-loyalty")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.isEligible) {
+          setLoyaltyInfo({
+            isEligible: true,
+            discountPercent: data.discountPercent,
+            previousBookingsCount: data.previousBookingsCount,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [session]);
+
+  // Debounced live validation — loyalty (if eligible) beats referral, so a
+  // code is pointless to check while it's already applied, but we still
+  // validate it in case the user wants to compare or loyalty doesn't apply.
+  useEffect(() => {
+    const code = referralInput.trim();
+    if (!code || !stayId) {
+      setReferralStatus("idle");
+      setReferralInfo(null);
+      setReferralError(null);
+      return;
+    }
+    setReferralStatus("checking");
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/referrals/validate?code=${encodeURIComponent(code)}&stayId=${stayId}`);
+        const data = await res.json();
+        if (data.valid) {
+          setReferralStatus("valid");
+          setReferralInfo({ discountPercent: data.discountPercent, communityName: data.communityName });
+          setReferralError(null);
+        } else {
+          setReferralStatus("invalid");
+          setReferralInfo(null);
+          setReferralError(data.error || "Invalid code");
+        }
+      } catch {
+        setReferralStatus("invalid");
+        setReferralInfo(null);
+        setReferralError("Could not validate code");
+      }
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [referralInput, stayId]);
 
   // Sync guests array with occupancy count
   useEffect(() => {
@@ -125,7 +210,16 @@ export default function ApplyPage() {
     return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  const totalPayable = getPrice() * getNights() * (guests.length || 1);
+  const subtotal = getPrice() * getNights() * (guests.length || 1);
+
+  // Loyalty beats referral when both apply — mirrors lib/pricing.ts, which
+  // is the actual source of truth server-side; this is just a preview.
+  const loyaltyPercent = loyaltyInfo?.discountPercent || 0;
+  const referralPercent = referralStatus === "valid" ? referralInfo?.discountPercent || 0 : 0;
+  const effectiveDiscountPercent = Math.max(loyaltyPercent, referralPercent);
+  const isLoyaltyDiscount = effectiveDiscountPercent === loyaltyPercent && loyaltyPercent > 0;
+  const discountAmount = (subtotal * effectiveDiscountPercent) / 100;
+  const totalPayable = subtotal - discountAmount;
 
   const handleContinue = async () => {
     setApiError(null);
@@ -157,6 +251,7 @@ export default function ApplyPage() {
         checkInDate: stayData?.startDate,
         checkOutDate: stayData?.endDate,
         guests: guests,
+        ...(referralStatus === "valid" && referralInput.trim() ? { referralCode: referralInput.trim() } : {}),
       };
 
       const res = await fetch(`/api/stays/${stayId}/apply`, {
@@ -225,6 +320,23 @@ export default function ApplyPage() {
             </div>
           </div>
         </div>
+
+        {existingBooking && (
+          <div className="mb-10 max-w-4xl bg-[#EBE1D0] border border-[#3D4331]/20 rounded-2xl p-5 flex items-start gap-3">
+            <Info size={18} className="text-[#8A9670] shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-sm">
+                You already have a {existingBooking.status.toLowerCase()} booking for this stay ({existingBooking.guestCount} guest{existingBooking.guestCount !== 1 ? "s" : ""}).
+              </p>
+              <p className="text-sm opacity-70 mt-1">
+                Submitting below will add the guests you enter here to that same booking, not create a new one — you'll only pay the difference.{" "}
+                <Link href={`/dashboard/booking/${existingBooking.bookingId}`} className="underline font-semibold hover:opacity-80">
+                  View existing booking
+                </Link>
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col lg:flex-row gap-12 lg:gap-20 relative">
           
@@ -512,11 +624,59 @@ export default function ApplyPage() {
                   </div>
                 </div>
 
-                <div className="space-y-4 text-sm font-semibold mb-8 pb-8 border-b border-[#F3EDE0]/10">
+                <div className="space-y-4 text-sm font-semibold mb-6 pb-6 border-b border-[#F3EDE0]/10">
                   <div className="flex justify-between">
-                    <span className="opacity-70">${getPrice()} x {getNights()} nights</span>
-                    <span>${totalPayable.toLocaleString()}</span>
+                    <span className="opacity-70">${getPrice()} x {getNights()} nights x {guests.length || 1} guest{(guests.length || 1) !== 1 ? "s" : ""}</span>
+                    <span>${subtotal.toLocaleString()}</span>
                   </div>
+                  {effectiveDiscountPercent > 0 && (
+                    <div className="flex justify-between text-[#8A9670]">
+                      <span className="flex items-center gap-1.5">
+                        {isLoyaltyDiscount ? <Sparkles size={13} /> : <Tag size={13} />}
+                        {isLoyaltyDiscount ? "Loyalty" : `Referral (${referralInfo?.communityName})`} discount ({effectiveDiscountPercent}%)
+                      </span>
+                      <span>-${discountAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Referral code */}
+                <div className="mb-8">
+                  <label className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-2 block">Referral code — optional</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={referralInput}
+                      onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
+                      placeholder="COMMUNITY10"
+                      className="w-full bg-[#F3EDE0]/5 border border-[#F3EDE0]/20 rounded-xl px-4 py-3 pr-10 font-bold text-sm placeholder-[#F3EDE0]/30 focus:outline-none focus:border-[#8A9670] transition-colors uppercase"
+                    />
+                    {referralStatus === "checking" && (
+                      <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin opacity-60" />
+                    )}
+                    {referralStatus === "valid" && (
+                      <Check size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A9670]" />
+                    )}
+                  </div>
+                  {referralStatus === "valid" && referralInfo && (
+                    isLoyaltyDiscount ? (
+                      <p className="text-[11px] text-[#F3EDE0]/60 mt-2">
+                        Valid — {referralInfo.discountPercent}% off, but your loyalty discount is better and will be used instead.
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-[#8A9670] mt-2">
+                        Applied — {referralInfo.communityName} · {referralInfo.discountPercent}% off
+                      </p>
+                    )
+                  )}
+                  {referralStatus === "invalid" && referralError && (
+                    <p className="text-[11px] text-red-400 mt-2">{referralError}</p>
+                  )}
+                  {loyaltyInfo?.isEligible && (
+                    <p className="text-[11px] text-[#F3EDE0]/60 mt-2 flex items-center gap-1.5">
+                      <Sparkles size={12} /> Welcome back — {loyaltyInfo.discountPercent}% loyalty discount applied automatically.
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex justify-between items-end mb-8">

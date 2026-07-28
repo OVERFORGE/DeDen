@@ -5,6 +5,12 @@
 import { useState } from 'react';
 import { chainConfig, SUPPORTED_CHAINS, getChainName } from '@/lib/config';
 
+// Chains with a deployed booking-NFT contract — see NFT_CONTRACT_ADDRESSES
+// in lib/nft-service.ts. Ethereum mainnet (1) has none yet: a payment there
+// confirms and issues tickets normally, but the NFT mint step is silently
+// skipped. Flagged here so an admin doesn't enable it without knowing.
+const CHAINS_WITHOUT_NFT_CONTRACT = new Set([1]);
+
 interface StayChainConfigProps {
   stayId: string;
   currentEnabledChains: number[];
@@ -103,10 +109,20 @@ export function StayChainConfig({ stayId, currentEnabledChains, onUpdate }: Stay
                         TESTNET
                       </span>
                     )}
+                    {CHAINS_WITHOUT_NFT_CONTRACT.has(chainId) && (
+                      <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-semibold rounded">
+                        NO NFT CONTRACT
+                      </span>
+                    )}
                   </div>
                   <div className="text-sm text-gray-600 ml-7">
                     Supported tokens: {supportedTokens.join(', ')}
                   </div>
+                  {CHAINS_WITHOUT_NFT_CONTRACT.has(chainId) && (
+                    <div className="text-xs text-orange-700 ml-7 mt-1">
+                      Payments here confirm and issue tickets normally, but guests won't receive a booking NFT — no contract is deployed on this chain yet.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,10 +1,15 @@
 "use client";
 
-import { Mail, User, MessageSquare } from "lucide-react";
+import { Mail, User, MessageSquare, CheckCircle2, AlertCircle } from "lucide-react";
 import { useState } from "react";
 
 export default function ContactPage() {
   const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-[#f7eedb] text-[#2c331f] selection:bg-[#9db47d] selection:text-[#2c331f]">
@@ -38,10 +43,29 @@ export default function ContactPage() {
             </h2>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 setLoading(true);
-                setTimeout(() => setLoading(false), 1200);
+                setStatus("idle");
+                setErrorMsg(null);
+                try {
+                  const res = await fetch("/api/contact", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, email, message }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || "Failed to send message");
+                  setStatus("success");
+                  setName("");
+                  setEmail("");
+                  setMessage("");
+                } catch (err: any) {
+                  setStatus("error");
+                  setErrorMsg(err.message);
+                } finally {
+                  setLoading(false);
+                }
               }}
               className="space-y-6"
             >
@@ -57,6 +81,8 @@ export default function ContactPage() {
                   <input
                     type="text"
                     placeholder="John Doe"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     className="w-full pl-12 pr-5 py-4 text-sm font-bold bg-[#f7eedb]/30 border-2 border-[#2c331f] rounded-xl focus:bg-white focus:shadow-[4px_4px_0px_0px_#2c331f] focus:outline-none transition-all placeholder:text-[#2c331f]/40 placeholder:font-normal"
                     required
                   />
@@ -75,6 +101,8 @@ export default function ContactPage() {
                   <input
                     type="email"
                     placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-12 pr-5 py-4 text-sm font-bold bg-[#f7eedb]/30 border-2 border-[#2c331f] rounded-xl focus:bg-white focus:shadow-[4px_4px_0px_0px_#2c331f] focus:outline-none transition-all placeholder:text-[#2c331f]/40 placeholder:font-normal"
                     required
                   />
@@ -89,6 +117,8 @@ export default function ContactPage() {
                 <textarea
                   placeholder="What's on your mind?..."
                   rows={4}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
                   className="w-full p-5 text-sm font-bold bg-[#f7eedb]/30 border-2 border-[#2c331f] rounded-xl focus:bg-white focus:shadow-[4px_4px_0px_0px_#2c331f] focus:outline-none transition-all resize-none placeholder:text-[#2c331f]/40 placeholder:font-normal"
                   required
                 />
@@ -112,6 +142,17 @@ export default function ContactPage() {
                   "Send Message ✦"
                 )}
               </button>
+
+              {status === "success" && (
+                <div className="flex items-center gap-2 text-sm font-bold text-[#3D4331] bg-[#EEF2E6] border-2 border-[#8A9670] rounded-xl px-4 py-3">
+                  <CheckCircle2 size={16} /> Message sent — we'll get back to you soon.
+                </div>
+              )}
+              {status === "error" && (
+                <div className="flex items-center gap-2 text-sm font-bold text-[#7A2A20] bg-[#FBE7E4] border-2 border-[#C24A3D] rounded-xl px-4 py-3">
+                  <AlertCircle size={16} /> {errorMsg || "Something went wrong. Please try again."}
+                </div>
+              )}
             </form>
           </div>
         </div>

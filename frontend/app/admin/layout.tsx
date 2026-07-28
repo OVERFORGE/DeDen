@@ -14,6 +14,7 @@ import {
   Gift,
   Loader2,
   History,
+  QrCode,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -75,11 +76,23 @@ export default function AdminLayout({
       icon: Calendar,
       description: 'Manage events and accommodations'
     },
-    { 
-      name: 'Referrals', 
-      href: '/admin/referrals', 
+    {
+      name: 'Check-In',
+      href: '/admin/check-in',
+      icon: QrCode,
+      description: 'Scan tickets at the door'
+    },
+    {
+      name: 'Referrals',
+      href: '/admin/referrals',
       icon: Gift,
       description: 'Community referral codes'
+    },
+    {
+      name: 'Activity',
+      href: '/admin/activity',
+      icon: History,
+      description: 'Full audit log'
     },
     { 
       name: 'Past Events', 

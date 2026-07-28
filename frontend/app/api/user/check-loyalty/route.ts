@@ -56,23 +56,13 @@ export async function GET(request: NextRequest) {
 
     const bookingCount = confirmedBookings.length;
 
-    // Determine eligibility and discount percentage
-    // You can implement tiered discounts here
-    let isEligible = false;
-    let discountPercent = 0;
-
-    if (bookingCount >= 1) {
-      isEligible = true;
-      
-      // Tiered loyalty discounts (optional - customize as needed)
-      if (bookingCount >= 5) {
-        discountPercent = 25; // 25% for 5+ bookings
-      } else if (bookingCount >= 3) {
-        discountPercent = 20; // 20% for 3-4 bookings
-      } else {
-        discountPercent = 20; // 20% for 1-2 bookings (default)
-      }
-    }
+    // Must match LOYALTY_DISCOUNT_PERCENT in lib/pricing.ts — that's what
+    // actually gets applied at apply-time, flat, with no tiers. This
+    // endpoint used to advertise tiered 20/25% numbers pricing.ts never
+    // implemented, which would have shown guests a discount they wouldn't
+    // actually get.
+    const LOYALTY_DISCOUNT_PERCENT = 20;
+    const isEligible = bookingCount >= 1;
 
     if (!isEligible) {
       return NextResponse.json({
@@ -85,10 +75,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       isEligible: true,
-      discountPercent,
+      discountPercent: LOYALTY_DISCOUNT_PERCENT,
       previousBookingsCount: bookingCount,
-      message: `Welcome back! You've earned a ${discountPercent}% loyalty discount.`,
-      tier: bookingCount >= 5 ? 'platinum' : bookingCount >= 3 ? 'gold' : 'silver',
+      message: `Welcome back! You've earned a ${LOYALTY_DISCOUNT_PERCENT}% loyalty discount.`,
     });
   } catch (error) {
     console.error('[Check Loyalty] Error:', error);

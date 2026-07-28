@@ -1,0 +1,27 @@
+name: Booking expiry check
+
+# Triggers app/api/bookings/check-expiry, which processes PENDING bookings
+# past their expiresAt (sends expiry emails, releases held slots). The app
+# also settles staleness lazily on read (lib/booking-lifecycle.ts), so this
+# isn't load-bearing for correctness — it just catches bookings nobody
+# happens to poll, and keeps expiry emails timely. No Vercel Cron on the
+# current plan, so this is the free alternative.
+#
+# Requires two repo secrets to be set before this does anything:
+#   APP_URL     — e.g. https://deden.space
+#   JOB_SECRET  — must match the JOB_SECRET env var configured on the app
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check-expiry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call check-expiry endpoint
+        run: |
+          curl -sf -X POST "${{ secrets.APP_URL }}/api/bookings/check-expiry" \
+            -H "Authorization: Bearer ${{ secrets.JOB_SECRET }}" \
+            -H "Content-Type: application/json"

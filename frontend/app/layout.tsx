@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Dela_Gothic_One } from "next/font/google";
 import localFont from "next/font/local";
+import "@/lib/env";
 import "./globals.css";
 
 import { Providers } from "@/app/providers";

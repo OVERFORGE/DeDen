@@ -17,6 +17,9 @@ import {
   Twitter,
   Eye,
   EyeOff,
+  QrCode,
+  ChevronDown,
+  Ticket as TicketIcon,
 } from "lucide-react";
 import { getChainName, chainConfig } from "@/lib/config";
 import { BookingNFTCard } from "@/components/BookingNFTCard";
@@ -108,6 +111,15 @@ type GuestListEntry = {
   isPrimary: boolean;
 };
 
+type TicketSummary = {
+  ticketCode: string;
+  status: string;
+  guestName: string | null;
+  guestIndex: number;
+  checkedInAt: string | null;
+  nftMinted: boolean;
+};
+
 const STATUS_STYLES: Record<string, { label: string; classes: string; icon: React.ReactNode }> = {
   WAITLISTED: { label: "Under Review", classes: "bg-[#f7eedb] text-[#2c331f]", icon: <Clock size={14} /> },
   PENDING: { label: "Payment Required", classes: "bg-[#9db47d] text-[#2c331f]", icon: <Clock size={14} /> },
@@ -134,6 +146,11 @@ export default function BookingDetailPage() {
   const [guestListError, setGuestListError] = useState<string | null>(null);
   const [guestListLoading, setGuestListLoading] = useState(false);
   const [optInSaving, setOptInSaving] = useState(false);
+
+  const [tickets, setTickets] = useState<TicketSummary[]>([]);
+  const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
+  const [ticketQr, setTicketQr] = useState<Record<string, string>>({});
+  const [loadingQr, setLoadingQr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -177,6 +194,50 @@ export default function BookingDetailPage() {
       }
     })();
   }, [booking]);
+
+  // Tickets exist per-guest once payment is confirmed. GET /api/tickets
+  // returns the user's full list across every booking, so filter down to
+  // this one.
+  useEffect(() => {
+    if (!booking) return;
+    if (!ACCEPTED_STATUSES.includes(booking.status)) return;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/tickets");
+        const data = await res.json();
+        if (!res.ok) return;
+        setTickets(
+          (data as any[])
+            .filter((t) => t.booking?.bookingId === bookingId)
+            .sort((a, b) => a.guestIndex - b.guestIndex)
+        );
+      } catch {
+        // Non-critical — tickets section just stays empty.
+      }
+    })();
+  }, [booking, bookingId]);
+
+  const toggleTicket = async (ticketCode: string) => {
+    if (expandedTicket === ticketCode) {
+      setExpandedTicket(null);
+      return;
+    }
+    setExpandedTicket(ticketCode);
+    if (ticketQr[ticketCode]) return;
+    setLoadingQr(ticketCode);
+    try {
+      const res = await fetch(`/api/tickets/${ticketCode}`);
+      const data = await res.json();
+      if (res.ok && data.qrDataUrl) {
+        setTicketQr((prev) => ({ ...prev, [ticketCode]: data.qrDataUrl }));
+      }
+    } catch {
+      // Leave unset — card will just show a spinner-then-nothing rather than crash.
+    } finally {
+      setLoadingQr(null);
+    }
+  };
 
   const toggleOptIn = async () => {
     if (!booking) return;
@@ -350,6 +411,69 @@ export default function BookingDetailPage() {
               {booking.stay.checkOutTime && (
                 <div className="text-[10px] font-bold text-[#5a6b3a] mt-0.5">by {booking.stay.checkOutTime}</div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Your Tickets — one per guest, expands to the check-in QR */}
+        {tickets.length > 0 && (
+          <div className="mt-6 bg-white border-2 border-[#2c331f] rounded-2xl p-5 shadow-[3px_3px_0px_0px_#2c331f]">
+            <h2 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
+              <TicketIcon size={16} /> Your Tickets
+            </h2>
+            <div className="space-y-2">
+              {tickets.map((t) => {
+                const isOpen = expandedTicket === t.ticketCode;
+                return (
+                  <div
+                    key={t.ticketCode}
+                    className="border border-[#2c331f]/15 rounded-xl overflow-hidden"
+                  >
+                    <button
+                      onClick={() => toggleTicket(t.ticketCode)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-[#f7eedb] hover:bg-[#ede3c9] transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <QrCode size={14} className="text-[#5a6b3a] shrink-0" />
+                        <span className="text-xs font-black truncate">
+                          {t.guestName || `Guest ${t.guestIndex + 1}`}
+                        </span>
+                        {t.status === "CHECKED_IN" && (
+                          <span className="text-[9px] font-bold uppercase tracking-widest bg-[#9db47d] text-[#2c331f] px-2 py-0.5 rounded-full shrink-0">
+                            Checked In
+                          </span>
+                        )}
+                      </div>
+                      <ChevronDown
+                        size={16}
+                        className={`text-[#5a6b3a] shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {isOpen && (
+                      <div className="p-5 flex flex-col items-center gap-2 border-t border-[#2c331f]/10">
+                        {loadingQr === t.ticketCode ? (
+                          <Loader2 className="w-8 h-8 text-[#2c331f]/40 animate-spin my-6" />
+                        ) : ticketQr[t.ticketCode] ? (
+                          <>
+                            <img
+                              src={ticketQr[t.ticketCode]}
+                              alt={`QR code for ${t.guestName || "guest"}`}
+                              className="w-48 h-48 rounded-lg border-2 border-[#2c331f]"
+                            />
+                            <code className="text-[10px] font-bold text-[#5a6b3a] tracking-widest">
+                              {t.ticketCode}
+                            </code>
+                          </>
+                        ) : (
+                          <p className="text-xs font-medium text-[#5a6b3a] my-6">
+                            Couldn't load this QR — try again.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

@@ -13,7 +13,9 @@ type StayProps = {
     stayId: string;
     title: string;
     slotsTotal: number;
+    slotsAvailable: number;
     priceUSDC: number;
+    location?: string | null;
     shortDescription?: string | null;
     images?: string[] | null;
     heroImage?: string | null;
@@ -24,6 +26,7 @@ type StayProps = {
 export default function VillaStayCard({ stay }: StayProps) {
   const [imageIndex, setImageIndex] = useState(0);
   const images = stay.images?.length ? stay.images : [stay.heroImage || "/images/dedenbangalore4.jpeg"];
+  const soldOut = stay.slotsAvailable <= 0;
 
   const nextImage = () => {
     setImageIndex((prev) => (prev + 1) % images.length);
@@ -40,8 +43,12 @@ export default function VillaStayCard({ stay }: StayProps) {
         {/* Left: Info Panel */}
         <div className="bg-[#46392b] text-[#f7eedb] w-full md:w-[45%] p-10 flex flex-col justify-center relative">
           <div className="mb-2">
-            <span className="inline-block bg-[#869968] text-[#f7eedb] text-[8px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-6 shadow-sm">
-              Featured Stay
+            <span
+              className={`inline-block text-[#f7eedb] text-[8px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-6 shadow-sm ${
+                soldOut ? "bg-[#8a5a3f]" : "bg-[#869968]"
+              }`}
+            >
+              {soldOut ? "Sold Out" : "Featured Stay"}
             </span>
             <h2 className="text-3xl md:text-[2.5rem] font-serif text-[#f7eedb] leading-tight mb-5" style={{ fontFamily: "Georgia, serif" }}>
               {stay.title}
@@ -49,23 +56,35 @@ export default function VillaStayCard({ stay }: StayProps) {
             <div className="flex items-center gap-6 text-[#f7eedb]/80 text-[11px] font-semibold mb-6">
               <div className="flex items-center gap-2">
                 <Bed size={14} />
-                <span>{stay.slotsTotal || 10} Rooms</span>
+                <span>
+                  {soldOut ? "Fully booked" : `${stay.slotsAvailable} of ${stay.slotsTotal} spots left`}
+                </span>
               </div>
-              <div className="flex items-center gap-2">
-                <Tag size={14} />
-                <span>Starting at ${stay.priceUSDC || 200}</span>
-              </div>
+              {stay.priceUSDC > 0 && (
+                <div className="flex items-center gap-2">
+                  <Tag size={14} />
+                  <span>Starting at ${stay.priceUSDC}</span>
+                </div>
+              )}
             </div>
             <div className="w-full h-px bg-[#f7eedb]/10 mb-6"></div>
-            <p className="text-xs text-[#f7eedb]/70 font-medium leading-relaxed mb-8 pr-4 line-clamp-4">
-              {stay.shortDescription || "Lorem ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since."}
-            </p>
-            <Link 
-              href={`/stay/${stay.stayId}`}
-              className="inline-flex w-fit items-center justify-center bg-[#f7eedb] text-[#46392b] font-black px-6 py-3 rounded-full hover:bg-white transition-colors uppercase tracking-widest text-[10px]"
-            >
-              Book Stay ✦
-            </Link>
+            {stay.shortDescription && (
+              <p className="text-xs text-[#f7eedb]/70 font-medium leading-relaxed mb-8 pr-4 line-clamp-4">
+                {stay.shortDescription}
+              </p>
+            )}
+            {soldOut ? (
+              <span className="inline-flex w-fit items-center justify-center bg-[#f7eedb]/30 text-[#f7eedb] font-black px-6 py-3 rounded-full uppercase tracking-widest text-[10px] cursor-not-allowed">
+                Sold Out
+              </span>
+            ) : (
+              <Link
+                href={`/stay/${stay.stayId}`}
+                className="inline-flex w-fit items-center justify-center bg-[#f7eedb] text-[#46392b] font-black px-6 py-3 rounded-full hover:bg-white transition-colors uppercase tracking-widest text-[10px]"
+              >
+                Book Stay ✦
+              </Link>
+            )}
           </div>
         </div>
 

@@ -2,7 +2,7 @@
 // ✅ FIXED: Prevents caching issues between localhost and production
 
 import { db } from "@/lib/database";
-import VillaStayCard from "@/components/VillaStayCard";
+import VillasList from "@/components/VillasList";
 
 // ============================================================================
 // ✅ CRITICAL FIX: Force Dynamic Rendering
@@ -11,7 +11,11 @@ export const dynamic = 'force-dynamic';
 
 async function getStays() {
   const stays = await db.stay.findMany({
-    where: { isPublished: true },
+    where: {
+      isPublished: true,
+      endDate: { gte: new Date() },
+      status: { not: "DONE" },
+    },
     orderBy: { startDate: "asc" },
   });
   return stays;
@@ -60,17 +64,13 @@ export default async function VillasPage() {
         </div>
 
         {/* Stays List */}
-        <div className="flex flex-col gap-24 pb-20">
-          {stays.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-[#43392e] text-lg font-bold">No upcoming stays available at the moment.</p>
-            </div>
-          ) : (
-            stays.map((stay) => (
-              <VillaStayCard key={stay.id} stay={stay} />
-            ))
-          )}
-        </div>
+        {stays.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-[#43392e] text-lg font-bold">No upcoming stays available at the moment.</p>
+          </div>
+        ) : (
+          <VillasList stays={stays} />
+        )}
       </div>
     </div>
   );

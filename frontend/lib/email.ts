@@ -836,3 +836,68 @@ export async function sendRefundConfirmedEmail(props: {
     return false;
   }
 }
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// --- Email: Contact form submission -> internal notification to the team ---
+export async function sendContactNotification(props: {
+  name: string;
+  email: string;
+  message: string;
+}) {
+  const { name, email, message } = props;
+  const subject = `New contact form message from ${name}`;
+
+  const bodyHtml = `
+    <p style="margin:0 0 18px;">Someone submitted the contact form on deden.space.</p>
+    ${detailsCard([
+      { label: "Name", value: escapeHtml(name) },
+      { label: "Email", value: escapeHtml(email) },
+    ])}
+    ${calloutBox({ tone: "info", title: "Message", bodyHtml: escapeHtml(message).replace(/\n/g, "<br/>") })}
+  `;
+
+  const htmlBody = renderEmailShell({
+    preheader: `New contact form message from ${name}`,
+    eyebrow: "Contact Form",
+    title: "New message",
+    subtitle: undefined,
+    bodyHtml,
+    supportEmail,
+    year: new Date().getFullYear(),
+  });
+
+  try {
+    const response = await resend.emails.send({
+      from: fromEmail,
+      to: supportEmail,
+      replyTo: email,
+      subject,
+      html: htmlBody,
+    });
+
+    await logEmailToDb(supportEmail, subject, response.data ? "contact_submission" : "contact_submission_failed", {
+      name,
+      email,
+      resendId: response.data?.id,
+    });
+
+    if (response.error) throw response.error;
+    return true;
+  } catch (error: any) {
+    console.error("[EmailLib] Failed to send contact notification:", error);
+    await logEmailToDb(supportEmail, subject, "contact_submission_failed", {
+      name,
+      email,
+      error: error?.message || error,
+    });
+    return false;
+  }
+}
