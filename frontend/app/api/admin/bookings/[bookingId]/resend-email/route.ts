@@ -35,7 +35,7 @@ export async function POST(
     if (booking.status === BookingStatus.PENDING) {
       const amount = booking.requiresReservation ? booking.reservationAmount! : (booking.selectedRoomPriceUSDC || booking.stay.priceUSDC);
       await sendApprovalEmail({
-        recipientEmail: booking.user.email,
+        recipientEmail: booking.guestEmail || booking.user.email,
         recipientName: booking.user.displayName || 'Guest',
         bookingId: booking.bookingId,
         stayTitle: booking.stay.title,
@@ -53,7 +53,7 @@ export async function POST(
       emailType = 'approval';
     } else if (booking.status === BookingStatus.RESERVED) {
       await sendReservationConfirmedEmail({
-        recipientEmail: booking.user.email,
+        recipientEmail: booking.guestEmail || booking.user.email,
         recipientName: booking.user.displayName || 'Guest',
         bookingId: booking.bookingId,
         stayTitle: booking.stay.title,
@@ -70,7 +70,7 @@ export async function POST(
       emailType = 'reservation_confirmed';
     } else if (booking.status === BookingStatus.CONFIRMED) {
       await sendConfirmationEmail({
-        recipientEmail: booking.user.email,
+        recipientEmail: booking.guestEmail || booking.user.email,
         recipientName: booking.user.displayName || 'Guest',
         bookingId: booking.bookingId,
         stayTitle: booking.stay.title,

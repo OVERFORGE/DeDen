@@ -55,6 +55,9 @@ export async function GET(
         reservationAmount: true,
         minNightsForReservation: true,
         loyaltyDiscountEnabled: true,
+        allowFlexibleDates: true,
+        coreStartDate: true,
+        coreEndDate: true,
       },
     });
 

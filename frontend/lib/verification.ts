@@ -11,11 +11,34 @@ import { mintBookingNFT } from './nft-service'; // ✅ NEW: Import NFT service
 import { holdStaySlots } from './inventory';
 import { issueTicketsForBooking, getTicketEmailPayload } from './ticket-service';
 
+/** Which payment leg a verification is currently processing. */
+export type PaymentLeg = 'reservation' | 'remaining' | 'full';
+
 /**
- * Check if a transaction hash has already been used
+ * Finds a prior *consumption* of this transaction hash that conflicts with
+ * the leg we're about to credit.
+ *
+ * ⚠️ SECURITY-CRITICAL. Transaction hashes are public on-chain data, so
+ * without this check anyone could take another guest's txHash for the same
+ * stay/amount and use it to confirm their own booking for free — the
+ * on-chain receipt validates perfectly (right token, right treasury, right
+ * amount) because nothing in the receipt ties it to a specific booking.
+ *
+ * Two distinct conflicts are caught:
+ *   1. Another booking already consumed this tx.
+ *   2. THIS booking already consumed it on a *different* leg — e.g.
+ *      re-submitting the $30 reservation tx as the remaining payment to get
+ *      the balance credited for free.
+ *
+ * Re-verifying the same booking's same leg is NOT a conflict, so a retried
+ * or duplicated verify call stays idempotent.
  */
-export async function checkTransactionUsed(txHash: string): Promise<boolean> {
-  const existingBooking = await db.booking.findFirst({
+export async function findConflictingTxUsage(
+  txHash: string,
+  currentBookingId: string,
+  currentLeg: PaymentLeg
+): Promise<{ bookingId: string; leg: PaymentLeg } | null> {
+  const candidates = await db.booking.findMany({
     where: {
       OR: [
         { txHash: txHash, status: BookingStatus.CONFIRMED },
@@ -23,9 +46,41 @@ export async function checkTransactionUsed(txHash: string): Promise<boolean> {
         { remainingTxHash: txHash, remainingPaid: true },
       ],
     },
+    select: {
+      bookingId: true,
+      txHash: true,
+      status: true,
+      reservationTxHash: true,
+      reservationPaid: true,
+      remainingTxHash: true,
+      remainingPaid: true,
+    },
   });
-  
-  return !!existingBooking;
+
+  for (const b of candidates) {
+    // Every leg this booking has already credited to this txHash.
+    const usedLegs: PaymentLeg[] = [];
+    if (b.reservationPaid && b.reservationTxHash === txHash) usedLegs.push('reservation');
+    if (b.remainingPaid && b.remainingTxHash === txHash) usedLegs.push('remaining');
+    if (b.status === BookingStatus.CONFIRMED && b.txHash === txHash) usedLegs.push('full');
+
+    for (const leg of usedLegs) {
+      const isSameBookingSameLeg = b.bookingId === currentBookingId && leg === currentLeg;
+      if (!isSameBookingSameLeg) {
+        return { bookingId: b.bookingId, leg };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Back-compat boolean wrapper — true if this tx has been consumed at all.
+ */
+export async function checkTransactionUsed(txHash: string): Promise<boolean> {
+  const used = await findConflictingTxUsage(txHash, '__none__', 'full');
+  return !!used;
 }
 
 /**
@@ -67,6 +122,31 @@ export async function verifyPayment(
 
       // ✅ Check if this is reservation or remaining payment
       const isReservationPayment = booking.requiresReservation && !booking.reservationPaid && !isRemainingPayment;
+
+      const currentLeg: PaymentLeg = isReservationPayment
+        ? 'reservation'
+        : isRemainingPayment
+        ? 'remaining'
+        : 'full';
+
+      // ⚠️ REPLAY GUARD — must run before any state change. A txHash is
+      // public on-chain data; without this, someone could paste another
+      // guest's transaction hash for the same amount and get confirmed for
+      // free. Checked here and again immediately before the write below,
+      // to narrow the window if two verifications race.
+      const alreadyUsed = await findConflictingTxUsage(txHash, bookingId, currentLeg);
+      if (alreadyUsed) {
+        console.error(
+          `[Verification] ❌ REPLAY BLOCKED: tx ${txHash} already credited to booking ${alreadyUsed.bookingId} (${alreadyUsed.leg} leg)`
+        );
+        await updateBookingStatus(bookingId, BookingStatus.FAILED, {
+          error: 'This transaction has already been used for another payment',
+          txHash,
+          conflictingBookingId: alreadyUsed.bookingId,
+          conflictingLeg: alreadyUsed.leg,
+        });
+        return;
+      }
       
       console.log(`[Verification] Requires Reservation: ${booking.requiresReservation}`);
       console.log(`[Verification] Reservation Paid: ${booking.reservationPaid}`);
@@ -274,7 +354,25 @@ export async function verifyPayment(
           const gasFeeUSD = gasFeeNative * nativePriceUsd;
           
           console.log(`[Verification] Gas fee: ${gasFeeNative.toFixed(6)} ${chain.nativeCurrency.symbol} (~$${gasFeeUSD.toFixed(4)})`);
-          
+
+          // ⚠️ Second replay check, immediately before the write. The first
+          // check ran before the (slow) RPC round-trips above; re-checking
+          // here shrinks the window where two concurrent verifications of
+          // the same txHash could both pass.
+          const raceUsed = await findConflictingTxUsage(txHash, bookingId, currentLeg);
+          if (raceUsed) {
+            console.error(
+              `[Verification] ❌ REPLAY BLOCKED (race): tx ${txHash} claimed by booking ${raceUsed.bookingId} (${raceUsed.leg} leg)`
+            );
+            await updateBookingStatus(bookingId, BookingStatus.FAILED, {
+              error: 'This transaction has already been used for another payment',
+              txHash,
+              conflictingBookingId: raceUsed.bookingId,
+              conflictingLeg: raceUsed.leg,
+            });
+            return;
+          }
+
           // ✅ UPDATE BOOKING BASED ON PAYMENT TYPE
           if (isReservationPayment) {
             // ==========================================
@@ -332,7 +430,7 @@ export async function verifyPayment(
                 console.log(`[Verification] 📧 Sending reservation confirmation email to ${booking.user.email}...`);
                 
                 await sendReservationConfirmedEmail({
-                  recipientEmail: booking.user.email,
+                  recipientEmail: booking.guestEmail || booking.user.email,
                   recipientName: booking.user.name || booking.guestName || 'Guest',
                   bookingId: booking.bookingId,
                   stayTitle: booking.stay.title,
@@ -506,7 +604,7 @@ export async function verifyPayment(
                 console.log(`[Verification] 📧 Sending full confirmation email to ${booking.user.email}...`);
                 
                 await sendConfirmationEmail({
-                  recipientEmail: booking.user.email,
+                  recipientEmail: booking.guestEmail || booking.user.email,
                   recipientName: booking.user.name || booking.guestName || 'Guest',
                   bookingId: booking.bookingId,
                   stayTitle: booking.stay.title,
@@ -669,7 +767,7 @@ export async function verifyPayment(
                 console.log(`[Verification] 📧 Sending confirmation email to ${booking.user.email}...`);
                 
                 await sendConfirmationEmail({
-                  recipientEmail: booking.user.email,
+                  recipientEmail: booking.guestEmail || booking.user.email,
                   recipientName: booking.user.name || booking.guestName || 'Guest',
                   bookingId: booking.bookingId,
                   stayTitle: booking.stay.title,

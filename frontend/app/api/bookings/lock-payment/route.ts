@@ -12,6 +12,7 @@ import { BookingStatus } from '@prisma/client';
 import { parseUnits } from 'viem';
 import { chainConfig } from '@/lib/config';
 import { requireBookingOwner, authErrorResponse } from '@/lib/api-auth';
+import { settleBookingIfStale } from '@/lib/booking-lifecycle';
 
 export async function POST(request: Request) {
   try {
@@ -35,6 +36,12 @@ export async function POST(request: Request) {
     // 1. Ownership check — only the booking's owner (or an admin) may lock
     //    payment details for it.
     const { booking: ownedBooking } = await requireBookingOwner(bookingId);
+
+    // Expiry is settled lazily (no cron on the current plan), so flip a
+    // stale PENDING booking to EXPIRED *before* reading it — otherwise a
+    // booking whose window closed but that nobody happened to load could
+    // still be locked and paid, and its slot may already be re-sold.
+    await settleBookingIfStale(bookingId);
 
     const booking = await db.booking.findUnique({
       where: { bookingId },
@@ -60,6 +67,29 @@ export async function POST(request: Request) {
           error: `Cannot lock payment. Booking status is: ${booking.status}`,
           currentStatus: booking.status,
         },
+        { status: 409 }
+      );
+    }
+
+    // Belt-and-braces expiry guard. settleBookingIfStale above already flips
+    // stale PENDING rows, but this also covers the window between that read
+    // and here, and rows whose expiresAt was set without a status flip.
+    if (
+      booking.status === BookingStatus.PENDING &&
+      booking.expiresAt &&
+      booking.expiresAt.getTime() <= Date.now()
+    ) {
+      return NextResponse.json(
+        { error: 'This payment window has expired. Please contact support to reopen it.' },
+        { status: 409 }
+      );
+    }
+
+    // Never take money for a stay that's already finished — the slot has no
+    // value at that point and the payment would just need refunding.
+    if (booking.stay.endDate && booking.stay.endDate.getTime() < Date.now()) {
+      return NextResponse.json(
+        { error: 'This stay has already ended and can no longer be paid for.' },
         { status: 409 }
       );
     }

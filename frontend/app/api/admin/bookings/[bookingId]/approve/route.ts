@@ -136,7 +136,7 @@ export async function POST(
 
     try {
       await sendApprovalEmail({
-        recipientEmail: booking.user.email!,
+        recipientEmail: (booking.guestEmail || booking.user.email)!,
         recipientName: booking.user.displayName || "Guest",
         bookingId: booking.bookingId,
         stayTitle: booking.stay.title,

@@ -228,6 +228,21 @@ model Stay {
   // existing stays keep today's behavior.
   loyaltyDiscountEnabled Boolean @default(true)
 
+  // When off (default), every guest books the whole event window and the
+  // apply form shows fixed dates. When on, guests pick their own check-in /
+  // check-out inside [startDate, endDate] and are priced per night for the
+  // range they chose. Off by default so existing conference-style stays are
+  // unaffected.
+  allowFlexibleDates Boolean @default(false)
+
+  // Optional MANDATORY CORE inside the stay window — the nights every guest
+  // must book (e.g. the actual conference days). Only meaningful when
+  // allowFlexibleDates is on: the guest's chosen range must fully contain
+  // [coreStartDate, coreEndDate], but they may extend earlier and/or later
+  // up to [startDate, endDate]. Leave null for "any range in the window".
+  coreStartDate   DateTime?
+  coreEndDate     DateTime?
+
   status          String    @default("UPCOMING") // UPCOMING, ONGOING, DONE
   
   // Past Event Details

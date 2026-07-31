@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { requireUser, authErrorResponse } from '@/lib/api-auth';
 import { z } from 'zod';
+import { firstValidationMessage } from '@/lib/validate';
 
 export async function GET() {
   try {
@@ -74,7 +75,7 @@ export async function PATCH(request: Request) {
     const parsed = profileSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || 'Invalid profile data' },
+        { error: firstValidationMessage(parsed.error, 'Invalid profile data') },
         { status: 400 }
       );
     }

@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useAccount, useSendTransaction, useSwitchChain } from "wagmi";
-import { ConnectKitButton } from "connectkit";
 import { parseUnits, encodeFunctionData } from "viem";
 import { erc20Abi } from "@/lib/erc20abi";
+import { PayWalletModal } from "@/components/PayWalletModal";
 import {
   chainConfig,
   treasuryAddress,
@@ -78,6 +78,7 @@ export default function PaymentPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<PaymentStatus>("loading");
   const [copied, setCopied] = useState(false);
+  const [payModalOpen, setPayModalOpen] = useState(false);
 
   // Web3 hooks
   const { address, isConnected } = useAccount();
@@ -580,42 +581,22 @@ export default function PaymentPage() {
                   </div>
                 )}
 
-                {(
-                  <ConnectKitButton.Custom>
-                    {({ isConnected, show, address: connectedAddress }) => {
-                      if (!isConnected) {
-                        return (
-                          <button
-                            onClick={show}
-                            disabled={status === "sending"}
-                            className="w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-5 rounded-full transition-all flex justify-center items-center gap-3 uppercase tracking-widest text-sm hover:opacity-90 disabled:opacity-50 shadow-lg"
-                          >
-                            <Wallet className="w-5 h-5" /> Connect Wallet to Pay
-                          </button>
-                        );
-                      }
-                      
-                      return (
-                        <div className="space-y-4">
-                          <div className="bg-[#EBE1D0] p-4 rounded-xl border border-[#3D4331]/20 flex justify-between items-center text-sm font-bold">
-                            <span className="opacity-60 uppercase tracking-widest text-[10px]">Connected Wallet</span>
-                            <span className="truncate max-w-[200px]">{connectedAddress}</span>
-                          </div>
-                          <button
-                            onClick={handlePay}
-                            disabled={status === "sending"}
-                            className="w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-5 rounded-full transition-all flex justify-center items-center gap-3 uppercase tracking-widest text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                          >
-                            {status === "sending" ? (
-                              <><Loader2 className="w-5 h-5 animate-spin" /> Confirming in Wallet...</>
-                            ) : (
-                              <><CheckCircle2 className="w-5 h-5" /> Confirm Payment</>
-                            )}
-                          </button>
-                        </div>
-                      );
-                    }}
-                  </ConnectKitButton.Custom>
+                <button
+                  onClick={() => setPayModalOpen(true)}
+                  disabled={status === "sending"}
+                  className="w-full bg-[#3D4331] text-[#F3EDE0] font-bold py-5 rounded-full transition-all flex justify-center items-center gap-3 uppercase tracking-widest text-sm hover:opacity-90 disabled:opacity-50 shadow-lg"
+                >
+                  <Wallet className="w-5 h-5" /> Pay Now
+                </button>
+
+                {payModalOpen && (
+                  <PayWalletModal
+                    amountLabel={`${formattedAmount} ${selectedToken}`}
+                    chainName={getChainName(selectedChain)}
+                    sending={status === "sending"}
+                    onConfirm={handlePay}
+                    onClose={() => setPayModalOpen(false)}
+                  />
                 )}
               </div>
             </section>

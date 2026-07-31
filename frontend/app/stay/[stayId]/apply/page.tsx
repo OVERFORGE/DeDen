@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { useAccount } from "wagmi";
 import { ArrowLeft, Minus, Plus, Calendar, Check, AlertCircle, Loader2, Tag, Sparkles, Info } from "lucide-react";
 
 const ACTIVE_NON_TERMINAL_STATUSES = ["WAITLISTED", "PENDING", "RESERVED", "CONFIRMED"];
@@ -24,7 +23,17 @@ type StayData = {
   reservationAmount?: number;
   minNightsForReservation?: number;
   loyaltyDiscountEnabled?: boolean;
+  allowFlexibleDates?: boolean;
+  coreStartDate?: string | null;
+  coreEndDate?: string | null;
 };
+
+/** ISO timestamp -> the yyyy-MM-dd that <input type="date"> requires. */
+function toDateInput(value?: string | null): string {
+  if (!value) return "";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
 
 type GuestData = {
   fullName: string;
@@ -45,7 +54,6 @@ export default function ApplyPage() {
   const stayId = params.stayId as string;
 
   const { data: session, status: sessionStatus } = useSession();
-  const { address, isConnected } = useAccount();
 
   const [stayData, setStayData] = useState<StayData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +65,12 @@ export default function ApplyPage() {
   const [occupancy, setOccupancy] = useState<number>(urlGuests > 0 ? urlGuests : 1);
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
   const [guests, setGuests] = useState<GuestData[]>([]);
+
+  // Guest-chosen dates, only used when the stay allows flexible dates.
+  // Defaults to the full stay window once the stay loads.
+  const [checkIn, setCheckIn] = useState<string>("");
+  const [checkOut, setCheckOut] = useState<string>("");
+  const [dateError, setDateError] = useState<string | null>(null);
 
   // Loyalty (silent, based on the signed-in user's booking history)
   const [loyaltyInfo, setLoyaltyInfo] = useState<{ isEligible: boolean; discountPercent: number; previousBookingsCount: number } | null>(null);
@@ -82,7 +96,13 @@ export default function ApplyPage() {
         if (!res.ok) throw new Error("Failed to fetch stay");
         const data = await res.json();
         setStayData(data);
-        
+
+        // Default to the required nights when the organiser set them (the
+        // cheapest valid booking), otherwise the full window.
+        const core = data.allowFlexibleDates && data.coreStartDate && data.coreEndDate;
+        setCheckIn(toDateInput(core ? data.coreStartDate : data.startDate));
+        setCheckOut(toDateInput(core ? data.coreEndDate : data.endDate));
+
         // Auto-select first room
         if (data.rooms && data.rooms.length > 0) {
           setSelectedRoomId(data.rooms[0].id);
@@ -204,11 +224,24 @@ export default function ApplyPage() {
     return room.priceUSDC || stayData?.priceUSDC || 0;
   };
 
+  const isFlexible = stayData?.allowFlexibleDates === true;
+
+  // Mandatory core nights, if the organiser set them. Check-in can be no
+  // later than the core start, and check-out no earlier than the core end,
+  // so the picker itself makes an invalid range unreachable.
+  const coreStart = isFlexible ? toDateInput(stayData?.coreStartDate) : "";
+  const coreEnd = isFlexible ? toDateInput(stayData?.coreEndDate) : "";
+  const hasCore = Boolean(coreStart && coreEnd);
+
+  // Nights come from the guest's chosen range on flexible stays, otherwise
+  // from the fixed event window. The server re-derives this the same way and
+  // ignores whatever we send, so this is purely for live price preview.
   const getNights = () => {
     if (!stayData) return 0;
-    const start = new Date(stayData.startDate);
-    const end = new Date(stayData.endDate);
-    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const start = new Date(isFlexible && checkIn ? checkIn : stayData.startDate);
+    const end = new Date(isFlexible && checkOut ? checkOut : stayData.endDate);
+    const nights = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    return Number.isFinite(nights) && nights > 0 ? nights : 0;
   };
 
   const subtotal = getPrice() * getNights() * (guests.length || 1);
@@ -235,11 +268,30 @@ export default function ApplyPage() {
       setApiError("Guest 1 requires Full Name, Email, and Phone.");
       return;
     }
-    
+
+    if (isFlexible) {
+      if (!checkIn || !checkOut) {
+        setDateError("Please choose your check-in and check-out dates.");
+        return;
+      }
+      if (checkOut <= checkIn) {
+        setDateError("Check-out must be after check-in.");
+        return;
+      }
+      if (hasCore && (checkIn > coreStart || checkOut < coreEnd)) {
+        setDateError(
+          `Your dates must cover the required nights (${new Date(coreStart).toLocaleDateString("en-US", { day: "2-digit", month: "short" })} – ${new Date(coreEnd).toLocaleDateString("en-US", { day: "2-digit", month: "short" })}).`
+        );
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const payload = {
-        walletAddress: address || "0x0000000000000000000000000000000000000000",
+        // No wallet is connected at application time anymore — wallet-connect
+        // only happens at the payment step (components/PayWalletModal.tsx).
+        walletAddress: "0x0000000000000000000000000000000000000000",
         email: guests[0].email,
         displayName: guests[0].fullName,
         firstName: guests[0].fullName.split(" ")[0],
@@ -249,9 +301,12 @@ export default function ApplyPage() {
         mobileNumber: guests[0].phone,
         selectedRoomId,
         selectedCurrency: "USDC",
+        // Sent for the record, but the server re-derives nights from the
+        // dates (and ignores both entirely on fixed-date stays) — pricing is
+        // never driven by what we send here.
         numberOfNights: getNights(),
-        checkInDate: stayData?.startDate,
-        checkOutDate: stayData?.endDate,
+        checkInDate: isFlexible && checkIn ? checkIn : stayData?.startDate,
+        checkOutDate: isFlexible && checkOut ? checkOut : stayData?.endDate,
         guests: guests,
         ...(referralStatus === "valid" && referralInput.trim() ? { referralCode: referralInput.trim() } : {}),
       };
@@ -358,23 +413,111 @@ export default function ApplyPage() {
                       <Calendar size={24} />
                       {getNights()} Nights • {getNights() + 1} Days
                     </div>
-                    <p className="text-sm opacity-60 mt-1 font-medium">Fixed duration — set by the event organiser</p>
+                    <p className="text-sm opacity-60 mt-1 font-medium">
+                      {isFlexible
+                        ? "Choose any dates inside the event window"
+                        : "Fixed duration — set by the event organiser"}
+                    </p>
                   </div>
                   <div className="bg-[#8A9670] text-[#F3EDE0] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
-                    Fixed
+                    {isFlexible ? "Flexible" : "Fixed"}
                   </div>
                 </div>
-                <div className="flex items-center gap-6">
-                  <div className="flex-1">
-                    <p className="text-[10px] uppercase tracking-widest font-bold opacity-50 mb-1">Check-in</p>
-                    <p className="font-bold">{stayData?.startDate ? new Date(stayData.startDate).toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Loading...'}</p>
+
+                {isFlexible ? (
+                  <>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-4">
+                      <div className="flex-1">
+                        <label className="block text-[10px] uppercase tracking-widest font-bold opacity-50 mb-2">
+                          Check-in
+                        </label>
+                        <input
+                          type="date"
+                          value={checkIn}
+                          min={toDateInput(stayData?.startDate)}
+                          max={hasCore ? coreStart : toDateInput(stayData?.endDate)}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            setCheckIn(next);
+                            setDateError(null);
+                            // Keep the range coherent: push check-out out by a
+                            // night if the new check-in would overtake it.
+                            if (checkOut && next && next >= checkOut) {
+                              const d = new Date(next);
+                              d.setDate(d.getDate() + 1);
+                              const bounded = toDateInput(stayData?.endDate);
+                              const pushed = d.toISOString().slice(0, 10);
+                              setCheckOut(bounded && pushed > bounded ? bounded : pushed);
+                            }
+                          }}
+                          className="w-full bg-[#F3EDE0] border border-[#3D4331]/20 rounded-xl px-4 py-3 font-bold focus:outline-none focus:border-[#8A9670] transition-colors"
+                        />
+                      </div>
+
+                      <ArrowLeft size={16} className="opacity-30 rotate-180 hidden sm:block mb-4" />
+
+                      <div className="flex-1">
+                        <label className="block text-[10px] uppercase tracking-widest font-bold opacity-50 mb-2">
+                          Check-out
+                        </label>
+                        <input
+                          type="date"
+                          value={checkOut}
+                          min={hasCore ? coreEnd : checkIn || toDateInput(stayData?.startDate)}
+                          max={toDateInput(stayData?.endDate)}
+                          onChange={(e) => {
+                            setCheckOut(e.target.value);
+                            setDateError(null);
+                          }}
+                          className="w-full bg-[#F3EDE0] border border-[#3D4331]/20 rounded-xl px-4 py-3 font-bold focus:outline-none focus:border-[#8A9670] transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    {hasCore && (
+                      <div className="mt-4 flex items-start gap-2 bg-[#F3EDE0] border border-[#8A9670]/40 rounded-xl px-4 py-3">
+                        <Info size={15} className="text-[#8A9670] shrink-0 mt-0.5" />
+                        <p className="text-xs font-medium">
+                          <span className="font-bold">
+                            {new Date(coreStart).toLocaleDateString("en-US", { day: "2-digit", month: "short" })} –{" "}
+                            {new Date(coreEnd).toLocaleDateString("en-US", { day: "2-digit", month: "short" })} is required
+                          </span>{" "}
+                          for this stay. You can arrive earlier or leave later, but those nights are always included.
+                        </p>
+                      </div>
+                    )}
+
+                    <p className="text-xs opacity-60 mt-4 font-medium">
+                      Available{" "}
+                      {stayData?.startDate
+                        ? new Date(stayData.startDate).toLocaleDateString("en-US", { day: "2-digit", month: "short" })
+                        : ""}{" "}
+                      –{" "}
+                      {stayData?.endDate
+                        ? new Date(stayData.endDate).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })
+                        : ""}
+                      . You're charged per night for the dates you pick.
+                    </p>
+
+                    {dateError && (
+                      <p className="mt-3 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2">
+                        {dateError}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-center gap-6">
+                    <div className="flex-1">
+                      <p className="text-[10px] uppercase tracking-widest font-bold opacity-50 mb-1">Check-in</p>
+                      <p className="font-bold">{stayData?.startDate ? new Date(stayData.startDate).toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Loading...'}</p>
+                    </div>
+                    <ArrowLeft size={16} className="opacity-30 rotate-180" />
+                    <div className="flex-1">
+                      <p className="text-[10px] uppercase tracking-widest font-bold opacity-50 mb-1">Check-out</p>
+                      <p className="font-bold">{stayData?.endDate ? new Date(stayData.endDate).toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Loading...'}</p>
+                    </div>
                   </div>
-                  <ArrowLeft size={16} className="opacity-30 rotate-180" />
-                  <div className="flex-1">
-                    <p className="text-[10px] uppercase tracking-widest font-bold opacity-50 mb-1">Check-out</p>
-                    <p className="font-bold">{stayData?.endDate ? new Date(stayData.endDate).toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Loading...'}</p>
-                  </div>
-                </div>
+                )}
               </div>
             </section>
 

@@ -3,10 +3,17 @@
 
 "use client";
 import { StayChainConfig } from '@/components/admin/StayChainConfig';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Plus, X, Trash2, Edit, Check, DollarSign, Users, Calendar } from 'lucide-react';
+
+/** Full ISO timestamp -> the yyyy-MM-dd that <input type="date"> requires. */
+function toDateInput(value?: string | null): string {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
 
 type Room = {
     id?: string;
@@ -74,10 +81,15 @@ export default function EditStayPage() {
     const [newLandmarkType, setNewLandmarkType] = useState('Airport');
     const [editingRoom, setEditingRoom] = useState<Room | null>(null);
 
-    const { register, handleSubmit, reset, watch, setValue } = useForm();
+    const { register, handleSubmit, reset, watch, setValue, formState } = useForm();
+
+    // Snapshot of the stay as loaded, so we can tell which of the
+    // state-managed array/JSON editors were actually touched.
+    const originalStayRef = useRef<any>(null);
 
     // ✅ NEW: Watch reservation fields
     const requiresReservation = watch('requiresReservation');
+    const allowFlexibleDates = watch('allowFlexibleDates');
 
     useEffect(() => {
         if (stayId && typeof stayId === 'string' && stayId.length > 0) {
@@ -107,7 +119,18 @@ export default function EditStayPage() {
             data.address = data.address || { mapUrl: '', fullAddress: '', landmarks: [] };
             
             setStay(data);
-            reset(data);
+            originalStayRef.current = JSON.parse(JSON.stringify(data));
+
+            // <input type="date"> only accepts yyyy-MM-dd; the API returns full
+            // ISO timestamps, which React rejects with a format warning and
+            // leaves the field blank.
+            reset({
+                ...data,
+                startDate: toDateInput(data.startDate),
+                endDate: toDateInput(data.endDate),
+                coreStartDate: toDateInput(data.coreStartDate),
+                coreEndDate: toDateInput(data.coreEndDate),
+            });
         } catch (err) {
             alert('Error loading stay: ' + (err as Error).message);
         } finally {
@@ -118,22 +141,49 @@ export default function EditStayPage() {
     const onSubmit = async (data: any) => {
         setSaving(true);
         try {
+            // Only send what actually changed.
+            //
+            // Sending the whole stay back made Prisma build one update stage
+            // per field, and Stay has 58 — over MongoDB Atlas's hard 50-stage
+            // aggregation-pipeline limit, so every save failed with a 500
+            // ("Pipeline length greater than 50 not supported"). A normal edit
+            // touches a handful of fields, which stays far under the cap.
+            const dirty = formState.dirtyFields as Record<string, unknown>;
+            const changed: Record<string, any> = {};
+            for (const key of Object.keys(dirty)) {
+                if (data[key] !== undefined) changed[key] = data[key];
+            }
+
+            // The array/JSON editors below are managed in `stay` state rather
+            // than by react-hook-form, so they never show up as dirty. Include
+            // them only when they actually differ from what we loaded.
+            const current = stay as any;
+            for (const key of ['images', 'amenities', 'rooms', 'highlights', 'rules', 'amenityIcons']) {
+                if (JSON.stringify(current?.[key] ?? []) !== JSON.stringify(originalStayRef.current?.[key] ?? [])) {
+                    changed[key] = current?.[key] ?? [];
+                }
+            }
+            if (JSON.stringify(stay?.address ?? null) !== JSON.stringify(originalStayRef.current?.address ?? null)) {
+                changed.address = stay?.address ?? null;
+            }
+
+            if (Object.keys(changed).length === 0) {
+                alert('No changes to save.');
+                setSaving(false);
+                return;
+            }
+
             const res = await fetch(`/api/admin/stays/${stayId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...data,
-                    images: stay?.images || [],
-                    amenities: stay?.amenities || [],
-                    rooms: stay?.rooms || [],
-                    highlights: stay?.highlights || [],
-                    rules: stay?.rules || [],
-                    address: stay?.address || null,
-                }),
+                body: JSON.stringify(changed),
             });
 
-            if (!res.ok) throw new Error('Failed to update stay');
-            
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || body.details || `Failed to update stay (${res.status})`);
+            }
+
             alert('Stay updated successfully!');
             router.push('/admin/stays');
         } catch (err) {
@@ -376,6 +426,10 @@ export default function EditStayPage() {
                                 <input type="checkbox" {...register('loyaltyDiscountEnabled')} className="h-4 w-4 text-[#96A476] border-[#96A476]/40 rounded" />
                                 Allow loyalty discount
                             </label>
+                            <label className="flex items-center gap-2 text-[#3D4331]/80 text-sm font-medium">
+                                <input type="checkbox" {...register('allowFlexibleDates')} className="h-4 w-4 text-[#96A476] border-[#96A476]/40 rounded" />
+                                Let guests choose their own dates
+                            </label>
                         </div>
                         <p className="text-xs text-[#3D4331]/60 -mt-2">
                             When on, confirmed/reserved guests can see the names and X handles of other
@@ -385,6 +439,47 @@ export default function EditStayPage() {
                             Turn off "Allow loyalty discount" to exclude this stay from the flat 20% returning-guest
                             discount — e.g. for a sponsored or already-discounted event.
                         </p>
+                        <p className="text-xs text-[#3D4331]/60 -mt-2">
+                            "Let guests choose their own dates" turns the apply form's fixed date block into a
+                            calendar. Guests pick any check-in/check-out inside the stay window above and are priced
+                            per night for the range they choose. Leave it off for conference-style events where
+                            everyone books the whole window.
+                        </p>
+
+                        {allowFlexibleDates && (
+                            <div className="mt-2 p-4 rounded-xl bg-[#F3EDE0] border border-[#96A476]/40">
+                                <p className="text-sm font-semibold text-[#3D4331] mb-1">
+                                    Required nights <span className="font-normal opacity-60">— optional</span>
+                                </p>
+                                <p className="text-xs text-[#3D4331]/60 mb-3">
+                                    Nights every guest must book (e.g. the actual conference days). Guests can still
+                                    arrive earlier or leave later, but their dates must cover this range. Leave both
+                                    blank to allow any dates inside the stay window.
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-[#3D4331]/70 mb-1">
+                                            Required from
+                                        </label>
+                                        <input
+                                            type="date"
+                                            {...register('coreStartDate')}
+                                            className="w-full p-2 border border-[#96A476]/40 rounded-lg focus:ring-[#96A476] focus:border-[#96A476]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-[#3D4331]/70 mb-1">
+                                            Required until
+                                        </label>
+                                        <input
+                                            type="date"
+                                            {...register('coreEndDate')}
+                                            className="w-full p-2 border border-[#96A476]/40 rounded-lg focus:ring-[#96A476] focus:border-[#96A476]"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
