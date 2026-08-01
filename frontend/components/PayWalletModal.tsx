@@ -28,10 +28,24 @@ function isWalletConnect(c: Connector) {
   return c.id === "walletConnect" || c.type === "walletConnect";
 }
 
+// Coinbase's own SDK handles its mobile fallback internally (it opens its
+// app / shows its own connect flow when no extension is present), so it
+// doesn't need the same "no provider on mobile" handling as a plain
+// injected() connector like MetaMask does.
+function isCoinbase(c: Connector) {
+  return c.id === "coinbaseWalletSDK" || c.id === "coinbaseWallet";
+}
+
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 /** Short, friendly sub-label under each wallet name. */
-function connectorHint(c: Connector, ready: boolean) {
-  if (isWalletConnect(c)) return "Scan with any wallet";
-  if (c.id === "coinbaseWalletSDK" || c.id === "coinbaseWallet") return "Extension or mobile";
+function connectorHint(c: Connector, ready: boolean, mobile: boolean) {
+  if (isWalletConnect(c)) return mobile ? "Opens your wallet app" : "Scan with any wallet";
+  if (isCoinbase(c)) return "Extension or mobile";
+  if (mobile && !ready) return "Not available in this browser";
   return ready ? "Installed" : "Not detected";
 }
 
@@ -45,6 +59,11 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [readyIds, setReadyIds] = useState<Set<string>>(new Set());
+  // Computed once on mount rather than per-render — the device class doesn't
+  // change mid-session, and this avoids a hydration mismatch from reading
+  // navigator during SSR.
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => setMobile(isMobileDevice()), []);
 
   const cleanupRef = useRef<null | (() => void)>(null);
 
@@ -83,13 +102,19 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectorKey]);
 
-  // Show real extension wallets first, then WalletConnect as the catch-all.
+  // Desktop: real extensions first, WalletConnect as the catch-all last.
+  //
+  // Mobile: flipped. A plain injected connector (MetaMask, etc. without its
+  // own SDK) has nothing to talk to in a phone browser — window.ethereum
+  // simply doesn't exist there — so tapping it can only ever hang. Leading
+  // with WalletConnect means the working path is what people see first,
+  // instead of a MetaMask button that looks connectable but silently isn't.
   const ordered = useMemo(() => {
     const wc = connectors.filter(isWalletConnect);
     const rest = connectors.filter((c) => !isWalletConnect(c));
     rest.sort((a, b) => Number(readyIds.has(b.id)) - Number(readyIds.has(a.id)));
-    return [...rest, ...wc];
-  }, [connectors, readyIds]);
+    return mobile ? [...wc, ...rest] : [...rest, ...wc];
+  }, [connectors, readyIds, mobile]);
 
   // Render the WalletConnect pairing URI as a QR in our own palette.
   useEffect(() => {
@@ -114,6 +139,19 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
       setWcUri(null);
       cleanupRef.current?.();
 
+      // A plain injected connector with no detected provider, on mobile, has
+      // nothing to connect to — there's no extension for it to find. Calling
+      // connectAsync here just hangs on "Waiting…" indefinitely, which is
+      // exactly what was reported: tapping MetaMask on a phone appeared to
+      // do nothing. Stop before that happens and point at what actually
+      // works instead.
+      if (mobile && !isWalletConnect(connector) && !isCoinbase(connector) && !readyIds.has(connector.id)) {
+        setError(
+          `${connector.name} isn't available in your phone's browser. Use WalletConnect below to open your wallet app instead.`
+        );
+        return;
+      }
+
       try {
         if (isWalletConnect(connector)) {
           // Grab the pairing URI so we can draw the QR ourselves instead of
@@ -134,7 +172,7 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
         }
       }
     },
-    [connectAsync]
+    [connectAsync, mobile, readyIds]
   );
 
   // Sealed while a transaction is in flight: unmounting would disconnect
@@ -235,6 +273,10 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
                 const active = selected?.uid === c.uid;
                 const ready = readyIds.has(c.id);
                 const icon = (c as any).icon as string | undefined;
+                // Dimmed, not disabled — still tappable so the explanatory
+                // error in handleSelect actually reaches the user, instead
+                // of a dead button that looks broken with no explanation.
+                const unusableHere = mobile && !isWalletConnect(c) && !isCoinbase(c) && !ready;
 
                 return (
                   <button
@@ -243,7 +285,7 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
                     disabled={connecting}
                     className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors disabled:opacity-60 ${
                       active ? "bg-[#EBE1D0]" : "hover:bg-[#EBE1D0]/60"
-                    }`}
+                    } ${unusableHere ? "opacity-50" : ""}`}
                   >
                     <span className="w-8 h-8 rounded-lg bg-white border border-[#3D4331]/10 flex items-center justify-center overflow-hidden shrink-0">
                       {icon ? (
@@ -263,7 +305,7 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
                           ready && !isWalletConnect(c) ? "text-[#7d8f5c]" : "text-[#3D4331]/40"
                         }`}
                       >
-                        {connectorHint(c, ready)}
+                        {connectorHint(c, ready, mobile)}
                       </span>
                     </span>
                   </button>
@@ -289,22 +331,71 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
 
               {selected && isWalletConnect(selected) && (
                 <>
-                  <p className="text-sm font-bold text-[#3D4331] mb-5 max-w-xs">
-                    Scan with your wallet app to connect and confirm payment
-                  </p>
-                  <div className="bg-white p-4 rounded-2xl border border-[#3D4331]/15 shadow-sm">
-                    {qrDataUrl ? (
-                      <img
-                        src={qrDataUrl}
-                        alt="WalletConnect QR code"
-                        className="w-[230px] h-[230px] block"
-                      />
-                    ) : (
-                      <div className="w-[230px] h-[230px] flex items-center justify-center">
-                        <Loader2 className="w-7 h-7 animate-spin text-[#3D4331]/40" />
+                  {mobile ? (
+                    <>
+                      <p className="text-sm font-bold text-[#3D4331] mb-5 max-w-xs">
+                        Open your wallet app to connect and confirm payment
+                      </p>
+
+                      {/* Primary path on mobile: a real deep link, not a QR
+                          the same phone can't scan. `wc:` URIs are
+                          registered as universal/app links by essentially
+                          every WalletConnect-compatible wallet (MetaMask,
+                          Trust, Rainbow, etc.), so this opens whichever one
+                          the guest has installed. */}
+                      <a
+                        href={wcUri || undefined}
+                        aria-disabled={!wcUri}
+                        className={`inline-flex items-center gap-2 bg-[#3D4331] text-[#F3EDE0] font-bold py-3 px-7 rounded-full uppercase tracking-widest text-xs transition-opacity ${
+                          wcUri ? "hover:opacity-90" : "opacity-50 pointer-events-none"
+                        }`}
+                      >
+                        {wcUri ? (
+                          <>
+                            <ExternalLink size={14} /> Open Wallet App
+                          </>
+                        ) : (
+                          <>
+                            <Loader2 size={14} className="animate-spin" /> Preparing…
+                          </>
+                        )}
+                      </a>
+
+                      <details className="mt-6 text-left w-full max-w-[230px]">
+                        <summary className="text-[10px] font-bold uppercase tracking-widest text-[#3D4331]/40 cursor-pointer text-center">
+                          Or scan with another device
+                        </summary>
+                        <div className="bg-white p-3 rounded-2xl border border-[#3D4331]/15 shadow-sm mt-3 mx-auto w-fit">
+                          {qrDataUrl ? (
+                            <img src={qrDataUrl} alt="WalletConnect QR code" className="w-[160px] h-[160px] block" />
+                          ) : (
+                            <div className="w-[160px] h-[160px] flex items-center justify-center">
+                              <Loader2 className="w-6 h-6 animate-spin text-[#3D4331]/40" />
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-bold text-[#3D4331] mb-5 max-w-xs">
+                        Scan with your wallet app to connect and confirm payment
+                      </p>
+                      <div className="bg-white p-4 rounded-2xl border border-[#3D4331]/15 shadow-sm">
+                        {qrDataUrl ? (
+                          <img
+                            src={qrDataUrl}
+                            alt="WalletConnect QR code"
+                            className="w-[230px] h-[230px] block"
+                          />
+                        ) : (
+                          <div className="w-[230px] h-[230px] flex items-center justify-center">
+                            <Loader2 className="w-7 h-7 animate-spin text-[#3D4331]/40" />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </>
+                  )}
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#3D4331]/40 mt-4">
                     480+ wallets supported
                   </p>

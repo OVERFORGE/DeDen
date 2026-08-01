@@ -25,7 +25,7 @@ import { BookingStatus } from '@prisma/client';
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { computeBookingTotals, incrementReferralUsage, PricingError } from '@/lib/pricing';
-import { hasAvailableSlots, holdStaySlots } from '@/lib/inventory';
+import { checkRangeAvailability, recomputeStayAvailability } from '@/lib/inventory';
 import { z } from 'zod';
 import { firstValidationMessage } from '@/lib/validate';
 
@@ -324,19 +324,58 @@ export async function POST(
 
     console.log(`[Apply] ${isExtendable ? 'Extending' : 'New'} — guests: ${combinedGuestCount} (+${addedGuestCount}) | nights: ${numberOfNights} | discount: ${pricing.discountPercent}%`);
 
+    // A brand-new application had NO capacity check before this — a stay
+    // could fill up entirely and still keep accepting fresh PENDING
+    // bookings, which only got caught (if ever) at admin-approve time, a
+    // step the common apply-straight-to-PENDING flow skips. Checked per
+    // night over the guest's actual requested range, not the whole stay
+    // window, so a short booking can still fit into a gap a longer one
+    // couldn't.
+    if (!isExtendable) {
+      const range = await checkRangeAvailability(stay.id, submittedGuestCount, checkInDate, checkOutDate);
+      if (!range.ok) {
+        return NextResponse.json(
+          {
+            error: `This stay doesn't have room for ${submittedGuestCount} guest(s)${
+              range.conflictNight ? ` on ${range.conflictNight}` : ''
+            } — only ${range.availableOnConflict ?? 0} spot(s) free${
+              range.conflictNight ? ' that night' : ''
+            }. Try fewer guests or different dates.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const paymentWindowExpiresAt = new Date(Date.now() + DEFAULT_PAYMENT_WINDOW_HOURS * 60 * 60 * 1000);
     let resultBooking;
     let extensionDelta: number | null = null;
 
     if (isExtendable && existingBooking) {
-      // Extra slots are claimed the moment the extension is requested, same
-      // as the initial reservation flow claims a slot before the remaining
-      // leg is paid.
-      if (addedGuestCount > 0 && (existingBooking.status === BookingStatus.RESERVED || existingBooking.status === BookingStatus.CONFIRMED)) {
-        const slotsOk = await hasAvailableSlots(stay.id, addedGuestCount);
-        if (!slotsOk) {
+      // A RESERVED/CONFIRMED booking already occupies capacity — re-check it
+      // any time this request could change its footprint (more guests,
+      // different dates, or both — a flexible-dates stay lets either
+      // change independently). Checked against the FULL new combined guest
+      // count over the NEW dates (`checkInDate`/`checkOutDate`, resolved
+      // server-side above — NOT `existingBooking`'s old ones, which was the
+      // bug: a combined date-change + guest-add validated against the range
+      // being left, not the range being moved to), excluding this booking's
+      // own current occupancy so it isn't compared against itself.
+      if (existingBooking.status === BookingStatus.RESERVED || existingBooking.status === BookingStatus.CONFIRMED) {
+        const range = await checkRangeAvailability(
+          stay.id,
+          combinedGuestCount,
+          checkInDate,
+          checkOutDate,
+          existingBooking.bookingId
+        );
+        if (!range.ok) {
           return NextResponse.json(
-            { error: `Not enough slots remaining for ${addedGuestCount} additional guest(s).` },
+            {
+              error: `Not enough slots remaining for ${combinedGuestCount} guest(s)${
+                range.conflictNight ? ` on ${range.conflictNight}` : ''
+              } (only ${range.availableOnConflict ?? 0} spot(s) free${range.conflictNight ? ' that night' : ''}).`,
+            },
             { status: 409 }
           );
         }
@@ -386,10 +425,6 @@ export async function POST(
         extensionDelta = parseFloat((pricing.finalTotalUSDC - (existingBooking.finalPrice ?? 0)).toFixed(2));
         const newRemaining = parseFloat(((existingBooking.remainingAmount ?? 0) + extensionDelta).toFixed(2));
 
-        if (addedGuestCount > 0) {
-          await holdStaySlots(stay.id, addedGuestCount);
-        }
-
         resultBooking = await db.booking.update({
           where: { id: existingBooking.id },
           data: {
@@ -399,6 +434,13 @@ export async function POST(
             remainingAmount: newRemaining,
           },
         });
+
+        // Recompute AFTER the update above persists the new guest count —
+        // occupancy is derived from the booking rows themselves, so this
+        // has to run once they reflect the extension, not before.
+        if (addedGuestCount > 0) {
+          await recomputeStayAvailability(stay.id);
+        }
       } else {
         // CONFIRMED — fully paid already. Open a fresh "remaining due" leg
         // for just the incremental cost, reusing the existing
@@ -412,10 +454,6 @@ export async function POST(
             { error: 'Could not compute a positive amount due for the added guest(s).' },
             { status: 400 }
           );
-        }
-
-        if (addedGuestCount > 0) {
-          await holdStaySlots(stay.id, addedGuestCount);
         }
 
         resultBooking = await db.booking.update({
@@ -433,6 +471,12 @@ export async function POST(
             remainingChainId: null,
           },
         });
+
+        // See the comment on the RESERVED-extension branch above — this
+        // must run after the guest count is actually persisted.
+        if (addedGuestCount > 0) {
+          await recomputeStayAvailability(stay.id);
+        }
       }
     } else {
       // Fresh booking — either no prior booking, or the prior one is in a

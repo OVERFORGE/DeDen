@@ -26,8 +26,6 @@ const {
   checkRangeAvailability,
   recomputeStayAvailability,
   hasAvailableSlots,
-  holdStaySlots,
-  releaseStaySlots,
 } = await import("@/lib/inventory");
 
 beforeEach(() => {
@@ -230,25 +228,5 @@ describe("hasAvailableSlots", () => {
   it("true (no-op) for zero guests", async () => {
     expect(await hasAvailableSlots("stay-1", 0)).toBe(true);
     expect(stayFindUnique).not.toHaveBeenCalled();
-  });
-});
-
-describe("holdStaySlots / releaseStaySlots (deprecated aliases)", () => {
-  it("both just trigger a recompute, ignoring the guestCount argument", async () => {
-    stayFindUnique.mockResolvedValueOnce({ slotsTotal: 10 }).mockResolvedValueOnce({
-      startDate: new Date("2026-10-01"),
-      endDate: new Date("2026-10-31"),
-    });
-    bookingFindMany.mockResolvedValue([]);
-    await holdStaySlots("stay-1", 999); // absurd count — must not be used directly
-    expect(stayUpdate).toHaveBeenCalledWith({ where: { id: "stay-1" }, data: { slotsAvailable: 10 } });
-
-    stayUpdate.mockClear();
-    stayFindUnique.mockResolvedValueOnce({ slotsTotal: 10 }).mockResolvedValueOnce({
-      startDate: new Date("2026-10-01"),
-      endDate: new Date("2026-10-31"),
-    });
-    await releaseStaySlots("stay-1", -50);
-    expect(stayUpdate).toHaveBeenCalledWith({ where: { id: "stay-1" }, data: { slotsAvailable: 10 } });
   });
 });

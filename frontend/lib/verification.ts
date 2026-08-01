@@ -8,7 +8,7 @@ import { chainConfig, treasuryAddress } from './config';
 import { parseUnits } from 'viem';
 import { sendConfirmationEmail, sendReservationConfirmedEmail } from './email';
 import { mintBookingNFT } from './nft-service'; // ✅ NEW: Import NFT service
-import { holdStaySlots } from './inventory';
+import { recomputeStayAvailability, checkRangeAvailability } from './inventory';
 import { issueTicketsForBooking, getTicketEmailPayload } from './ticket-service';
 
 /** Which payment leg a verification is currently processing. */
@@ -203,6 +203,24 @@ export async function verifyPayment(
         return;
       }
 
+      // ⚠️ `lock-payment` validates the chain is enabled for the stay and
+      // records the locked chain as `booking.chainId` — but that restriction
+      // only bites if this `chainId` (client-supplied, from verify-popup-tx)
+      // is actually checked against it. Without this, a guest could lock on
+      // an approved chain, then verify against a tx on a different chain
+      // entirely, bypassing the stay's chain allowlist.
+      if (booking.chainId && booking.chainId !== chainId) {
+        console.error(
+          `[Verification] ❌ CHAIN MISMATCH: locked to ${booking.chainId}, verification requested for ${chainId}`
+        );
+        await updateBookingStatus(bookingId, BookingStatus.FAILED, {
+          error: 'This payment was not made on the chain locked for this booking',
+          lockedChainId: booking.chainId,
+          requestedChainId: chainId,
+        });
+        return;
+      }
+
       console.log(`[Verification] Expected amount: ${expectedAmount} ${paymentToken}`);
 
       // 4. Get blockchain client
@@ -373,13 +391,47 @@ export async function verifyPayment(
             return;
           }
 
+          // ⚠️ CAPACITY RE-CHECK — right before the write, for the two
+          // transitions that newly claim a slot (PENDING -> RESERVED, or
+          // PENDING -> CONFIRMED for non-reservation stays). `lock-payment`
+          // only checked capacity before any money moved; a PENDING booking
+          // holds nothing, so two guests racing for the last spot can both
+          // pass that check and both send real crypto. This is the last
+          // chance to catch that before double-booking a night — if it's
+          // gone, the booking fails instead of silently overbooking, and the
+          // guest's payment is refunded manually (a paid-but-failed booking
+          // is surfaced via admin like any other FAILED verification).
+          // The already-RESERVED remaining-payment leg below is exempt: it
+          // occupies the same nights it already holds, so nothing new is
+          // being claimed.
+          if (isReservationPayment || (!isReservationPayment && !isRemainingPayment)) {
+            const range = await checkRangeAvailability(
+              booking.stayId,
+              booking.guestCount || 1,
+              booking.checkInDate ?? booking.stay.startDate,
+              booking.checkOutDate ?? booking.stay.endDate,
+              booking.bookingId
+            );
+            if (!range.ok) {
+              console.error(
+                `[Verification] ❌ CAPACITY LOST: stay ${booking.stayId} no longer has room for booking ${bookingId}'s ${booking.guestCount || 1} guest(s)${range.conflictNight ? ` on ${range.conflictNight}` : ''}`
+              );
+              await updateBookingStatus(bookingId, BookingStatus.FAILED, {
+                error: 'This stay sold out while your payment was being confirmed. Your payment was received — contact support for a refund.',
+                txHash,
+                conflictNight: range.conflictNight,
+              });
+              return;
+            }
+          }
+
           // ✅ UPDATE BOOKING BASED ON PAYMENT TYPE
           if (isReservationPayment) {
             // ==========================================
             // RESERVATION PAYMENT CONFIRMED
             // ==========================================
             console.log('[Verification] 💾 Updating booking status to RESERVED...');
-            
+
             await db.booking.update({
               where: { bookingId },
               data: {
@@ -400,7 +452,7 @@ export async function verifyPayment(
             // ✅ Slot is secured the moment the reservation is paid — hold it
             // now so it isn't double-booked while the remaining payment is
             // still outstanding.
-            await holdStaySlots(booking.stayId, booking.guestCount || 1);
+            await recomputeStayAvailability(booking.stayId);
 
             // Log activity
             await db.activityLog.create({
@@ -647,7 +699,7 @@ export async function verifyPayment(
             });
 
             // ✅ Non-reservation stays hold the slot at full-payment confirmation.
-            await holdStaySlots(booking.stayId, booking.guestCount || 1);
+            await recomputeStayAvailability(booking.stayId);
 
             // Log activity
             await db.activityLog.create({

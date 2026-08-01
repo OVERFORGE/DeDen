@@ -14,7 +14,7 @@
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
 import { sendPaymentExpiryEmail } from '@/lib/email';
-import { releaseStaySlots } from '@/lib/inventory';
+import { recomputeStayAvailability } from '@/lib/inventory';
 import { releaseReferralUsage } from '@/lib/pricing';
 
 /**
@@ -61,9 +61,10 @@ export async function settleBookingIfStale(bookingId: string): Promise<void> {
     data: { status: BookingStatus.EXPIRED },
   });
 
-  // Only a RESERVED booking was actually holding inventory.
+  // Only a RESERVED booking was actually holding inventory — but recompute
+  // is idempotent, so it's harmless to skip this in the PENDING-expiry case.
   if (isAbandonedReservation) {
-    await releaseStaySlots(booking.stayId, booking.guestCount || 1);
+    await recomputeStayAvailability(booking.stayId);
   }
 
   // Give the referral-code use back — this booking never completed.

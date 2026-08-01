@@ -6,7 +6,7 @@ import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
 import { sendPaymentExpiryEmail } from '@/lib/email';
 import { requireAdminOrJob, authErrorResponse } from '@/lib/api-auth';
-import { releaseStaySlots } from '@/lib/inventory';
+import { recomputeStayAvailability } from '@/lib/inventory';
 import { releaseReferralUsage } from '@/lib/pricing';
 
 /**
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         });
 
         if (wasHoldingSlots) {
-          await releaseStaySlots(booking.stayId, booking.guestCount || 1);
+          await recomputeStayAvailability(booking.stayId);
         }
 
         // Give the referral-code use back — this booking never completed.

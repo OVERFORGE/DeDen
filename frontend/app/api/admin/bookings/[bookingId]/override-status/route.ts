@@ -9,9 +9,8 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
 import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
-import { holdStaySlots, releaseStaySlots } from '@/lib/inventory';
-
-const SLOT_HOLDING_STATUSES: BookingStatus[] = [BookingStatus.CONFIRMED, BookingStatus.RESERVED];
+import { recomputeStayAvailability } from '@/lib/inventory';
+import { issueTicketsForBooking } from '@/lib/ticket-service';
 
 export async function POST(
   request: Request,
@@ -50,16 +49,21 @@ export async function POST(
       },
     });
 
-    // Reconcile slot inventory: hold on entering a slot-holding status,
-    // release on leaving one.
-    const wasHolding = SLOT_HOLDING_STATUSES.includes(previousStatus);
-    const nowHolding = SLOT_HOLDING_STATUSES.includes(status);
-    const guestCount = booking.guestCount || 1;
+    // Occupancy is derived from live bookings (lib/inventory.ts), not
+    // tracked incrementally — any status change that could affect who's
+    // occupying a night just triggers a resync of the display counter.
+    await recomputeStayAvailability(booking.stayId);
 
-    if (!wasHolding && nowHolding) {
-      await holdStaySlots(booking.stayId, guestCount);
-    } else if (wasHolding && !nowHolding) {
-      await releaseStaySlots(booking.stayId, guestCount);
+    // Forcing a booking to CONFIRMED (e.g. an off-chain payment) skips the
+    // normal verifyPayment() path entirely, which is the only other place
+    // tickets get issued — without this, the guest is "confirmed" with
+    // nothing to scan at the door.
+    if (status === BookingStatus.CONFIRMED) {
+      try {
+        await issueTicketsForBooking(booking.bookingId);
+      } catch (ticketError) {
+        console.error('[Override Status] Ticket issuance failed:', ticketError);
+      }
     }
 
     await db.activityLog.create({

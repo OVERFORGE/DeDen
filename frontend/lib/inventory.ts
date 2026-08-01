@@ -213,19 +213,3 @@ export async function hasAvailableSlots(stayId: string, guestCount: number): Pro
   );
   return result.ok;
 }
-
-/**
- * @deprecated Occupancy is derived from bookings now — there is no counter to
- * hold. Kept as a thin alias so existing call sites stay correct; they simply
- * resync the display value.
- */
-export async function holdStaySlots(stayId: string, _guestCount: number): Promise<void> {
-  await recomputeStayAvailability(stayId);
-}
-
-/**
- * @deprecated See holdStaySlots. Releasing is just a resync now.
- */
-export async function releaseStaySlots(stayId: string, _guestCount: number): Promise<void> {
-  await recomputeStayAvailability(stayId);
-}

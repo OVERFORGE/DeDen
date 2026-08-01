@@ -19,7 +19,7 @@ vi.mock("@/lib/email", () => ({
   sendReservationConfirmedEmail: vi.fn(),
 }));
 vi.mock("@/lib/nft-service", () => ({ mintBookingNFT: vi.fn() }));
-vi.mock("@/lib/inventory", () => ({ holdStaySlots: vi.fn() }));
+vi.mock("@/lib/inventory", () => ({ recomputeStayAvailability: vi.fn() }));
 vi.mock("@/lib/ticket-service", () => ({
   issueTicketsForBooking: vi.fn(),
   getTicketEmailPayload: vi.fn(),
