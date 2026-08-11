@@ -200,11 +200,11 @@ export async function DELETE(
     }
 
     // Manually cascade delete related records to avoid Prisma referential integrity errors
-    await db.ticket.deleteMany({ where: { stayId: id } });
-    await db.booking.deleteMany({ where: { stayId: id } });
-    await db.review.deleteMany({ where: { stayId: id } });
-    await db.addon.deleteMany({ where: { stayId: id } });
-    await db.referralCode.deleteMany({ where: { stayId: id } });
+    if ((db as any).ticket) { try { await (db as any).ticket.deleteMany({ where: { stayId: id } }); } catch (e) { console.warn('Deleting tickets warning:', e); } }
+    if ((db as any).booking) { try { await (db as any).booking.deleteMany({ where: { stayId: id } }); } catch (e) { console.warn('Deleting bookings warning:', e); } }
+    if ((db as any).review) { try { await (db as any).review.deleteMany({ where: { stayId: id } }); } catch (e) { console.warn('Deleting reviews warning:', e); } }
+    if ((db as any).addon) { try { await (db as any).addon.deleteMany({ where: { stayId: id } }); } catch (e) { console.warn('Deleting addons warning:', e); } }
+    if ((db as any).referralCode) { try { await (db as any).referralCode.deleteMany({ where: { stayId: id } }); } catch (e) { console.warn('Deleting referral codes warning:', e); } }
 
     // Delete the stay
     await db.stay.delete({

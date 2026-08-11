@@ -32,17 +32,39 @@ function FeatureCard({ icon, title, description }: { icon: React.ReactNode; titl
   );
 }
 
-function StayCard({ image, location, event, price, href }: { image: string; location: string; event: string; price: string; href: string; }) {
+function formatDateRange(startDateStr?: string, endDateStr?: string) {
+  if (!startDateStr || !endDateStr) return "";
+  const start = new Date(startDateStr);
+  const end = new Date(endDateStr);
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return "";
+
+  const startMonth = start.toLocaleDateString("en-US", { month: "short" });
+  const startDay = start.getDate();
+  const endMonth = end.toLocaleDateString("en-US", { month: "short" });
+  const endDay = end.getDate();
+
+  if (startMonth === endMonth) {
+    return `${startMonth} ${startDay}-${endDay}`;
+  } else {
+    return `${startMonth} ${startDay}-${endMonth} ${endDay}`;
+  }
+}
+
+function StayCard({ image, location, event, price, href, startDate, endDate }: { image: string; location: string; event: string; price: string; href: string; startDate?: string; endDate?: string; }) {
+  const dateRange = formatDateRange(startDate, endDate);
+  const bannerText = dateRange ? `${location} ${dateRange}` : location;
+
   return (
     <div className="bg-[#9db47d] border-2 border-[#2c331f] rounded-2xl overflow-hidden transition-all shadow-[4px_4px_0px_0px_#2c331f] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#2c331f] group flex flex-col">
       <div className="relative h-48 overflow-hidden border-b-2 border-[#2c331f]">
-        <Image src={image} alt={location} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+        <Image src={image} alt={event} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
         <div className="font-caveat font-extrabold text-[12px] absolute top-4 left-[-10px] bg-[#e8c37b] text-[#2c331f] text-[10px] font-bold px-4 py-1.5 rounded-full border-2 border-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f] rotate-[-5deg] tracking-wider">
-          DevCon ✦ Nov 5-11
+          {bannerText}
         </div>
       </div>
       <div className="p-4 pt-5 pb-6 flex flex-col">
-        <p className="text-[#2c331f] font-black text-xl font-display tracking-wide leading-tight">{location}</p>
+        <p className="text-[#2c331f] font-black text-xl font-display tracking-wide leading-tight">{event}</p>
         <p className="text-[#f7eedb] text-[11px] font-bold mt-1 tracking-widest opacity-90 uppercase">{price}</p>
         <div className="mt-5">
           <Link href={href} className="inline-block bg-[#f7eedb] text-[#2c331f] text-[11px] font-bold py-2.5 px-6 rounded-full border-2 border-[#2c331f] shadow-[2px_2px_0px_0px_#2c331f] hover:bg-white transition-colors">
@@ -256,8 +278,7 @@ export default function HomePage() {
             </h1>
             
             <p className="text-[#2c331f] text-sm md:text-base leading-relaxed mb-10 max-w-md font-medium">
-              No less things than proper finding UI elements your users have a focus on. To better avoid this feeling and actually breaking a habit here, I place some copy in this blank UI.
-            </p>
+The best part of any conference isn't on the schedule. It's the stranger you meet in the kitchen at midnight, the pitch you refine over breakfast, the friend you didn't know you were flying in to make. We take over villas and entire hostels near the biggest Web3 events so that part of the trip has somewhere to happen.            </p>
             
             {/* Search Box */}
             <HeroSearch stays={liveStays} />
@@ -313,10 +334,13 @@ export default function HomePage() {
                 We host the<br />underground.
               </h2>
               <p className="text-[#2c331f] text-sm leading-relaxed mb-4 font-medium">
-                DeDen is a global, floating home away from home. We take over luxury villas and fill them with makers, creators and doers traveling to conference cities.
+                 DeDen started because we kept showing up to conferences and going home the same way we came a badge, some business cards, a hotel room we barely used. So we started renting the villa instead. Then the whole hostel. Now it's how we travel, and how a growing crew of makers, creators and doers travels with us.
               </p>
               <p className="text-[#2c331f] text-sm leading-relaxed mb-6 font-medium">
-                We curate intimate pop-ups where the real conversations happen, right after the panels end. You're not booking a room, you're finding a crew.
+                Villa or hostel, the idea's the same: we take over the whole property, not just a few rooms, so every hallway and common room belongs to the Den. Nobody's a guest in someone else's stay, everyone's home for the week.
+              </p>
+              <p className="text-[#2c331f] text-sm leading-relaxed mb-6 font-medium">
+                The panels end at 6. The real conversations start after. That's what we're building around, not a room to sleep in, but a crew to land with.
               </p>
               <Link href="/#about" className="font-caveat font-extrabold text-[18px] inline-flex items-center gap-2 text-[#d04639]  hover:opacity-80 transition-opacity uppercase tracking-widest">
                 read our story ✦ stay awhile
@@ -349,17 +373,17 @@ export default function HomePage() {
             <FeatureCard 
               icon={<MapPin size={18} strokeWidth={2.5} />} 
               title="Stays near" 
-              description="Pick your event, pick your room, pay in crypto or fiat. We handle the rest so you can focus on building." 
+              description="Show up, pay in crypto or fiat, and someone already knows your name at check-in. We handle the logistics so your only job is to be there." 
             />
             <FeatureCard 
               icon={<Users size={18} strokeWidth={2.5} />} 
               title="Instant crew" 
-              description="Every Den is a curated group. You're not booking a room, you're joining a community of makers who get it." 
+              description="No icebreakers, no small talk. Every Den fills up with people already building something, you just have to walk into the kitchen." 
             />
             <FeatureCard 
               icon={<Calendar size={18} strokeWidth={2.5} />} 
               title="Hot & Flexible" 
-              description="Short stays, long stays, last-minute rooms. We move as fast as you do, because conference season waits for no one." 
+              description="Landing last-minute? Staying an extra week because the conversation isn't done? We move with you, because that's usually how the good trips go." 
             />
           </div>
         </div>
@@ -375,9 +399,7 @@ export default function HomePage() {
                 Live Stays
               </h2>
             </div>
-            <p className="text-[#2c331f] text-sm md:text-base max-w-sm leading-relaxed font-medium text-left md:text-right">
-              You're getting full house amenities plus the camaraderie of your local crew in a place where it goes.
-            </p>
+           
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
             {loadingStays ? (
@@ -393,6 +415,8 @@ export default function HomePage() {
                   event={stay.title}
                   price={`Starts at ${stay.priceUSDC || 310} USDC / week`}
                   href={`/stay/${stay.stayId}`}
+                  startDate={stay.startDate}
+                  endDate={stay.endDate}
                 />
               ))
             ) : (
@@ -426,21 +450,21 @@ export default function HomePage() {
             
             {/* Stat 1 */}
             <div className="flex flex-col items-center">
-              <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">38</p>
+              <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">3</p>
               <div className="w-12 h-1 bg-[#2c331f] mb-4"></div>
               <p className="font-caveat font-extrabold text-[18px] text-[#5a6b3a] italic tracking-widest">super hosts</p>
             </div>
             
             {/* Stat 2 */}
             <div className="flex flex-col items-center">
-              <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">12</p>
+              <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">3</p>
               <div className="w-12 h-1 bg-[#2c331f] mb-4"></div>
               <p className="font-caveat font-extrabold text-[18px] text-[#5a6b3a] italic tracking-widest">cities covered</p>
             </div>
 
             {/* Stat 3 */}
             <div className="flex flex-col items-center">
-              <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">4,200+</p>
+              <p className="text-[#2c331f] text-6xl md:text-[5.5rem] font-black tracking-tighter mb-4 font-display leading-none drop-shadow-sm">200+</p>
               <div className="w-12 h-1 bg-[#2c331f] mb-4"></div>
               <p className="font-caveat font-extrabold text-[18px] text-[#5a6b3a] italic tracking-widest">founders met</p>
             </div>

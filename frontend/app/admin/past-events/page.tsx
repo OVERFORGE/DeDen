@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MapPin, Calendar, Globe, Edit } from "lucide-react";
+import { MapPin, Calendar, Globe, Edit, Trash2, Eye, EyeOff, BarChart3 } from "lucide-react";
 
 interface Stay {
   id: string;
@@ -12,6 +12,7 @@ interface Stay {
   startDate: string;
   endDate: string;
   status: string;
+  isPublished: boolean;
 }
 
 export default function AdminPastEventsPage() {
@@ -30,12 +31,47 @@ export default function AdminPastEventsPage() {
       if (!response.ok) throw new Error("Failed to fetch stays");
       const data = await response.json();
       
-      // Filter for DONE status
-      setStays(data.filter((s: Stay) => s.status === 'DONE'));
+      // Filter for past events (DONE status or end date in the past)
+      const now = new Date();
+      setStays(data.filter((s: Stay) => s.status === 'DONE' || new Date(s.endDate) < now));
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const togglePublished = async (stayId: string, currentIsPublished: boolean) => {
+    try {
+      const response = await fetch(`/api/admin/stays/${stayId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublished: !currentIsPublished }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update stay visibility");
+      fetchStays();
+    } catch (err) {
+      alert("Error updating visibility: " + (err as Error).message);
+    }
+  };
+
+  const deletePastEvent = async (stayId: string, title: string) => {
+    if (!confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) return;
+
+    try {
+      const response = await fetch(`/api/admin/stays/${stayId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete past event");
+      }
+
+      fetchStays();
+    } catch (err) {
+      alert("Error deleting past event: " + (err as Error).message);
     }
   };
 
@@ -70,7 +106,7 @@ export default function AdminPastEventsPage() {
               Past Events
             </h1>
             <p className="text-[#5a6b3a] font-bold uppercase tracking-widest text-xs">
-              Manage gallery and testimonials for completed experiences
+              Click any card to view event metrics and guest turnout, or manage gallery & visibility
             </p>
           </div>
         </div>
@@ -82,29 +118,35 @@ export default function AdminPastEventsPage() {
               No Past Events Found
             </h3>
             <p className="text-[#5a6b3a] font-bold uppercase tracking-widest text-xs mb-8">
-              Mark an active stay as 'Done' for it to appear here.
+              Completed stays will appear here.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {stays.map((stay) => (
-              <div key={stay.id} className="bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] overflow-hidden flex flex-col relative">
+              <div key={stay.id} className="bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] overflow-hidden flex flex-col relative group">
                 
-                <div className="p-6 md:p-8 flex-1">
-                  <div className="flex gap-2 items-center mb-4">
+                {/* Clickable Card Body -> Takes to Metrics */}
+                <Link href={`/admin/past-events/${stay.id}/metrics`} className="p-6 md:p-8 flex-1 block hover:bg-amber-50/50 transition-colors">
+                  <div className="flex flex-wrap gap-2 items-center mb-4">
                     <span className="bg-[#f7eedb] px-2 py-1 rounded-md border-2 border-[#2c331f] text-[#2c331f] font-bold text-[10px]">
                       {stay.stayId}
                     </span>
                     <span className="bg-green-100 px-2 py-1 rounded-md border-2 border-green-600 text-green-700 font-black text-[10px] uppercase tracking-widest">
                       COMPLETED
                     </span>
+                    <span className={`px-2 py-1 rounded-md border-2 border-[#2c331f] font-black text-[10px] uppercase tracking-widest ${
+                      stay.isPublished ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700'
+                    }`}>
+                      {stay.isPublished ? 'PUBLISHED' : 'HIDDEN'}
+                    </span>
                   </div>
 
-                  <h3 className="text-3xl font-black mb-3 text-[#2c331f] font-display tracking-tight leading-tight">
+                  <h3 className="text-3xl font-black mb-3 text-[#2c331f] font-display tracking-tight leading-tight group-hover:text-[#5a6b3a] transition-colors">
                     {stay.title}
                   </h3>
                   
-                  <div className="space-y-3 mb-6">
+                  <div className="space-y-2 mb-4">
                     <p className="text-xs font-bold text-[#5a6b3a] flex items-center uppercase tracking-widest">
                       <MapPin size={14} className="mr-2 text-[#2c331f]" /> {stay.location}
                     </p>
@@ -113,15 +155,46 @@ export default function AdminPastEventsPage() {
                       {new Date(stay.startDate).toLocaleDateString()} - {new Date(stay.endDate).toLocaleDateString()}
                     </p>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 border-t-2 border-[#2c331f] bg-gray-50">
+                  <div className="mt-4 pt-4 border-t border-dashed border-gray-200 flex items-center justify-between text-xs font-bold text-[#5a6b3a]">
+                    <span className="flex items-center gap-1.5 text-[#2c331f]">
+                      <BarChart3 size={15} /> View Event Metrics & Turnout →
+                    </span>
+                  </div>
+                </Link>
+
+                {/* Footer Action Buttons */}
+                <div className="grid grid-cols-3 border-t-2 border-[#2c331f] bg-gray-50">
                   <Link
                     href={`/admin/past-events/${stay.id}`}
-                    className="flex items-center justify-center gap-2 py-4 text-[#2c331f] font-bold uppercase tracking-widest text-xs hover:bg-[#e8c37b] transition-colors"
+                    className="flex items-center justify-center gap-1 py-3 text-[#2c331f] font-bold uppercase tracking-widest text-[10px] border-r-2 border-[#2c331f] hover:bg-[#e8c37b] transition-colors"
                   >
-                    <Edit size={16} strokeWidth={2.5} /> Edit Details
+                    <Edit size={13} strokeWidth={2.5} /> Edit
                   </Link>
+
+                  <button
+                    onClick={() => togglePublished(stay.id, stay.isPublished)}
+                    className={`flex items-center justify-center gap-1 py-3 font-bold uppercase tracking-widest text-[10px] border-r-2 border-[#2c331f] transition-colors ${
+                      stay.isPublished ? 'text-amber-800 hover:bg-amber-100' : 'text-emerald-700 hover:bg-emerald-100'
+                    }`}
+                  >
+                    {stay.isPublished ? (
+                      <>
+                        <EyeOff size={13} strokeWidth={2.5} /> Hide
+                      </>
+                    ) : (
+                      <>
+                        <Eye size={13} strokeWidth={2.5} /> Show
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => deletePastEvent(stay.id, stay.title)}
+                    className="flex items-center justify-center gap-1 py-3 text-red-600 font-bold uppercase tracking-widest text-[10px] hover:bg-red-100 transition-colors"
+                  >
+                    <Trash2 size={13} strokeWidth={2.5} /> Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -131,3 +204,4 @@ export default function AdminPastEventsPage() {
     </div>
   );
 }
+

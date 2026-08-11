@@ -140,14 +140,14 @@ export default function AdminStaysPage() {
           </Link>
         </div>
 
-        {stays.filter(s => s.status !== 'DONE').length === 0 ? (
+        {stays.filter(s => s.status !== 'DONE' && new Date(s.endDate) >= new Date()).length === 0 ? (
           <div className="text-center p-16 bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f]">
             <Globe size={48} strokeWidth={2} className="mx-auto mb-5 text-[#2c331f]" />
             <h3 className="text-3xl font-black mb-2 text-[#2c331f] font-display tracking-tight">
-              No Popups Found
+              No Active Popups Found
             </h3>
             <p className="text-[#5a6b3a] font-bold uppercase tracking-widest text-xs mb-8">
-              You haven't created any active stays yet.
+              You haven't created any active stays yet. Completed/ended stays appear in Past Events.
             </p>
             <Link 
               href="/admin/stays/create" 
@@ -159,7 +159,7 @@ export default function AdminStaysPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {stays.filter(s => s.status !== 'DONE').map((stay) => (
+            {stays.filter(s => s.status !== 'DONE' && new Date(s.endDate) >= new Date()).map((stay) => (
               <div key={stay.id} className="bg-white rounded-2xl border-2 border-[#2c331f] shadow-[4px_4px_0px_0px_#2c331f] overflow-hidden flex flex-col relative">
                 
                 {stay.isFeatured && (
@@ -169,7 +169,7 @@ export default function AdminStaysPage() {
                 )}
                 
                 <div className="p-6 md:p-8 flex-1">
-                  <div className="flex gap-2 items-center mb-4">
+                  <div className="flex flex-wrap gap-2 items-center mb-4">
                     <span className="bg-[#f7eedb] px-2 py-1 rounded-md border-2 border-[#2c331f] text-[#2c331f] font-bold text-[10px]">
                       {stay.stayId}
                     </span>
@@ -184,6 +184,11 @@ export default function AdminStaysPage() {
                       {stay.isPublished ? <Globe size={12} /> : <FileX size={12} />}
                       {stay.isPublished ? "Published" : "Draft"}
                     </button>
+                    {new Date(stay.endDate) < new Date() && (
+                      <span className="bg-amber-100 border-2 border-amber-600 text-amber-800 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest">
+                        ENDED
+                      </span>
+                    )}
                   </div>
 
                   <h3 className="text-3xl font-black mb-3 text-[#2c331f] font-display tracking-tight leading-tight">

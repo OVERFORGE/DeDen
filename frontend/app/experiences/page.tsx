@@ -7,8 +7,15 @@ import { ArrowRight, MapPin, Calendar, Star } from "lucide-react";
 export const dynamic = 'force-dynamic';
 
 async function getPastExperiences() {
+  const now = new Date();
   const stays = await db.stay.findMany({
-    where: { status: "DONE" },
+    where: {
+      isPublished: true,
+      OR: [
+        { status: "DONE" },
+        { endDate: { lt: now } }
+      ]
+    },
     orderBy: { endDate: "desc" },
   });
   return stays;

@@ -160,7 +160,7 @@ interface TicketPdfParams {
 export async function renderTicketPdf(params: TicketPdfParams): Promise<Buffer> {
   const { ticketCode, guestName, qrToken, stayTitle, stayLocation, checkInDate, checkOutDate } = params;
 
-  const qrPngBuffer = await QRCode.toBuffer(qrToken, {
+  const qrPngBuffer = await (QRCode as any).toBuffer(qrToken, {
     color: { dark: '#1F2328', light: '#FFFFFF' },
     width: 400,
     margin: 1,
