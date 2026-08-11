@@ -62,9 +62,18 @@ export async function PATCH(
     const { id } = await context.params;
     const body = await request.json();
 
-    // Remove 'id' from body if it exists
-    if (body.id) {
-      delete body.id;
+    // Strip anything that isn't a writable Stay column.
+    //
+    // Prisma turns each field into its own MongoDB aggregation stage, and
+    // Atlas hard-caps pipelines at 50 stages. Stay has 58 columns, so a
+    // client that echoes the whole record back (which the edit form used to
+    // do) blows the limit and every save 500s with
+    // "Pipeline length greater than 50 not supported". Filtering to real,
+    // changed columns keeps updates small and also stops relation/meta
+    // fields (id, createdAt, bookings, …) reaching Prisma.
+    const IMMUTABLE = new Set(['id', '_id', 'createdAt', 'updatedAt', 'bookings', 'tickets', 'referralCodes']);
+    for (const key of Object.keys(body)) {
+      if (IMMUTABLE.has(key)) delete body[key];
     }
 
     const dataToUpdate: any = { ...body };
@@ -76,6 +85,14 @@ export async function PATCH(
     
     if (body.endDate) {
       dataToUpdate.endDate = new Date(body.endDate);
+    }
+
+    // Mandatory-core dates: blank means "no required nights", so normalise
+    // empty strings to null rather than an Invalid Date.
+    for (const key of ['coreStartDate', 'coreEndDate'] as const) {
+      if (body[key] !== undefined) {
+        dataToUpdate[key] = body[key] ? new Date(body[key]) : null;
+      }
     }
 
     if (dataToUpdate.startDate && dataToUpdate.endDate) {
@@ -153,12 +170,75 @@ export async function PATCH(
       dataToUpdate.sponsorIds = Array.isArray(body.sponsorIds) ? body.sponsorIds : [];
     }
 
-    // --- 5. Update the Stay ---
+    // --- 5. Narrow to fields that actually changed ---
+    //
+    // Prisma emits one aggregation stage per updated field and Atlas caps
+    // pipelines at 50, so a caller sending the whole 58-column record fails
+    // outright. Diffing here means the write is always proportional to what
+    // genuinely changed, regardless of how much the client sent.
+    const existing = await db.stay.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Stay not found' }, { status: 404 });
+    }
+
+    // --- 5b. Validate the mandatory-core range against the stay window ---
+    //
+    // A core that sits outside the window (or is inverted) would make the
+    // stay impossible to book — no guest range could ever satisfy both
+    // constraints — and the failure would only surface as a confusing
+    // rejection on the apply form. Catch it here instead.
+    const mergedStart = new Date((dataToUpdate.startDate ?? existing.startDate) as any);
+    const mergedEnd = new Date((dataToUpdate.endDate ?? existing.endDate) as any);
+    const rawCoreStart = dataToUpdate.coreStartDate ?? (existing as any).coreStartDate;
+    const rawCoreEnd = dataToUpdate.coreEndDate ?? (existing as any).coreEndDate;
+
+    if (rawCoreStart && rawCoreEnd) {
+      const coreStart = new Date(rawCoreStart as any);
+      const coreEnd = new Date(rawCoreEnd as any);
+
+      if (Number.isNaN(coreStart.getTime()) || Number.isNaN(coreEnd.getTime())) {
+        return NextResponse.json({ error: 'Required-nights dates are not valid dates' }, { status: 400 });
+      }
+      if (coreEnd.getTime() <= coreStart.getTime()) {
+        return NextResponse.json(
+          { error: 'Required-nights end must be after required-nights start' },
+          { status: 400 }
+        );
+      }
+      if (coreStart.getTime() < mergedStart.getTime() || coreEnd.getTime() > mergedEnd.getTime()) {
+        return NextResponse.json(
+          { error: 'Required nights must fall inside the stay window' },
+          { status: 400 }
+        );
+      }
+    } else if ((rawCoreStart && !rawCoreEnd) || (!rawCoreStart && rawCoreEnd)) {
+      return NextResponse.json(
+        { error: 'Set both required-nights dates, or leave both empty' },
+        { status: 400 }
+      );
+    }
+
+    const changedData: any = {};
+    for (const [key, value] of Object.entries(dataToUpdate)) {
+      const before = (existing as any)[key];
+      const isSame =
+        before instanceof Date && (value instanceof Date || typeof value === 'string')
+          ? before.getTime() === new Date(value as any).getTime()
+          : JSON.stringify(before ?? null) === JSON.stringify(value ?? null);
+
+      if (!isSame) changedData[key] = value;
+    }
+
+    if (Object.keys(changedData).length === 0) {
+      return NextResponse.json(existing);
+    }
+
+    // --- 6. Update the Stay ---
     const updatedStay = await db.stay.update({
       where: {
         id: id,
       },
-      data: dataToUpdate,
+      data: changedData,
     });
 
     return NextResponse.json(updatedStay);

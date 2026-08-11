@@ -223,3 +223,24 @@ export async function incrementReferralUsage(referralCodeId: string) {
     data: { usageCount: { increment: 1 } },
   });
 }
+
+/**
+ * Gives a referral-code use back when the booking that consumed it reaches a
+ * terminal state (expired, cancelled, refunded). Without this, abandoned
+ * applications permanently burn slots against a code's `maxUsage` — a
+ * community code capped at 50 could be exhausted by 50 people who never paid.
+ *
+ * Clamped at 0 so repeated/duplicate releases can't drive the count negative.
+ */
+export async function releaseReferralUsage(referralCodeId: string) {
+  const code = await db.referralCode.findUnique({
+    where: { id: referralCodeId },
+    select: { usageCount: true },
+  });
+  if (!code || code.usageCount <= 0) return;
+
+  await db.referralCode.update({
+    where: { id: referralCodeId },
+    data: { usageCount: { decrement: 1 } },
+  });
+}

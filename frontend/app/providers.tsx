@@ -124,7 +124,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <ConnectKitProvider
             mode="dark"
             options={{
-              enforceSupportedChains: true,
+              // OFF deliberately. When on, ConnectKit throws up its own dark
+              // "Switch Networks" modal the moment a wallet connects on a
+              // chain it doesn't recognise — on top of our payment modal, in
+              // completely different chrome, asking the user to pick a network
+              // they already chose in our own UI.
+              //
+              // It's also redundant: handlePay() calls switchChainAsync() with
+              // the selected chain right before sending, so the wallet is put
+              // on the correct network as part of paying.
+              enforceSupportedChains: false,
               embedGoogleFonts: true,
             }}
           >

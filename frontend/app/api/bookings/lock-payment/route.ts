@@ -12,6 +12,8 @@ import { BookingStatus } from '@prisma/client';
 import { parseUnits } from 'viem';
 import { chainConfig } from '@/lib/config';
 import { requireBookingOwner, authErrorResponse } from '@/lib/api-auth';
+import { settleBookingIfStale } from '@/lib/booking-lifecycle';
+import { checkRangeAvailability } from '@/lib/inventory';
 
 export async function POST(request: Request) {
   try {
@@ -35,6 +37,12 @@ export async function POST(request: Request) {
     // 1. Ownership check — only the booking's owner (or an admin) may lock
     //    payment details for it.
     const { booking: ownedBooking } = await requireBookingOwner(bookingId);
+
+    // Expiry is settled lazily (no cron on the current plan), so flip a
+    // stale PENDING booking to EXPIRED *before* reading it — otherwise a
+    // booking whose window closed but that nobody happened to load could
+    // still be locked and paid, and its slot may already be re-sold.
+    await settleBookingIfStale(bookingId);
 
     const booking = await db.booking.findUnique({
       where: { bookingId },
@@ -62,6 +70,56 @@ export async function POST(request: Request) {
         },
         { status: 409 }
       );
+    }
+
+    // Belt-and-braces expiry guard. settleBookingIfStale above already flips
+    // stale PENDING rows, but this also covers the window between that read
+    // and here, and rows whose expiresAt was set without a status flip.
+    if (
+      booking.status === BookingStatus.PENDING &&
+      booking.expiresAt &&
+      booking.expiresAt.getTime() <= Date.now()
+    ) {
+      return NextResponse.json(
+        { error: 'This payment window has expired. Please contact support to reopen it.' },
+        { status: 409 }
+      );
+    }
+
+    // Never take money for a stay that's already finished — the slot has no
+    // value at that point and the payment would just need refunding.
+    if (booking.stay.endDate && booking.stay.endDate.getTime() < Date.now()) {
+      return NextResponse.json(
+        { error: 'This stay has already ended and can no longer be paid for.' },
+        { status: 409 }
+      );
+    }
+
+    // ⚠️ The actual pre-payment capacity gate. A PENDING booking holds no
+    // slot yet — it only starts occupying capacity once RESERVED/CONFIRMED,
+    // which happens after verifyPayment sees the money land on-chain. That
+    // makes THIS the last point where a "sorry, sold out" can be shown
+    // instead of a guest sending real crypto for a spot that's already
+    // gone. Only applies to the first lock — the remaining-payment leg
+    // (isRemainingLeg) already holds its slot from the reservation payment,
+    // so it isn't requesting anything new.
+    if (!isRemainingLeg) {
+      const range = await checkRangeAvailability(
+        booking.stayId,
+        booking.guestCount || 1,
+        booking.checkInDate ?? booking.stay.startDate,
+        booking.checkOutDate ?? booking.stay.endDate
+      );
+      if (!range.ok) {
+        return NextResponse.json(
+          {
+            error: `This stay is sold out for your dates${
+              range.conflictNight ? ` (${range.conflictNight})` : ''
+            }. Please contact support or try different dates.`,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // 3. Chain must be enabled for this stay (or, if the stay has no

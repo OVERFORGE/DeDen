@@ -8,6 +8,7 @@ import { db } from '@/lib/database';
 import { sendContactNotification } from '@/lib/email';
 import { isRateLimited, getRequestIp } from '@/lib/rate-limit';
 import { z } from 'zod';
+import { firstValidationMessage } from '@/lib/validate';
 
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
     const parsed = contactSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || 'Invalid submission' },
+        { error: firstValidationMessage(parsed.error, 'Invalid submission') },
         { status: 400 }
       );
     }

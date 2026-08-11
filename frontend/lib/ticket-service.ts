@@ -160,12 +160,16 @@ interface TicketPdfParams {
 export async function renderTicketPdf(params: TicketPdfParams): Promise<Buffer> {
   const { ticketCode, guestName, qrToken, stayTitle, stayLocation, checkInDate, checkOutDate } = params;
 
-  const qrPngBuffer = await (QRCode as any).toBuffer(qrToken, {
+  // Rendered via toDataURL rather than toBuffer: the `qrcode` package ships
+  // its own type declarations that omit toBuffer, so this keeps the build
+  // type-clean without pulling in @types/qrcode just for one signature.
+  const qrDataUrl = await QRCode.toDataURL(qrToken, {
     color: { dark: '#1F2328', light: '#FFFFFF' },
     width: 400,
     margin: 1,
     errorCorrectionLevel: 'H',
   });
+  const qrPngBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64');
 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([360, 560]);

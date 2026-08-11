@@ -101,14 +101,22 @@ export async function GET(
         },
       ];
 
-      // Additional guests on the same booking, from the guests[] snapshot.
+      // Additional guests on the same booking.
+      //
+      // PRIVACY: `optInGuestList` is a per-BOOKING flag set by whoever filled
+      // in the application — it is not consent from the other people on that
+      // booking. Publishing a secondary guest's X handle (a directly
+      // identifying, contactable handle) on the strength of someone else's
+      // click isn't consent we actually have. So they're listed by first name
+      // only, with no social handle, purely so the roster count and "who's
+      // here" reads correctly.
       const extra = ((booking.guests as any[]) || []).slice(1);
       for (const g of extra) {
         if (!g?.fullName) continue;
         entries.push({
-          name: g.fullName,
-          role: g.profession || null,
-          xHandle: normalizeXHandle(g.xHandle),
+          name: String(g.fullName).trim().split(/\s+/)[0],
+          role: null,
+          xHandle: null,
           isPrimary: false,
         });
       }

@@ -8,7 +8,8 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus, PaymentToken } from '@prisma/client';
 import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
-import { releaseStaySlots } from '@/lib/inventory';
+import { recomputeStayAvailability } from '@/lib/inventory';
+import { releaseReferralUsage } from '@/lib/pricing';
 import { sendRefundConfirmedEmail } from '@/lib/email';
 
 const REFUNDABLE_STATUSES: BookingStatus[] = [BookingStatus.CONFIRMED, BookingStatus.RESERVED];
@@ -80,7 +81,12 @@ export async function POST(
       data: { status: BookingStatus.REFUNDED },
     });
 
-    await releaseStaySlots(booking.stayId, booking.guestCount || 1);
+    await recomputeStayAvailability(booking.stayId);
+
+    // Refunded bookings shouldn't keep consuming a referral code's maxUsage.
+    if (booking.referralCodeId) {
+      await releaseReferralUsage(booking.referralCodeId);
+    }
 
     await db.activityLog.create({
       data: {
@@ -96,7 +102,7 @@ export async function POST(
     let emailSent = false;
     if (booking.user?.email) {
       emailSent = await sendRefundConfirmedEmail({
-        recipientEmail: booking.user.email,
+        recipientEmail: booking.guestEmail || booking.user.email,
         recipientName: booking.user.displayName || 'Guest',
         bookingId: booking.bookingId,
         stayTitle: booking.stay.title,

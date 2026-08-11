@@ -1,17 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useSignMessage, useConnect, useDisconnect } from "wagmi";
-import { injected } from "wagmi/connectors";
-import { SiweMessage } from "siwe";
 import { useSession, signOut } from "next-auth/react";
-import { ConnectKitButton } from "connectkit";
 import Link from "next/link";
 import {
-  AlertTriangle,
   Calendar,
   Mail,
-  Wallet,
   CheckCircle,
   XCircle,
   Clock,
@@ -33,7 +27,6 @@ import {
   ArrowRight,
   Zap,
   TrendingUp,
-  Shield,
   Star,
 } from "lucide-react";
 
@@ -348,16 +341,10 @@ function ProfileDrawer({
 
 export default function UserDashboard() {
   const { data: session, status: sessionStatus } = useSession();
-  const { address, isConnected, chainId } = useAccount();
-  const { connectAsync } = useConnect();
-  const { signMessageAsync } = useSignMessage();
-  const { disconnect } = useDisconnect();
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isLinkingWallet, setIsLinkingWallet] = useState(false);
-  const [linkMessage, setLinkMessage] = useState<string | null>(null);
 
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [filter, setFilter] = useState<FilterKey>("ALL");
@@ -369,17 +356,6 @@ export default function UserDashboard() {
 
   const userEmail = session?.user?.email;
   const userName = session?.user?.name;
-  const linkedWallet = session?.user ? (session.user as any).walletAddress : null;
-  const isWalletLinked = Boolean(linkedWallet);
-
-  const truncateAddress = (addr: string | null) => {
-    if (!addr) return "";
-    return `${addr.substring(0, 6)}…${addr.substring(addr.length - 4)}`;
-  };
-
-  const isWalletMismatched =
-    linkedWallet && isConnected && address &&
-    linkedWallet.toLowerCase() !== address.toLowerCase();
 
   // ─── Data fetching ─────────────────────────────────────────────────────────
 
@@ -434,63 +410,6 @@ export default function UserDashboard() {
       } catch {}
     })();
   }, [sessionStatus]);
-
-  // ─── Wallet handlers ────────────────────────────────────────────────────────
-
-  const handleLinkWallet = async () => {
-    if (!session?.user) { setLinkMessage("Please sign in first"); return; }
-    setIsLinkingWallet(true); setLinkMessage(null); setError(null);
-    try {
-      let currentAddress = address;
-      let currentChainId = chainId;
-      if (!currentAddress) {
-        await connectAsync({ connector: injected() });
-        let attempts = 0;
-        while ((!address || !chainId) && attempts < 10) {
-          await new Promise((r) => setTimeout(r, 100));
-          currentAddress = address; currentChainId = chainId; attempts++;
-        }
-      }
-      if (!currentAddress) throw new Error("Failed to connect wallet");
-      const csrfRes = await fetch("/api/auth/csrf");
-      if (!csrfRes.ok) throw new Error("Failed to fetch nonce");
-      const { csrfToken } = await csrfRes.json();
-      const message = new SiweMessage({
-        domain: window.location.host, address: currentAddress,
-        statement: "Link this wallet to your account",
-        uri: window.location.origin, version: "1",
-        chainId: currentChainId || 1, nonce: csrfToken,
-      });
-      const signature = await signMessageAsync({ message: message.prepareMessage() });
-      const linkRes = await fetch("/api/user/link-wallet", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: JSON.stringify(message), signature }),
-      });
-      const linkData = await linkRes.json();
-      if (!linkRes.ok) throw new Error(linkData.error || "Failed to link wallet");
-      setLinkMessage("Wallet linked successfully!");
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) {
-      if (err.message.includes("User rejected") || err.message.includes("User denied")) {
-        setError("Wallet linking cancelled");
-      } else {
-        setError(err.message || "Failed to link wallet");
-      }
-    } finally {
-      setIsLinkingWallet(false);
-    }
-  };
-
-  const handleUnlinkWallet = async () => {
-    if (!confirm("Are you sure you want to unlink your wallet?")) return;
-    try {
-      const res = await fetch("/api/user/unlink-wallet", { method: "POST" });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to unlink wallet"); }
-      setLinkMessage("Wallet unlinked successfully");
-      disconnect();
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) { setError(err.message); }
-  };
 
   // ─── Status helpers ─────────────────────────────────────────────────────────
 
@@ -614,42 +533,11 @@ export default function UserDashboard() {
                   {userName || "Welcome back"}
                 </h1>
                 <p className="text-xs font-bold text-[#5a6b3a] truncate">{userEmail}</p>
-                {isWalletLinked && (
-                  <p className="text-[10px] font-bold text-[#2c331f]/60 font-mono mt-0.5">
-                    {truncateAddress(linkedWallet)}
-                  </p>
-                )}
               </div>
             </div>
 
             {/* Actions */}
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {/* Wallet section */}
-              {!isWalletLinked ? (
-                <div className="flex items-center gap-2">
-                  <div className="scale-90 origin-left">
-                    <ConnectKitButton />
-                  </div>
-                  {isConnected && (
-                    <button
-                      onClick={handleLinkWallet}
-                      disabled={isLinkingWallet}
-                      className="flex items-center gap-1.5 py-2 px-3 bg-[#9db47d] text-[#2c331f] rounded-xl border-2 border-[#2c331f] shadow-[2px_2px_0_0_#2c331f] hover:shadow-none hover:translate-y-0.5 hover:translate-x-0.5 transition-all font-bold text-[10px] uppercase tracking-widest disabled:opacity-50"
-                    >
-                      {isLinkingWallet ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
-                      Link Wallet
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={handleUnlinkWallet}
-                  className="flex items-center gap-1.5 py-2 px-3 bg-[#f7eedb] text-[#2c331f] rounded-xl border-2 border-[#2c331f] hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors font-bold text-[10px] uppercase tracking-widest"
-                >
-                  <Shield size={12} /> Unlink Wallet
-                </button>
-              )}
-
               <button
                 onClick={() => profile && setShowProfileDrawer(true)}
                 disabled={!profile}
@@ -668,22 +556,6 @@ export default function UserDashboard() {
           </div>
 
           {/* ── Alerts ───────────────────────────────────────────────────────── */}
-          {isWalletMismatched && (
-            <div className="mb-4 p-4 bg-[#e8c37b] rounded-2xl border-2 border-[#2c331f] shadow-[3px_3px_0_0_#2c331f] flex items-start gap-3">
-              <AlertTriangle strokeWidth={3} size={16} className="mt-0.5 shrink-0" />
-              <div>
-                <p className="font-black text-sm">Wallet Mismatch</p>
-                <p className="text-xs font-medium text-[#2c331f]/80 mt-0.5">
-                  Connected wallet ({truncateAddress(address)}) doesn't match your linked wallet ({truncateAddress(linkedWallet)}). Switch wallets in your browser.
-                </p>
-              </div>
-            </div>
-          )}
-          {linkMessage && (
-            <div className="mb-4 p-3 bg-green-50 border-2 border-green-300 text-green-800 rounded-xl text-xs font-bold">
-              {linkMessage}
-            </div>
-          )}
           {error && (
             <div className="mb-4 p-3 bg-red-50 border-2 border-red-300 text-red-700 rounded-xl text-xs font-bold">
               {error}

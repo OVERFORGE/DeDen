@@ -16,7 +16,7 @@ import { BookingStatus } from '@prisma/client';
 import { sendApprovalEmail } from '@/lib/email';
 import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
 import { computeReservationSplit } from '@/lib/pricing';
-import { hasAvailableSlots } from '@/lib/inventory';
+import { checkRangeAvailability } from '@/lib/inventory';
 
 /**
  * Batch approve multiple bookings
@@ -62,9 +62,19 @@ export async function PATCH(request: NextRequest) {
         }
 
         const guestCount = booking.guestCount || 1;
-        const slotsOk = await hasAvailableSlots(booking.stayId, guestCount);
-        if (!slotsOk) {
-          results.failed.push({ bookingId, error: `Not enough slots remaining (need ${guestCount})` });
+        const range = await checkRangeAvailability(
+          booking.stayId,
+          guestCount,
+          booking.checkInDate ?? booking.stay.startDate,
+          booking.checkOutDate ?? booking.stay.endDate
+        );
+        if (!range.ok) {
+          results.failed.push({
+            bookingId,
+            error: `Not enough slots remaining (need ${guestCount}${
+              range.conflictNight ? ` on ${range.conflictNight}` : ''
+            }, only ${range.availableOnConflict ?? 0} free)`,
+          });
           continue;
         }
 
@@ -119,7 +129,7 @@ export async function PATCH(request: NextRequest) {
         const paymentUrl = `/booking/${bookingId}`;
         try {
           await sendApprovalEmail({
-            recipientEmail: booking.user.email!,
+            recipientEmail: (booking.guestEmail || booking.user.email)!,
             recipientName: booking.user.displayName || 'Guest',
             bookingId: booking.bookingId,
             stayTitle: booking.stay.title,

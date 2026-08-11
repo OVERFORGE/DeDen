@@ -6,6 +6,8 @@ import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
 import { sendPaymentExpiryEmail } from '@/lib/email';
 import { requireAdminOrJob, authErrorResponse } from '@/lib/api-auth';
+import { recomputeStayAvailability } from '@/lib/inventory';
+import { releaseReferralUsage } from '@/lib/pricing';
 
 /**
  * POST /api/bookings/check-expiry
@@ -20,14 +22,23 @@ export async function POST(request: Request) {
     await requireAdminOrJob(request);
 
     const now = new Date();
-    
-    // Find all PENDING bookings that have expired
+
+    // Two kinds of stale booking (mirrors lib/booking-lifecycle.ts):
+    //   1. PENDING past its payment window — never held a slot.
+    //   2. RESERVED whose stay has ENDED with the balance never paid — the
+    //      deposit is holding a slot that's now stranded forever. Keyed off
+    //      stay.endDate rather than the balance due date (= check-in) so we
+    //      never cancel a guest who plans to settle up on arrival.
     const expiredBookings = await db.booking.findMany({
       where: {
-        status: BookingStatus.PENDING,
-        expiresAt: {
-          lte: now,
-        },
+        OR: [
+          { status: BookingStatus.PENDING, expiresAt: { lte: now } },
+          {
+            status: BookingStatus.RESERVED,
+            remainingPaid: false,
+            stay: { is: { endDate: { lt: now } } },
+          },
+        ],
       },
       include: {
         user: true,
@@ -41,6 +52,10 @@ export async function POST(request: Request) {
 
     for (const booking of expiredBookings) {
       try {
+        // Only a RESERVED booking was actually holding inventory — a PENDING
+        // one never got as far as a paid deposit.
+        const wasHoldingSlots = booking.status === BookingStatus.RESERVED;
+
         // Update status to EXPIRED
         await db.booking.update({
           where: { id: booking.id },
@@ -48,6 +63,15 @@ export async function POST(request: Request) {
             status: BookingStatus.EXPIRED,
           },
         });
+
+        if (wasHoldingSlots) {
+          await recomputeStayAvailability(booking.stayId);
+        }
+
+        // Give the referral-code use back — this booking never completed.
+        if (booking.referralCodeId) {
+          await releaseReferralUsage(booking.referralCodeId);
+        }
 
         // Log activity
         await db.activityLog.create({
@@ -60,6 +84,10 @@ export async function POST(request: Request) {
             details: {
               expiredAt: now,
               wasReservation: booking.requiresReservation,
+              reason: wasHoldingSlots
+                ? 'reservation_balance_never_paid_stay_ended'
+                : 'payment_window_elapsed',
+              slotsReleased: wasHoldingSlots ? booking.guestCount || 1 : 0,
             },
           },
         });
@@ -68,7 +96,7 @@ export async function POST(request: Request) {
         if (booking.user?.email) {
           try {
             await sendPaymentExpiryEmail({
-              recipientEmail: booking.user.email,
+              recipientEmail: booking.guestEmail || booking.user.email,
               recipientName: booking.user.displayName || 'Guest',
               bookingId: booking.bookingId,
               stayTitle: booking.stay.title,

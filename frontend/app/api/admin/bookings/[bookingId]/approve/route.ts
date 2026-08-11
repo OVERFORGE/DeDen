@@ -12,7 +12,7 @@ import { sendApprovalEmail } from "@/lib/email";
 import { Prisma } from "@prisma/client";
 import { requireAdmin, authErrorResponse } from "@/lib/api-auth";
 import { computeReservationSplit } from "@/lib/pricing";
-import { hasAvailableSlots } from "@/lib/inventory";
+import { checkRangeAvailability } from "@/lib/inventory";
 
 export async function POST(
   request: NextRequest,
@@ -58,12 +58,22 @@ export async function POST(
     }
 
     // ✅ Overbooking guard — the stay may have filled up since this
-    // application was submitted.
+    // application was submitted. Checked per-night, over the range this
+    // booking actually occupies, not the whole stay window.
     const guestCount = booking.guestCount || 1;
-    const slotsOk = await hasAvailableSlots(booking.stayId, guestCount);
-    if (!slotsOk) {
+    const range = await checkRangeAvailability(
+      booking.stayId,
+      guestCount,
+      booking.checkInDate ?? booking.stay.startDate,
+      booking.checkOutDate ?? booking.stay.endDate
+    );
+    if (!range.ok) {
       return NextResponse.json(
-        { error: `Not enough slots remaining for this stay (need ${guestCount}).` },
+        {
+          error: `Not enough slots remaining for this stay (need ${guestCount}${
+            range.conflictNight ? ` on ${range.conflictNight}` : ''
+          }, only ${range.availableOnConflict ?? 0} free).`,
+        },
         { status: 409 }
       );
     }
@@ -136,7 +146,7 @@ export async function POST(
 
     try {
       await sendApprovalEmail({
-        recipientEmail: booking.user.email!,
+        recipientEmail: (booking.guestEmail || booking.user.email)!,
         recipientName: booking.user.displayName || "Guest",
         bookingId: booking.bookingId,
         stayTitle: booking.stay.title,

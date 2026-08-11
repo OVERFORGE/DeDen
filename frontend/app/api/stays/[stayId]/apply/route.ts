@@ -25,8 +25,9 @@ import { BookingStatus } from '@prisma/client';
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { computeBookingTotals, incrementReferralUsage, PricingError } from '@/lib/pricing';
-import { hasAvailableSlots, holdStaySlots } from '@/lib/inventory';
+import { checkRangeAvailability, recomputeStayAvailability } from '@/lib/inventory';
 import { z } from 'zod';
+import { firstValidationMessage } from '@/lib/validate';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const DEFAULT_PAYMENT_WINDOW_HOURS = 24;
@@ -102,21 +103,13 @@ export async function POST(
     const parsed = applyBodySchema.safeParse(rawBody);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || 'Invalid request body' },
+        { error: firstValidationMessage(parsed.error, 'Invalid request body') },
         { status: 400 }
       );
     }
     const body = parsed.data;
 
-    const numberOfNights = Number(body.numberOfNights);
     const age = Number(body.age);
-
-    if (!numberOfNights || numberOfNights < 1) {
-      return NextResponse.json(
-        { error: 'Please select at least 1 night' },
-        { status: 400 }
-      );
-    }
 
     if (!age || age < 18) {
       return NextResponse.json(
@@ -163,38 +156,100 @@ export async function POST(
       );
     }
 
-    // Validate nights against stay duration
-    const stayDuration = stay.duration || Math.ceil(
-      (new Date(stay.endDate).getTime() - new Date(stay.startDate).getTime()) / (1000 * 60 * 60 * 24)
-    );
+    // ── Dates & nights are resolved SERVER-SIDE ────────────────────────────
+    //
+    // ⚠️ Nights multiply the price in computeBookingTotals(), so they can
+    // never be taken from the client. Previously `numberOfNights` was trusted
+    // as sent, which meant a guest could POST `numberOfNights: 1` against a
+    // 12-night fixed stay and be charged a twelfth of the real price.
+    //
+    //   • Fixed stays (default): the whole event window, full stop. Anything
+    //     the client sent for dates/nights is ignored.
+    //   • Flexible stays: the guest picks a range, but it must sit inside
+    //     [startDate, endDate] — and nights are DERIVED from those dates
+    //     rather than accepted as a separate number.
+    const stayStart = new Date(stay.startDate);
+    const stayEnd = new Date(stay.endDate);
+    const MS_PER_NIGHT = 1000 * 60 * 60 * 24;
 
-    if (numberOfNights > stayDuration) {
+    const stayDuration =
+      stay.duration || Math.ceil((stayEnd.getTime() - stayStart.getTime()) / MS_PER_NIGHT);
+
+    let checkInDate = stayStart;
+    let checkOutDate = stayEnd;
+    let numberOfNights = stayDuration;
+
+    if ((stay as any).allowFlexibleDates) {
+      const requestedIn = new Date(body.checkInDate);
+      const requestedOut = new Date(body.checkOutDate);
+
+      if (Number.isNaN(requestedIn.getTime()) || Number.isNaN(requestedOut.getTime())) {
+        return NextResponse.json(
+          { error: 'Please choose a valid check-in and check-out date' },
+          { status: 400 }
+        );
+      }
+
+      if (requestedOut.getTime() <= requestedIn.getTime()) {
+        return NextResponse.json(
+          { error: 'Check-out must be after check-in' },
+          { status: 400 }
+        );
+      }
+
+      // Compare on day boundaries so a time component can't push a valid
+      // date just outside the window.
+      const dayOf = (d: Date) => Math.floor(d.getTime() / MS_PER_NIGHT);
+      if (dayOf(requestedIn) < dayOf(stayStart) || dayOf(requestedOut) > dayOf(stayEnd)) {
+        return NextResponse.json(
+          {
+            error: `Dates must fall between ${stayStart.toDateString()} and ${stayEnd.toDateString()}`,
+          },
+          { status: 400 }
+        );
+      }
+
+      // Mandatory core: if the organiser marked certain nights as required
+      // (the conference days themselves), the chosen range has to cover all
+      // of them. Guests may still arrive early and/or leave late.
+      if ((stay as any).coreStartDate && (stay as any).coreEndDate) {
+        const coreStart = new Date((stay as any).coreStartDate);
+        const coreEnd = new Date((stay as any).coreEndDate);
+
+        if (dayOf(requestedIn) > dayOf(coreStart) || dayOf(requestedOut) < dayOf(coreEnd)) {
+          return NextResponse.json(
+            {
+              error: `This stay requires you to be booked for ${coreStart.toDateString()} to ${coreEnd.toDateString()}. You can arrive earlier or leave later, but your dates must cover those nights.`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      checkInDate = requestedIn;
+      checkOutDate = requestedOut;
+      numberOfNights = Math.max(1, Math.round((requestedOut.getTime() - requestedIn.getTime()) / MS_PER_NIGHT));
+    }
+
+    if (!numberOfNights || numberOfNights < 1) {
       return NextResponse.json(
-        { error: `Cannot book more than ${stayDuration} nights for this stay` },
+        { error: 'This stay has an invalid date range configured' },
         { status: 400 }
       );
     }
 
-    // 5. Get & Update Authenticated User
-    const emailConflict = await db.user.findFirst({
-      where: {
-        email: body.email,
-        id: { not: userId },
-      },
-    });
-
-    if (emailConflict) {
-      return NextResponse.json(
-        { error: 'This email is already registered with another account.' },
-        { status: 409 }
-      );
-    }
-
+    // 5. Update the authenticated user's profile from the form.
+    //
+    // NOTE: `email` is deliberately NOT written here. It is the account's
+    // identity (established by the Google sign-in) — letting a booking form
+    // silently rewrite it meant typing a different contact address on an
+    // application changed the address you log in / receive everything with.
+    // The per-booking contact address lives on `Booking.guestEmail` instead,
+    // and that's what transactional mail for this booking is sent to.
     const user = await db.user.update({
       where: { id: userId },
       data: {
         displayName: body.displayName,
-        email: body.email,
         firstName: body.firstName,
         lastName: body.lastName,
         role: body.role,
@@ -207,6 +262,9 @@ export async function POST(
         ...(walletAddress ? { walletAddress } : {}),
       },
     });
+
+    // Contact address for THIS booking — what the guest actually typed.
+    const bookingContactEmail = primaryGuest.email || body.email || user.email;
 
     // 6. Check for an existing booking for this stay
     const existingBooking = await db.booking.findFirst({
@@ -266,19 +324,58 @@ export async function POST(
 
     console.log(`[Apply] ${isExtendable ? 'Extending' : 'New'} — guests: ${combinedGuestCount} (+${addedGuestCount}) | nights: ${numberOfNights} | discount: ${pricing.discountPercent}%`);
 
+    // A brand-new application had NO capacity check before this — a stay
+    // could fill up entirely and still keep accepting fresh PENDING
+    // bookings, which only got caught (if ever) at admin-approve time, a
+    // step the common apply-straight-to-PENDING flow skips. Checked per
+    // night over the guest's actual requested range, not the whole stay
+    // window, so a short booking can still fit into a gap a longer one
+    // couldn't.
+    if (!isExtendable) {
+      const range = await checkRangeAvailability(stay.id, submittedGuestCount, checkInDate, checkOutDate);
+      if (!range.ok) {
+        return NextResponse.json(
+          {
+            error: `This stay doesn't have room for ${submittedGuestCount} guest(s)${
+              range.conflictNight ? ` on ${range.conflictNight}` : ''
+            } — only ${range.availableOnConflict ?? 0} spot(s) free${
+              range.conflictNight ? ' that night' : ''
+            }. Try fewer guests or different dates.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const paymentWindowExpiresAt = new Date(Date.now() + DEFAULT_PAYMENT_WINDOW_HOURS * 60 * 60 * 1000);
     let resultBooking;
     let extensionDelta: number | null = null;
 
     if (isExtendable && existingBooking) {
-      // Extra slots are claimed the moment the extension is requested, same
-      // as the initial reservation flow claims a slot before the remaining
-      // leg is paid.
-      if (addedGuestCount > 0 && (existingBooking.status === BookingStatus.RESERVED || existingBooking.status === BookingStatus.CONFIRMED)) {
-        const slotsOk = await hasAvailableSlots(stay.id, addedGuestCount);
-        if (!slotsOk) {
+      // A RESERVED/CONFIRMED booking already occupies capacity — re-check it
+      // any time this request could change its footprint (more guests,
+      // different dates, or both — a flexible-dates stay lets either
+      // change independently). Checked against the FULL new combined guest
+      // count over the NEW dates (`checkInDate`/`checkOutDate`, resolved
+      // server-side above — NOT `existingBooking`'s old ones, which was the
+      // bug: a combined date-change + guest-add validated against the range
+      // being left, not the range being moved to), excluding this booking's
+      // own current occupancy so it isn't compared against itself.
+      if (existingBooking.status === BookingStatus.RESERVED || existingBooking.status === BookingStatus.CONFIRMED) {
+        const range = await checkRangeAvailability(
+          stay.id,
+          combinedGuestCount,
+          checkInDate,
+          checkOutDate,
+          existingBooking.bookingId
+        );
+        if (!range.ok) {
           return NextResponse.json(
-            { error: `Not enough slots remaining for ${addedGuestCount} additional guest(s).` },
+            {
+              error: `Not enough slots remaining for ${combinedGuestCount} guest(s)${
+                range.conflictNight ? ` on ${range.conflictNight}` : ''
+              } (only ${range.availableOnConflict ?? 0} spot(s) free${range.conflictNight ? ' that night' : ''}).`,
+            },
             { status: 409 }
           );
         }
@@ -286,8 +383,8 @@ export async function POST(
 
       const sharedFields = {
         numberOfNights,
-        checkInDate: new Date(body.checkInDate),
-        checkOutDate: new Date(body.checkOutDate),
+        checkInDate,
+        checkOutDate,
         pricePerNightUSDC: pricing.pricePerNightUSDC,
         pricePerNightUSDT: pricing.pricePerNightUSDT,
         originalPrice: pricing.subtotalUSDC,
@@ -311,7 +408,7 @@ export async function POST(
             requiresReservation: pricing.requiresReservation,
             reservationAmount: pricing.reservationAmount,
             remainingAmount: pricing.remainingAmountUSDC,
-            remainingDueDate: pricing.requiresReservation ? new Date(body.checkInDate) : null,
+            remainingDueDate: pricing.requiresReservation ? checkInDate : null,
             expiresAt: paymentWindowExpiresAt,
             // Clear any stale payment lock so it's recomputed against the new total.
             paymentToken: null,
@@ -328,10 +425,6 @@ export async function POST(
         extensionDelta = parseFloat((pricing.finalTotalUSDC - (existingBooking.finalPrice ?? 0)).toFixed(2));
         const newRemaining = parseFloat(((existingBooking.remainingAmount ?? 0) + extensionDelta).toFixed(2));
 
-        if (addedGuestCount > 0) {
-          await holdStaySlots(stay.id, addedGuestCount);
-        }
-
         resultBooking = await db.booking.update({
           where: { id: existingBooking.id },
           data: {
@@ -341,6 +434,13 @@ export async function POST(
             remainingAmount: newRemaining,
           },
         });
+
+        // Recompute AFTER the update above persists the new guest count —
+        // occupancy is derived from the booking rows themselves, so this
+        // has to run once they reflect the extension, not before.
+        if (addedGuestCount > 0) {
+          await recomputeStayAvailability(stay.id);
+        }
       } else {
         // CONFIRMED — fully paid already. Open a fresh "remaining due" leg
         // for just the incremental cost, reusing the existing
@@ -354,10 +454,6 @@ export async function POST(
             { error: 'Could not compute a positive amount due for the added guest(s).' },
             { status: 400 }
           );
-        }
-
-        if (addedGuestCount > 0) {
-          await holdStaySlots(stay.id, addedGuestCount);
         }
 
         resultBooking = await db.booking.update({
@@ -375,6 +471,12 @@ export async function POST(
             remainingChainId: null,
           },
         });
+
+        // See the comment on the RESERVED-extension branch above — this
+        // must run after the guest count is actually persisted.
+        if (addedGuestCount > 0) {
+          await recomputeStayAvailability(stay.id);
+        }
       }
     } else {
       // Fresh booking — either no prior booking, or the prior one is in a
@@ -384,8 +486,8 @@ export async function POST(
         preferredRoomId: body.selectedRoomId || null,
         selectedRoomId: body.selectedRoomId || null,
         numberOfNights,
-        checkInDate: new Date(body.checkInDate),
-        checkOutDate: new Date(body.checkOutDate),
+        checkInDate,
+        checkOutDate,
         pricePerNightUSDC: pricing.pricePerNightUSDC,
         pricePerNightUSDT: pricing.pricePerNightUSDT,
         originalPrice: pricing.subtotalUSDC,
@@ -403,7 +505,7 @@ export async function POST(
         requiresReservation: pricing.requiresReservation,
         reservationAmount: pricing.reservationAmount,
         remainingAmount: pricing.remainingAmountUSDC,
-        remainingDueDate: pricing.requiresReservation ? new Date(body.checkInDate) : null,
+        remainingDueDate: pricing.requiresReservation ? checkInDate : null,
         expiresAt: paymentWindowExpiresAt,
       };
 
@@ -414,7 +516,7 @@ export async function POST(
             status: BookingStatus.PENDING,
             ...commonBookingFields,
             guestName: user.displayName,
-            guestEmail: user.email,
+            guestEmail: bookingContactEmail,
             guestGender: body.gender,
             guestAge: age,
             guestMobile: body.mobileNumber,
@@ -437,7 +539,7 @@ export async function POST(
             userId: user.id,
             stayId: stay.id,
             guestName: user.displayName,
-            guestEmail: user.email,
+            guestEmail: bookingContactEmail,
             guestGender: body.gender,
             guestAge: age,
             guestMobile: body.mobileNumber,
@@ -475,8 +577,8 @@ export async function POST(
           previousGuestCount,
           addedGuestCount,
           guestCount: combinedGuestCount,
-          checkInDate: body.checkInDate,
-          checkOutDate: body.checkOutDate,
+          checkInDate,
+          checkOutDate,
           finalPrice: pricing.finalTotalUSDC,
           extensionDelta,
           requiresReservation: pricing.requiresReservation,
@@ -508,8 +610,8 @@ export async function POST(
           selectedRoomName: pricing.roomName,
           numberOfNights,
           guestCount: combinedGuestCount,
-          checkInDate: body.checkInDate,
-          checkOutDate: body.checkOutDate,
+          checkInDate,
+          checkOutDate,
           finalPriceUSDC: pricing.finalTotalUSDC,
           finalPriceUSDT: pricing.finalTotalUSDT,
           discountType: pricing.discountType,
