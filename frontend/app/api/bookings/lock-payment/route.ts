@@ -192,7 +192,7 @@ export async function POST(request: Request) {
         txHash: null,
         confirmedAt: null,
       },
-      select: { bookingId: true, paymentToken: true, paymentAmount: true, chainId: true },
+      select: { bookingId: true, paymentToken: true, paymentAmount: true, amountBaseUnits: true, chainId: true },
     });
 
     await db.activityLog.create({

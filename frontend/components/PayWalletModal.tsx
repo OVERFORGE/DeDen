@@ -22,6 +22,11 @@ interface PayWalletModalProps {
   sending: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  /** Page-level payment error (e.g. insufficient balance) to surface here. */
+  error?: string | null;
+  /** Runs when the wallet connects; resolves to null if all good, else the
+      reason the payment can't proceed (insufficient token/gas balance…). */
+  preflight?: () => Promise<string | null>;
 }
 
 function isWalletConnect(c: Connector) {
@@ -49,7 +54,7 @@ function connectorHint(c: Connector, ready: boolean, mobile: boolean) {
   return ready ? "Installed" : "Not detected";
 }
 
-export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onClose }: PayWalletModalProps) {
+export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onClose, error: pageError, preflight }: PayWalletModalProps) {
   const { connectors, connectAsync, status: connectStatus } = useConnect();
   const { disconnect } = useDisconnect();
   const { address, isConnected } = useAccount();
@@ -74,6 +79,28 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
       disconnect();
     };
   }, [disconnect]);
+
+  // Run the balance pre-flight the moment the wallet connects (right after
+  // the QR scan), so an "insufficient balance on this chain" warning is
+  // visible here BEFORE the user taps Confirm Payment. Runs once per
+  // connection; re-armed if the wallet disconnects and reconnects.
+  const preflightRunRef = useRef(false);
+  useEffect(() => {
+    if (!isConnected) {
+      preflightRunRef.current = false;
+      return;
+    }
+    if (!preflight || preflightRunRef.current) return;
+    preflightRunRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const msg = await preflight();
+      if (!cancelled && msg) setError(msg);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isConnected, preflight]);
 
   // Which injected connectors actually have a provider available right now.
   //
@@ -259,6 +286,15 @@ export function PayWalletModal({ amountLabel, chainName, sending, onConfirm, onC
               >
                 Use a different wallet
               </button>
+            )}
+
+            {/* Balance / pre-flight or payment errors belong HERE, in the
+                connected view — a warning rendered behind the modal overlay
+                is invisible to the guest who is looking at this screen. */}
+            {(error || pageError) && (
+              <div className="mt-4 w-full max-w-sm bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-left">
+                <p className="text-xs font-bold text-red-800">{error || pageError}</p>
+              </div>
             )}
           </div>
         ) : (

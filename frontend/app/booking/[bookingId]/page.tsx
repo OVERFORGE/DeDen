@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAccount, useSendTransaction, useSwitchChain } from "wagmi";
+import { useAccount, useSendTransaction, useSwitchChain, usePublicClient } from "wagmi";
 import { parseUnits, encodeFunctionData } from "viem";
 import { erc20Abi } from "@/lib/erc20abi";
 import { PayWalletModal } from "@/components/PayWalletModal";
@@ -132,6 +132,11 @@ export default function PaymentPage() {
   const { address, isConnected } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const { sendTransactionAsync } = useSendTransaction();
+  const publicClient = usePublicClient({ chainId: selectedChain });
+
+  // Which payment leg we are mid-verification on. Used by the status poller
+  // to tell "remaining payment didn't land" apart from "booking confirmed".
+  const verifyingLegRef = useRef<"reservation" | "remaining" | "full" | null>(null);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -225,10 +230,30 @@ export default function PaymentPage() {
       try {
         const res = await fetch(`/api/bookings/status/${bookingId}`);
         const data = await res.json();
-        if (data.status === "CONFIRMED" || data.status === "RESERVED") {
+        if (data.status === "CONFIRMED") {
+          verifyingLegRef.current = null;
           setStatus("confirmed");
           clearInterval(interval);
+        } else if (data.status === "RESERVED") {
+          // A RESERVED booking can arrive here two ways:
+          //   1. We just paid the reservation leg — legitimately confirmed.
+          //   2. We were paying the REMAINING leg and it did NOT land (a
+          //      failed/insufficient transfer leaves the booking RESERVED —
+          //      the reservation is safe, but the balance is still owed).
+          // Distinguish via which leg this verifying session was paying.
+          if (verifyingLegRef.current === "remaining") {
+            verifyingLegRef.current = null;
+            setStatus("ready");
+            setError(
+              "Your remaining payment did not confirm on-chain. Your reservation is still safe — please retry the remaining payment."
+            );
+          } else {
+            verifyingLegRef.current = null;
+            setStatus("confirmed");
+          }
+          clearInterval(interval);
         } else if (data.status === "FAILED" || data.status === "EXPIRED") {
+          verifyingLegRef.current = null;
           setStatus("ready");
           setError(`Payment ${data.status.toLowerCase()}. Please retry.`);
           setBooking((prev) =>
@@ -251,13 +276,25 @@ export default function PaymentPage() {
     return () => clearInterval(interval);
   }, [status, bookingId]);
 
-  const handlePay = async () => {
-    if (!booking) return;
-
-    setError(null);
-    setStatus("sending");
-
+  // Lock the payment details and verify the wallet can actually pay, BEFORE
+  // the wallet is ever asked to sign anything. The server derives the
+  // authoritative amount (it never trusts the client number); we check the
+  // connected wallet's token + gas balance against it. Returns null when
+  // everything is good, otherwise a human-readable error.
+  //
+  // Runs in two places: automatically when a wallet connects inside the pay
+  // modal (so the "insufficient balance" warning shows right after the QR
+  // scan), and again as the authoritative gate inside handlePay.
+  const runPreflight = useCallback(async (): Promise<{
+    ok: boolean;
+    message?: string;
+    amountBaseUnits?: string;
+    tokenAddress?: string;
+  }> => {
     try {
+      if (!booking) return { ok: false, message: "Booking not available" };
+      if (!address) return { ok: false, message: "Please connect your wallet first" };
+
       const isReservationPayment = booking.requiresReservation && !booking.reservationPaid;
       const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
 
@@ -270,26 +307,28 @@ export default function PaymentPage() {
         : booking.selectedRoomPriceUSDT || booking.stay.priceUSDT;
 
       if (!amount) {
-        throw new Error("Payment amount not available");
+        return { ok: false, message: "Payment amount not available" };
       }
 
       const chain = chainConfig[selectedChain];
       if (!chain) {
-        throw new Error("Selected chain not supported");
+        return { ok: false, message: "Selected chain not supported" };
       }
 
       const tokenInfo = chain.tokens[selectedToken];
       if (!tokenInfo) {
-        throw new Error(`${selectedToken} not supported on ${chain.name}`);
+        return { ok: false, message: `${selectedToken} not supported on ${chain.name}` };
       }
-      
+
       const currentTreasury = treasuryAddress;
-
       if (!currentTreasury || currentTreasury.includes('PLACEHOLDER') || currentTreasury.trim() === "") {
-        throw new Error("Treasury address is not configured for this network");
+        return { ok: false, message: "Treasury address is not configured for this network" };
       }
 
-      // First lock the payment details
+      // Lock payment details FIRST. That locked amount is what we check the
+      // balance against AND what we actually transfer — so "what you send"
+      // always equals "what gets verified", even if the page's own copy of
+      // the price is stale.
       const lockRes = await fetch("/api/bookings/lock-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -303,50 +342,117 @@ export default function PaymentPage() {
 
       if (!lockRes.ok) {
         const { error } = await lockRes.json();
-        throw new Error(error || "Failed to lock payment details");
+        return { ok: false, message: error || "Failed to lock payment details" };
       }
 
-      {
-        // EVM Wagmi Flow
-        if (!address) {
-          throw new Error("Please connect your wallet first");
-        }
+      const lockData = await lockRes.json();
+      const lockedDetails = lockData?.lockedDetails as
+        | { paymentAmount?: number; amountBaseUnits?: string }
+        | undefined;
+      const serverAmount = lockedDetails?.paymentAmount ?? amount;
+      const serverAmountBaseUnits =
+        lockedDetails?.amountBaseUnits ??
+        parseUnits(serverAmount.toString(), tokenInfo.decimals).toString();
 
-        await switchChainAsync({ chainId: selectedChain });
+      // ⚠️ Balance check — BEFORE asking the wallet to send. A wallet without
+      // the selected token will happily broadcast an ERC20 transfer that then
+      // silently reverts on-chain. Reading balanceOf here lets us fail fast
+      // with a clear message instead.
+      if (!publicClient) {
+        return { ok: false, message: "Could not reach the blockchain network. Please try again." };
+      }
 
-        const amountBaseUnits = parseUnits(amount.toString(), tokenInfo.decimals);
-        const data = encodeFunctionData({
+      const [rawTokenBalance, rawNativeBalance] = await Promise.all([
+        publicClient.readContract({
+          address: tokenInfo.address as `0x${string}`,
           abi: erc20Abi,
-          functionName: "transfer",
-          args: [treasuryAddress as `0x${string}`, amountBaseUnits],
-        });
+          functionName: "balanceOf",
+          args: [address as `0x${string}`],
+        }),
+        publicClient.getBalance({ address: address as `0x${string}` }),
+      ]);
 
-        const txHash = await sendTransactionAsync({
-          to: tokenInfo.address as `0x${string}`,
-          data,
-          value: BigInt(0),
-        });
+      const tokenBalance = Number(rawTokenBalance) / 10 ** tokenInfo.decimals;
+      if (tokenBalance < serverAmount) {
+        return {
+          ok: false,
+          message: `Insufficient ${selectedToken} on ${chain.name}. You need ${serverAmount} ${selectedToken} but your wallet has only ${tokenBalance.toFixed(2)} ${selectedToken}. Top up and try again.`,
+        };
+      }
 
-        const verifyRes = await fetch("/api/bookings/verify-popup-tx", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            bookingId: booking.bookingId,
-            txHash: txHash,
-            chainId: selectedChain,
-            isRemainingPayment: isRemainingPayment
-          }),
-        });
+      // Also require a little native coin for the network fee — a zero-native
+      // wallet can't even broadcast the transfer.
+      const gasThreshold = BigInt(parseUnits("0.0001", chain.nativeCurrency.decimals));
+      if (rawNativeBalance < gasThreshold) {
+        return {
+          ok: false,
+          message: `Insufficient ${chain.nativeCurrency.symbol} on ${chain.name} to pay gas. Add a small ${chain.nativeCurrency.symbol} balance, then retry.`,
+        };
+      }
 
-        if (!verifyRes.ok) {
-          const { error } = await verifyRes.json();
-          throw new Error(error || "Failed to initiate tx verification");
-        }
+      return { ok: true, amountBaseUnits: serverAmountBaseUnits, tokenAddress: tokenInfo.address };
+    } catch (err: any) {
+      console.error("Preflight error:", err);
+      return { ok: false, message: err.message || "Could not verify your balance. Please try again." };
+    }
+  }, [booking, address, publicClient, selectedChain, selectedToken]);
+
+  const handlePay = async () => {
+    if (!booking) return;
+
+    setError(null);
+    setStatus("sending");
+
+    try {
+      const isReservationPayment = booking.requiresReservation && !booking.reservationPaid;
+      const isRemainingPayment = booking.requiresReservation && booking.reservationPaid && !booking.remainingPaid;
+
+      const pre = await runPreflight();
+      if (!pre.ok || !pre.amountBaseUnits || !pre.tokenAddress) {
+        throw new Error(pre.message || "Payment validation failed");
+      }
+
+      // EVM Wagmi Flow — the wallet is only asked to sign AFTER the balance
+      // check passed.
+      await switchChainAsync({ chainId: selectedChain });
+
+      const data = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: "transfer",
+        args: [treasuryAddress as `0x${string}`, BigInt(pre.amountBaseUnits)],
+      });
+
+      const txHash = await sendTransactionAsync({
+        to: pre.tokenAddress as `0x${string}`,
+        data,
+        value: BigInt(0),
+      });
+
+      const verifyRes = await fetch("/api/bookings/verify-popup-tx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: booking.bookingId,
+          txHash: txHash,
+          chainId: selectedChain,
+          isRemainingPayment: isRemainingPayment
+        }),
+      });
+
+      if (!verifyRes.ok) {
+        const { error } = await verifyRes.json();
+        throw new Error(error || "Failed to initiate tx verification");
       }
 
       setStatus("verifying");
+      verifyingLegRef.current = isReservationPayment
+        ? "reservation"
+        : isRemainingPayment
+        ? "remaining"
+        : "full";
     } catch (err: any) {
       console.error("Payment error:", err);
+      verifyingLegRef.current = null;
       setError(err.message || "Payment failed");
       setStatus("ready");
     }
@@ -654,6 +760,10 @@ export default function PaymentPage() {
                     sending={status === "sending"}
                     onConfirm={handlePay}
                     onClose={() => setPayModalOpen(false)}
+                    error={error}
+                    preflight={() =>
+                      runPreflight().then((r) => (r.ok ? null : r.message || "Payment validation failed"))
+                    }
                   />
                 )}
               </div>

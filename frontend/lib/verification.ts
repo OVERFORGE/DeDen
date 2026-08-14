@@ -867,34 +867,54 @@ async function updateBookingStatus(
   status: BookingStatus,
   details?: any
 ): Promise<void> {
-  // A FAILED payment attempt must not freeze the guest's network/token
-  // choice — clear the lock so they can pick again and retry on the
-  // booking page.
-  const data: Record<string, unknown> = { status };
-  if (status === BookingStatus.FAILED) {
-    data.paymentToken = null;
-    data.paymentAmount = null;
-    data.amountBaseUnits = null;
-    data.chainId = null;
-  }
-
-  await db.booking.update({
+  const current = await db.booking.findUnique({
     where: { bookingId },
-    data,
+    select: { id: true, status: true, userId: true },
   });
-  
-  const booking = await db.booking.findUnique({ where: { bookingId } });
-  
-  if (booking) {
-    await db.activityLog.create({
+  if (!current) return;
+
+  // ⚠️ A failed REMAINING-payment attempt must never downgrade an
+  // already-secured reservation to FAILED. The deposit already holds the
+  // slot; a bad/insufficient balance transfer just needs a retry. Keep the
+  // booking RESERVED, clear the (remaining) payment lock so the guest can
+  // re-pick a network and token, and record the failed attempt so admins
+  // can see it. Only reservation/full-payment failures on a non-reserved
+  // booking actually mark it FAILED.
+  const keepReserved =
+    status === BookingStatus.FAILED && current.status === BookingStatus.RESERVED;
+
+  if (!keepReserved) {
+    const data: Record<string, unknown> = { status };
+    if (status === BookingStatus.FAILED) {
+      data.paymentToken = null;
+      data.paymentAmount = null;
+      data.amountBaseUnits = null;
+      data.chainId = null;
+    }
+    await db.booking.update({ where: { bookingId }, data });
+  } else {
+    await db.booking.update({
+      where: { bookingId },
       data: {
-        bookingId: booking.id,
-        userId: booking.userId,
-        action: `payment_${status.toLowerCase()}`,
-        entity: 'booking',
-        entityId: booking.id,
-        details,
+        paymentToken: null,
+        paymentAmount: null,
+        amountBaseUnits: null,
+        chainId: null,
       },
     });
   }
+
+  await db.activityLog.create({
+    data: {
+      bookingId: current.id,
+      userId: current.userId,
+      action: `payment_${status.toLowerCase()}`,
+      entity: 'booking',
+      entityId: current.id,
+      details: {
+        ...details,
+        statusPreserved: keepReserved ? 'reservation_kept' : undefined,
+      },
+    },
+  });
 }
