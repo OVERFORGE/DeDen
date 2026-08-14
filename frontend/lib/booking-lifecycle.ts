@@ -58,7 +58,16 @@ export async function settleBookingIfStale(bookingId: string): Promise<void> {
 
   await db.booking.update({
     where: { id: booking.id },
-    data: { status: BookingStatus.EXPIRED },
+    data: {
+      status: BookingStatus.EXPIRED,
+      // Clear the stale payment lock so the guest can re-select a network
+      // and token if the booking is reopened — a failed/expired attempt
+      // must never freeze those choices.
+      paymentToken: null,
+      paymentAmount: null,
+      amountBaseUnits: null,
+      chainId: null,
+    },
   });
 
   // Only a RESERVED booking was actually holding inventory — but recompute

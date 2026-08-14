@@ -867,9 +867,20 @@ async function updateBookingStatus(
   status: BookingStatus,
   details?: any
 ): Promise<void> {
+  // A FAILED payment attempt must not freeze the guest's network/token
+  // choice — clear the lock so they can pick again and retry on the
+  // booking page.
+  const data: Record<string, unknown> = { status };
+  if (status === BookingStatus.FAILED) {
+    data.paymentToken = null;
+    data.paymentAmount = null;
+    data.amountBaseUnits = null;
+    data.chainId = null;
+  }
+
   await db.booking.update({
     where: { bookingId },
-    data: { status },
+    data,
   });
   
   const booking = await db.booking.findUnique({ where: { bookingId } });

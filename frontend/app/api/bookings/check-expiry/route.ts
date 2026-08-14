@@ -56,11 +56,16 @@ export async function POST(request: Request) {
         // one never got as far as a paid deposit.
         const wasHoldingSlots = booking.status === BookingStatus.RESERVED;
 
-        // Update status to EXPIRED
+        // Update status to EXPIRED and clear the stale payment lock so the
+        // guest can re-select network/token if the booking is reopened.
         await db.booking.update({
           where: { id: booking.id },
           data: {
             status: BookingStatus.EXPIRED,
+            paymentToken: null,
+            paymentAmount: null,
+            amountBaseUnits: null,
+            chainId: null,
           },
         });
 

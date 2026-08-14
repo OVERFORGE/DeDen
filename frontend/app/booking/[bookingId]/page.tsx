@@ -7,6 +7,7 @@ import { parseUnits, encodeFunctionData } from "viem";
 import { erc20Abi } from "@/lib/erc20abi";
 import { PayWalletModal } from "@/components/PayWalletModal";
 import { Dropdown, type DropdownOption } from "@/components/Dropdown";
+
 import {
   chainConfig,
   treasuryAddress,
@@ -23,7 +24,6 @@ import {
   ArrowRight,
   ExternalLink,
   Loader2,
-  Info,
   RefreshCw,
   ArrowLeft,
   Check,
@@ -68,14 +68,51 @@ type PaymentStatus =
   | "confirmed"
   | "error";
 
-// Small identity dot per chain in the network dropdown — not brand-accurate
-// logos, just enough of a visual cue to scan the list quickly.
+// Chain and token logos from CoinGecko CDN
+const CHAIN_LOGOS: Record<number, string> = {
+  42161: "https://coin-images.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg", // Arbitrum
+  56:    "https://coin-images.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",                 // BNB Chain
+  8453:  "https://coin-images.coingecko.com/coins/images/28167/small/base.jpeg",                     // Base
+  1:     "https://coin-images.coingecko.com/coins/images/279/small/ethereum.png",                    // Ethereum
+};
+
+const TOKEN_LOGOS: Record<string, string> = {
+  USDC: "https://coin-images.coingecko.com/coins/images/6319/small/usdc.png",
+  USDT: "https://coin-images.coingecko.com/coins/images/325/small/Tether.png",
+};
+
+// Fallback colored dot for chains without a logo.
 const CHAIN_DOT_COLORS: Record<number, string> = {
   42161: "#28A0F0", // Arbitrum
   56: "#F0B90B", // BNB Chain
   8453: "#0052FF", // Base
+  1: "#627EEA", // Ethereum
   5003: "#65B3AE", // Mantle
 };
+
+const ChainIcon = ({ chainId }: { chainId: number }) =>
+  CHAIN_LOGOS[chainId] ? (
+    <img
+      src={CHAIN_LOGOS[chainId]}
+      alt=""
+      className="w-5 h-5 rounded-full object-cover ring-1 ring-[#3D4331]/10"
+      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+    />
+  ) : (
+    <span
+      className="w-2.5 h-2.5 rounded-full shrink-0"
+      style={{ backgroundColor: CHAIN_DOT_COLORS[chainId] || "#3D4331" }}
+    />
+  );
+
+const TokenIcon = ({ token }: { token: string }) => (
+  <img
+    src={TOKEN_LOGOS[token]}
+    alt=""
+    className="w-5 h-5 rounded-full object-cover ring-1 ring-[#3D4331]/10"
+    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+  />
+);
 
 export default function PaymentPage() {
   const params = useParams();
@@ -119,6 +156,13 @@ export default function PaymentPage() {
           return;
         }
 
+        // A FAILED or EXPIRED attempt must never freeze the network/token
+        // selectors — the guest should be able to pick again and retry.
+        if (data.status === "FAILED" || data.status === "EXPIRED") {
+          data.paymentToken = null;
+          data.paymentAmount = null;
+        }
+
         setBooking(data);
 
         const stayEnabledChains = data.stay.enabledChains;
@@ -144,8 +188,6 @@ export default function PaymentPage() {
         if (data.status === "FAILED" || data.status === "EXPIRED") {
           setError(`Payment ${data.status.toLowerCase()}. Please retry.`);
           setStatus("ready");
-          data.paymentToken = null;
-          data.paymentAmount = null;
         }
 
         if (data.status === "CONFIRMED") {
@@ -471,7 +513,11 @@ export default function PaymentPage() {
     ? booking.selectedRoomPriceUSDC || booking.stay.priceUSDC
     : booking.selectedRoomPriceUSDT || booking.stay.priceUSDT;
 
-  const isPaymentLocked = !!booking.paymentToken;
+  // The network/token selectors are locked only while a payment is actually
+  // in flight (the modal is open). A previously locked-but-failed/expired
+  // attempt must stay editable so the guest can re-select and retry. The
+  // "verifying"/"confirmed" states render full-screen and never reach here.
+  const isPaymentLocked = status === "sending";
   const supportedTokens = getSupportedTokens(selectedChain);
 
   const formattedAmount = new Intl.NumberFormat("en-US", {
@@ -559,12 +605,8 @@ export default function PaymentPage() {
                         (chainId): DropdownOption => ({
                           value: String(chainId),
                           label: getChainName(chainId),
-                          icon: (
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: CHAIN_DOT_COLORS[chainId] || "#3D4331" }}
-                            />
-                          ),
+                          sublabel: "Network",
+                          icon: <ChainIcon chainId={chainId} />,
                         })
                       )}
                     />
@@ -580,7 +622,12 @@ export default function PaymentPage() {
                     disabled={isPaymentLocked}
                     onChange={(v) => setSelectedToken(v as "USDC" | "USDT")}
                     options={supportedTokens.map(
-                      (token): DropdownOption => ({ value: token, label: token })
+                      (token): DropdownOption => ({
+                        value: token,
+                        label: token,
+                        sublabel: "Stablecoin",
+                        icon: <TokenIcon token={token} />,
+                      })
                     )}
                   />
                 </div>

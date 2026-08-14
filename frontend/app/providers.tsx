@@ -2,44 +2,17 @@
 "use client";
 
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { arbitrum, bsc, base } from "wagmi/chains";
+import { arbitrum, bsc, base, mainnet } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConnectKitProvider, getDefaultConfig } from "connectkit";
 import React from "react";
 import { SessionProvider } from "next-auth/react";
-import type { Chain } from "wagmi/chains";
 
-// ✅ Define Mantle Sepolia chain
-const mantleSepolia: Chain = {
-  id: 5003,
-  name: 'Mantle Sepolia',
-  nativeCurrency: {
-    name: 'MNT',
-    symbol: 'MNT',
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://rpc.sepolia.mantle.xyz'],
-    },
-    public: {
-      http: ['https://rpc.sepolia.mantle.xyz'],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: 'Mantle Sepolia Explorer',
-      url: 'https://explorer.sepolia.mantle.xyz',
-    },
-  },
-  testnet: true,
-};
 
 // Get environment variables
 const arbitrumKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_ARBITRUM;
 const bnbKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BNB;
 const baseKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_BASE;
-const mantleSepoliaKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_MANTLE_TESTNET;
 const wcProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
 // Create React Query client
@@ -74,11 +47,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Get the app URL from environment or use defaults
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
-    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
-  
-  const appIcon = process.env.NEXT_PUBLIC_APP_ICON || 
+  // In development use localhost so WalletConnect doesn't reject the origin.
+  // In production use the exact URL registered in the WalletConnect dashboard.
+  const appUrl = process.env.NODE_ENV === "production"
+    ? "https://www.deden.space"
+    : "http://localhost:3000";
+  const appIcon = process.env.NEXT_PUBLIC_APP_ICON ||
     'https://res.cloudinary.com/dfa0ptxxk/image/upload/v1763107951/DenDen_no_bg_x6absy.png';
 
   // Create config only once
@@ -90,26 +64,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
         appUrl: appUrl,
         appIcon: appIcon,
 
-        // ✅ Configure all supported chains INCLUDING Mantle Sepolia
-        chains: [arbitrum, bsc, base, mantleSepolia],
+        chains: [arbitrum, bsc, base, mainnet],
 
-        // ✅ RPC transports including Mantle Sepolia
         transports: {
-          [arbitrum.id]: http(
-            `https://arb-mainnet.g.alchemy.com/v2/${arbitrumKey}`
-          ),
-          [bsc.id]: http(
-            `https://bnb-mainnet.g.alchemy.com/v2/${bnbKey}`
-          ),
-          [base.id]: http(
-            `https://base-mainnet.g.alchemy.com/v2/${baseKey}`
-          ),
-          // ✅ Add Mantle Sepolia transport
-          [mantleSepolia.id]: http(
-            mantleSepoliaKey 
-              ? `https://mantle-sepolia.g.alchemy.com/v2/${mantleSepoliaKey}`
-              : 'https://rpc.sepolia.mantle.xyz' // Fallback to public RPC
-          ),
+          [arbitrum.id]: http(`https://arb-mainnet.g.alchemy.com/v2/${arbitrumKey}`),
+          [bsc.id]:      http(`https://bnb-mainnet.g.alchemy.com/v2/${bnbKey}`),
+          [base.id]:     http(`https://base-mainnet.g.alchemy.com/v2/${baseKey}`),
+          [mainnet.id]:  http("https://eth.llamarpc.com"),
         },
 
         walletConnectProjectId: wcProjectId,
