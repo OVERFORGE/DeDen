@@ -85,6 +85,10 @@ export async function GET(
                 nftTokenId: true,
                 nftContractAddress: true,
                 nftTxHash: true,
+                nftClaimable: true,
+                nftVoucherSignature: true,
+                nftVoucherExpiry: true,
+                nftMetadataURI: true,
 
                 // ✅ Stay relation with enabledChains
                 stay: {

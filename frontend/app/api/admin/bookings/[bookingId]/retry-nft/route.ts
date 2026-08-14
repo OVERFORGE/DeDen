@@ -1,14 +1,18 @@
 // File: app/api/admin/bookings/[bookingId]/retry-nft/route.ts
-// POST — admin only. Re-attempts NFT minting for a CONFIRMED booking whose
-// mint previously failed. Tickets are never blocked by this (they're issued
-// separately, before minting is attempted), so this is purely for
-// completing the on-chain collectible after the fact.
+// POST — admin only. Re-issues a self-claim NFT voucher for a CONFIRMED
+// booking that doesn't have one (e.g. it was never issued before this
+// feature existed, or the original signing attempt failed). Tickets are
+// never blocked by this (they're issued separately), so this is purely for
+// making the on-chain collectible claimable after the fact. This no longer
+// mints directly — the guest still claims (and pays gas for) their own NFT
+// from the dashboard, same as the normal payment-confirmed path.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import { BookingStatus } from '@prisma/client';
 import { requireAdmin, authErrorResponse } from '@/lib/api-auth';
-import { mintBookingNFT } from '@/lib/nft-service';
+import { issueClaimVoucher } from '@/lib/nft-service';
+import { NFTS_ENABLED } from '@/lib/features';
 
 export async function POST(
   request: Request,
@@ -16,6 +20,10 @@ export async function POST(
 ) {
   try {
     await requireAdmin();
+
+    if (!NFTS_ENABLED) {
+      return NextResponse.json({ error: 'NFT features are disabled' }, { status: 404 });
+    }
 
     const { bookingId } = await context.params;
 
@@ -46,7 +54,7 @@ export async function POST(
       );
     }
 
-    const nftResult = await mintBookingNFT({
+    const voucher = await issueClaimVoucher({
       bookingId: booking.bookingId,
       recipientAddress: booking.senderAddress,
       chainId: booking.chainId,
@@ -58,18 +66,18 @@ export async function POST(
       numberOfNights: booking.numberOfNights || 0,
     });
 
-    if (!nftResult.success) {
-      return NextResponse.json({ error: nftResult.error || 'Minting failed' }, { status: 502 });
+    if (!voucher.success) {
+      return NextResponse.json({ error: voucher.error || 'Voucher signing failed' }, { status: 502 });
     }
 
     await db.booking.update({
       where: { bookingId },
       data: {
-        nftTokenId: nftResult.tokenId?.toString(),
-        nftContractAddress: nftResult.contractAddress,
-        nftMinted: true,
-        nftTxHash: nftResult.txHash,
-        nftMintedAt: new Date(),
+        nftClaimable: true,
+        nftVoucherSignature: voucher.signature,
+        nftVoucherExpiry: voucher.expiry ? new Date(voucher.expiry * 1000) : null,
+        nftMetadataURI: voucher.metadataURI,
+        nftContractAddress: voucher.contractAddress,
       },
     });
 
@@ -77,19 +85,17 @@ export async function POST(
       data: {
         bookingId: booking.id,
         userId: booking.userId,
-        action: 'nft_minted_retry',
+        action: 'nft_voucher_issued_retry',
         entity: 'booking',
         entityId: booking.id,
         details: {
-          tokenId: nftResult.tokenId,
-          contractAddress: nftResult.contractAddress,
-          txHash: nftResult.txHash,
+          contractAddress: voucher.contractAddress,
           chainId: booking.chainId,
         },
       },
     });
 
-    return NextResponse.json({ success: true, tokenId: nftResult.tokenId, txHash: nftResult.txHash });
+    return NextResponse.json({ success: true, message: 'NFT is now claimable — the guest can mint it from their dashboard.' });
   } catch (error) {
     if ((error as any).status) {
       return authErrorResponse(error);

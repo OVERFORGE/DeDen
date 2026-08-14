@@ -27,8 +27,8 @@ import {
   ArrowRight,
   Zap,
   TrendingUp,
-  Star,
 } from "lucide-react";
+import { NFTS_ENABLED } from "@/lib/features";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -186,7 +186,6 @@ function getInitials(name: string | null | undefined, email: string | null | und
 function getActivityIcon(action: string) {
   if (action.includes("payment") || action.includes("reservation")) return <CreditCard size={12} />;
   if (action.includes("checked_in")) return <CheckCircle size={12} />;
-  if (action.includes("nft")) return <Star size={12} />;
   if (action.includes("refund")) return <History size={12} />;
   if (action.includes("approved")) return <Zap size={12} />;
   return <Activity size={12} />;
@@ -506,6 +505,8 @@ export default function UserDashboard() {
   const initials = getInitials(userName, userEmail);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
+
+  const visibleActivity = NFTS_ENABLED ? activity : activity.filter((item) => !item.action.includes("nft"));
 
   return (
     <>
@@ -838,14 +839,14 @@ export default function UserDashboard() {
               )}
 
               {/* Recent Activity */}
-              {activity.length > 0 && (
+              {visibleActivity.length > 0 && (
                 <div>
                   <h2 className="text-base font-black text-[#2c331f] font-display tracking-tight mb-3">Recent Activity</h2>
                   <div className="bg-white rounded-2xl border-2 border-[#2c331f] shadow-[3px_3px_0_0_#2c331f] overflow-hidden">
-                    {activity.slice(0, 8).map((item, i) => (
+                    {visibleActivity.slice(0, 8).map((item, i) => (
                       <div
                         key={item.id}
-                        className={`flex items-start gap-3 px-4 py-3 ${i !== Math.min(activity.length, 8) - 1 ? "border-b border-[#2c331f]/10" : ""}`}
+                        className={`flex items-start gap-3 px-4 py-3 ${i !== Math.min(visibleActivity.length, 8) - 1 ? "border-b border-[#2c331f]/10" : ""}`}
                       >
                         <div className="w-7 h-7 rounded-lg bg-[#f7eedb] border border-[#2c331f]/20 flex items-center justify-center shrink-0 mt-0.5 text-[#5a6b3a]">
                           {getActivityIcon(item.action)}

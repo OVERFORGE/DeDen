@@ -58,6 +58,7 @@ type Stay = {
     enabledChains: number[];  // ✅ ADD THIS LINE
     guestListEnabled: boolean;
     loyaltyDiscountEnabled: boolean;
+    requiresApproval: boolean;
 };
 
 export default function EditStayPage() {
@@ -419,6 +420,10 @@ export default function EditStayPage() {
                                 Allow Applications
                             </label>
                             <label className="flex items-center gap-2 text-[#3D4331]/80 text-sm font-medium">
+                                <input type="checkbox" {...register('requiresApproval')} className="h-4 w-4 text-[#96A476] border-[#96A476]/40 rounded" />
+                                Require approval before payment
+                            </label>
+                            <label className="flex items-center gap-2 text-[#3D4331]/80 text-sm font-medium">
                                 <input type="checkbox" {...register('guestListEnabled')} className="h-4 w-4 text-[#96A476] border-[#96A476]/40 rounded" />
                                 Show "Who's Coming" to guests
                             </label>
@@ -444,6 +449,11 @@ export default function EditStayPage() {
                             calendar. Guests pick any check-in/check-out inside the stay window above and are priced
                             per night for the range they choose. Leave it off for conference-style events where
                             everyone books the whole window.
+                        </p>
+                        <p className="text-xs text-[#3D4331]/60 -mt-2">
+                            "Require approval before payment" holds new applications as Waitlisted instead of taking
+                            guests straight to the payment page. Review and approve from Admin → Bookings — approving
+                            sends the guest an email with their payment link. Leave off for instant, self-serve booking.
                         </p>
 
                         {allowFlexibleDates && (

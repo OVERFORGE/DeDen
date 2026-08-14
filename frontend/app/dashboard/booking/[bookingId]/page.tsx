@@ -22,7 +22,9 @@ import {
   Ticket as TicketIcon,
 } from "lucide-react";
 import { getChainName, chainConfig } from "@/lib/config";
+import { NFTS_ENABLED } from "@/lib/features";
 import { BookingNFTCard } from "@/components/BookingNFTCard";
+import { ClaimNftModal } from "@/components/ClaimNftModal";
 
 type Guest = {
   fullName?: string;
@@ -81,6 +83,10 @@ type BookingDetail = {
   nftMinted: boolean;
   nftTokenId: string | null;
   nftContractAddress: string | null;
+  nftClaimable: boolean;
+  nftVoucherSignature: string | null;
+  nftVoucherExpiry: string | null;
+  nftMetadataURI: string | null;
 
   stay: {
     stayId: string;
@@ -152,22 +158,50 @@ export default function BookingDetailPage() {
   const [ticketQr, setTicketQr] = useState<Record<string, string>>({});
   const [loadingQr, setLoadingQr] = useState<string | null>(null);
 
+  const [claimModalOpen, setClaimModalOpen] = useState(false);
+  const [claimConfirming, setClaimConfirming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+
+  const loadBooking = async () => {
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load booking");
+      setBooking(data);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   useEffect(() => {
     if (!bookingId) return;
     (async () => {
-      try {
-        setLoading(true);
-        const res = await fetch(`/api/bookings/${bookingId}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to load booking");
-        setBooking(data);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+      setLoading(true);
+      await loadBooking();
+      setLoading(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
+
+  const handleNftClaimed = async (txHash: string) => {
+    setClaimConfirming(true);
+    setClaimError(null);
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/confirm-nft-claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txHash }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not confirm your claim");
+      await loadBooking();
+      setClaimModalOpen(false);
+    } catch (err: any) {
+      setClaimError(err.message);
+    } finally {
+      setClaimConfirming(false);
+    }
+  };
 
   // "Who's coming" only applies once the guest is actually accepted, and
   // only if the stay's organiser turned it on.
@@ -531,7 +565,7 @@ export default function BookingDetailPage() {
               </div>
             )}
 
-            {booking.nftMinted && (
+            {NFTS_ENABLED && (booking.nftMinted || booking.nftClaimable) && (
               <div className="mt-4 pt-4 border-t border-[#2c331f]/10">
                 <BookingNFTCard
                   booking={{
@@ -541,8 +575,19 @@ export default function BookingDetailPage() {
                     nftContractAddress: booking.nftContractAddress || undefined,
                     chainId: booking.chainId || undefined,
                     stayTitle: booking.stay.title,
+                    nftClaimable: booking.nftClaimable,
+                    nftVoucherExpiry: booking.nftVoucherExpiry,
+                  }}
+                  onClaim={() => {
+                    setClaimError(null);
+                    setClaimModalOpen(true);
                   }}
                 />
+                {claimError && !claimModalOpen && (
+                  <p className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2 mt-3">
+                    {claimError}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -636,6 +681,29 @@ export default function BookingDetailPage() {
           </div>
         )}
       </div>
+
+      {NFTS_ENABLED &&
+        claimModalOpen &&
+        booking.nftContractAddress &&
+        booking.chainId &&
+        booking.nftMetadataURI &&
+        booking.nftVoucherSignature &&
+        booking.nftVoucherExpiry && (
+          <ClaimNftModal
+            contractAddress={booking.nftContractAddress}
+            chainId={booking.chainId}
+            bookingId={booking.bookingId}
+            metadataURI={booking.nftMetadataURI}
+            stayTitle={booking.stay.title}
+            expiry={Math.floor(new Date(booking.nftVoucherExpiry).getTime() / 1000)}
+            signature={booking.nftVoucherSignature}
+            onClaimed={handleNftClaimed}
+            onClose={() => {
+              if (claimConfirming) return;
+              setClaimModalOpen(false);
+            }}
+          />
+        )}
     </div>
   );
 }

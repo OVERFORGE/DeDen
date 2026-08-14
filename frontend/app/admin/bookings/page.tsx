@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from "react";
 import { ApproveWaitlistButton } from "@/components/ApproveWaitlistButton";
 import { BookingActionsMenu } from "@/components/admin/BookingActionsMenu";
 import { chainConfig, getChainName } from "@/lib/config";
+import { NFTS_ENABLED } from "@/lib/features";
 import {
   Users,
   DollarSign,
@@ -164,10 +165,12 @@ function BookingDetailModal({
     try {
       const [ticketsRes, nftRes] = await Promise.all([
         fetch(`/api/admin/bookings/${booking.bookingId}/backfill-tickets`, { method: "POST" }),
-        fetch(`/api/admin/bookings/${booking.bookingId}/retry-nft`, { method: "POST" }),
+        NFTS_ENABLED
+          ? fetch(`/api/admin/bookings/${booking.bookingId}/retry-nft`, { method: "POST" })
+          : Promise.resolve(null),
       ]);
       const ticketsData = await ticketsRes.json();
-      const nftData = await nftRes.json();
+      const nftData = nftRes ? await nftRes.json() : null;
       const parts: string[] = [];
       parts.push(
         ticketsRes.ok
@@ -176,7 +179,9 @@ function BookingDetailModal({
             : `Tickets OK (${ticketsData.totalTickets})`
           : `Tickets: ${ticketsData.error}`
       );
-      parts.push(nftRes.ok ? `NFT minted (token #${nftData.tokenId})` : `NFT: ${nftData.error}`);
+      if (NFTS_ENABLED && nftRes && nftData) {
+        parts.push(nftRes.ok ? `NFT voucher ready` : `NFT: ${nftData.error}`);
+      }
       alert(parts.join("\n"));
       onDone();
     } catch (err: any) {
@@ -439,7 +444,7 @@ function BookingDetailModal({
                 className="flex items-center justify-center gap-2 w-full py-3 bg-white text-[#2c331f] rounded-xl border-2 border-[#2c331f] shadow-[3px_3px_0px_0px_#2c331f] hover:shadow-[0px_0px_0px_0px_#2c331f] hover:translate-y-1 hover:translate-x-1 transition-all font-bold uppercase tracking-widest text-xs disabled:opacity-50"
               >
                 <RefreshCw size={14} className={resyncBusy ? "animate-spin" : ""} />
-                {resyncBusy ? "Syncing…" : "Resync Tickets / NFT"}
+                {resyncBusy ? "Syncing…" : NFTS_ENABLED ? "Resync Tickets / NFT" : "Resync Tickets"}
               </button>
             )}
             <div className="flex justify-center">

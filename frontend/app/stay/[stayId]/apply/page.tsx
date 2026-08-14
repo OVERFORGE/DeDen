@@ -322,7 +322,14 @@ export default function ApplyPage() {
         throw new Error(result.error || "Failed to submit application");
       }
 
-      router.push(`/booking/${result.booking.bookingId}`);
+      // A WAITLISTED application has no payment step yet — it's the
+      // dashboard booking-detail page (which already renders an "Under
+      // Review" state) that makes sense here, not the payment page.
+      if (result.booking.status === "WAITLISTED") {
+        router.push(`/dashboard/booking/${result.booking.bookingId}`);
+      } else {
+        router.push(`/booking/${result.booking.bookingId}`);
+      }
     } catch (err: any) {
       console.error(err);
       setApiError(err.message);

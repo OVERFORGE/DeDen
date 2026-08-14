@@ -20,7 +20,7 @@ function Spinner() {
 
 const HIGHLIGHTS = [
   "Curated luxury villa stays at major Web3 conferences",
-  "Seamless crypto payments & instant NFT event tickets",
+  "Seamless crypto payments & instant event tickets",
   "Network, collaborate & build IRL with leading founders",
 ];
 

@@ -217,6 +217,14 @@ model Stay {
   isFeatured      Boolean   @default(false)
   allowWaitlist   Boolean   @default(true)
   autoConfirm     Boolean   @default(false)
+
+  // When on, a fresh application lands as WAITLISTED instead of going
+  // straight to the payment page — an admin has to approve it first
+  // (app/api/admin/bookings/[bookingId]/approve), which is what actually
+  // sends the "complete your payment" email. Off by default so existing
+  // stays keep today's instant-pay behavior. Only applies to brand-new
+  // applications, not extensions to a booking that's already past WAITLISTED.
+  requiresApproval Boolean  @default(false)
   // When on, guests with an accepted booking can see who else is attending
   // (name + X handle only, and only for guests who opted in themselves).
   guestListEnabled Boolean  @default(false)
@@ -441,9 +449,18 @@ model Booking {
   // ✅ ✅ ✅ NFT TICKET FIELDS ✅ ✅ ✅
   nftMinted          Boolean   @default(false)  // ✅ NOT nullable, default false
   nftTokenId         String?                    // ✅ Nullable - will be set after minting
-  nftContractAddress String?                    // ✅ Nullable - will be set after minting
+  nftContractAddress String?                    // Set once a claim voucher exists (not only after minting)
   nftTxHash          String?                    // ✅ Optional - transaction hash of minting
   nftMintedAt        DateTime?                  // ✅ ADDED: When NFT was minted
+
+  // Self-claim voucher — the guest mints (and pays gas for) their own NFT by
+  // calling claimNFT() on-chain with this signature. Signing costs nothing,
+  // so this is always issued on payment confirmation; nftMinted only flips
+  // true once the guest actually claims it (see claim-confirm route).
+  nftClaimable        Boolean   @default(false)
+  nftVoucherSignature String?
+  nftVoucherExpiry    DateTime?
+  nftMetadataURI      String?
   
   // Relations
   refund          Refund?

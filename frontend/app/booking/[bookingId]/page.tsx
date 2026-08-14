@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAccount, useSendTransaction, useSwitchChain } from "wagmi";
 import { parseUnits, encodeFunctionData } from "viem";
 import { erc20Abi } from "@/lib/erc20abi";
 import { PayWalletModal } from "@/components/PayWalletModal";
+import { Dropdown, type DropdownOption } from "@/components/Dropdown";
 import {
   chainConfig,
   treasuryAddress,
@@ -67,8 +68,18 @@ type PaymentStatus =
   | "confirmed"
   | "error";
 
+// Small identity dot per chain in the network dropdown — not brand-accurate
+// logos, just enough of a visual cue to scan the list quickly.
+const CHAIN_DOT_COLORS: Record<number, string> = {
+  42161: "#28A0F0", // Arbitrum
+  56: "#F0B90B", // BNB Chain
+  8453: "#0052FF", // Base
+  5003: "#65B3AE", // Mantle
+};
+
 export default function PaymentPage() {
   const params = useParams();
+  const router = useRouter();
   const bookingId = params.bookingId as string;
 
   const [allowedChains, setAllowedChains] = useState<number[]>([]);
@@ -99,6 +110,15 @@ export default function PaymentPage() {
         }
 
         const data: BookingDetails = await res.json();
+
+        // Nothing to pay yet — this booking is still awaiting admin
+        // approval. The dashboard detail page already has a proper "Under
+        // Review" state; this page's job is payment, not application status.
+        if (data.status === "WAITLISTED") {
+          router.replace(`/dashboard/booking/${bookingId}`);
+          return;
+        }
+
         setBooking(data);
 
         const stayEnabledChains = data.stay.enabledChains;
@@ -515,7 +535,7 @@ export default function PaymentPage() {
                   <label className="block text-xs font-black uppercase tracking-widest text-[#3D4331] mb-4">
                     Select Network
                   </label>
-                  
+
                   {allowedChains.length === 0 ? (
                     <div className="p-5 bg-red-50 border border-red-100 rounded-2xl text-center">
                       <AlertCircle className="w-6 h-6 text-red-600 mx-auto mb-2" />
@@ -524,27 +544,30 @@ export default function PaymentPage() {
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      {allowedChains.map((chainId) => (
-                        <button
-                          key={chainId}
-                          onClick={() => {
-                            setSelectedChain(chainId);
-                            const tokens = getSupportedTokens(chainId);
-                            if (!tokens.includes(selectedToken)) {
-                              setSelectedToken(tokens[0] as "USDC" | "USDT");
-                            }
-                          }}
-                          className={`p-4 rounded-2xl font-bold text-sm transition-all ${
-                            selectedChain === chainId
-                              ? "bg-[#3D4331] text-[#F3EDE0]"
-                              : "bg-[#F3EDE0] hover:bg-[#EBE1D0] text-[#3D4331]"
-                          }`}
-                        >
-                          {getChainName(chainId)}
-                        </button>
-                      ))}
-                    </div>
+                    <Dropdown
+                      value={String(selectedChain)}
+                      disabled={isPaymentLocked}
+                      onChange={(v) => {
+                        const chainId = Number(v);
+                        setSelectedChain(chainId);
+                        const tokens = getSupportedTokens(chainId);
+                        if (!tokens.includes(selectedToken)) {
+                          setSelectedToken(tokens[0] as "USDC" | "USDT");
+                        }
+                      }}
+                      options={allowedChains.map(
+                        (chainId): DropdownOption => ({
+                          value: String(chainId),
+                          label: getChainName(chainId),
+                          icon: (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: CHAIN_DOT_COLORS[chainId] || "#3D4331" }}
+                            />
+                          ),
+                        })
+                      )}
+                    />
                   )}
                 </div>
 
@@ -552,26 +575,14 @@ export default function PaymentPage() {
                   <label className="block text-xs font-black uppercase tracking-widest text-[#3D4331] mb-4">
                     Select Token
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {supportedTokens.map((token) => (
-                      <button
-                        key={token}
-                        onClick={() => setSelectedToken(token as "USDC" | "USDT")}
-                        disabled={isPaymentLocked && selectedToken !== token}
-                        className={`p-4 rounded-2xl font-bold transition-all text-sm ${
-                          selectedToken === token
-                            ? "bg-[#3D4331] text-[#F3EDE0]"
-                            : "bg-[#F3EDE0] hover:bg-[#EBE1D0] text-[#3D4331]"
-                        } ${
-                          isPaymentLocked && selectedToken !== token
-                            ? "opacity-30 cursor-not-allowed"
-                            : ""
-                        }`}
-                      >
-                        {token}
-                      </button>
-                    ))}
-                  </div>
+                  <Dropdown
+                    value={selectedToken}
+                    disabled={isPaymentLocked}
+                    onChange={(v) => setSelectedToken(v as "USDC" | "USDT")}
+                    options={supportedTokens.map(
+                      (token): DropdownOption => ({ value: token, label: token })
+                    )}
+                  />
                 </div>
                 
                 {error && (

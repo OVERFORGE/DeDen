@@ -7,12 +7,34 @@ import { getPublicClient } from './web3-client';
 import { chainConfig, treasuryAddress } from './config';
 import { parseUnits } from 'viem';
 import { sendConfirmationEmail, sendReservationConfirmedEmail } from './email';
-import { mintBookingNFT } from './nft-service'; // ✅ NEW: Import NFT service
+import { issueClaimVoucher } from './nft-service';
+import { NFTS_ENABLED } from './features';
 import { recomputeStayAvailability, checkRangeAvailability } from './inventory';
 import { issueTicketsForBooking, getTicketEmailPayload } from './ticket-service';
 
 /** Which payment leg a verification is currently processing. */
 export type PaymentLeg = 'reservation' | 'remaining' | 'full';
+
+type NftVoucherBooking = {
+  id: string;
+  userId: string;
+  bookingId: string;
+  guestName: string | null;
+  checkInDate: Date | null;
+  checkOutDate: Date | null;
+  numberOfNights: number | null;
+  stay: {
+    title: string;
+    location: string;
+  };
+  user?: {
+    name?: string | null;
+  } | null;
+};
+
+type PaymentTransaction = {
+  from: string;
+};
 
 /**
  * Finds a prior *consumption* of this transaction hash that conflicts with
@@ -432,8 +454,17 @@ export async function verifyPayment(
             // ==========================================
             console.log('[Verification] 💾 Updating booking status to RESERVED...');
 
-            await db.booking.update({
-              where: { bookingId },
+            // Guarded on status still being PENDING: the lazy expiry check
+            // (settleBookingIfStale) can flip a PENDING booking to EXPIRED
+            // — releasing its slot — while a tx is still mid-confirmation
+            // here (up to ~30s of retries). Without this guard, a late
+            // confirmation would silently overwrite EXPIRED back to
+            // RESERVED, resurrecting a booking whose slot may have already
+            // been re-sold. updateMany + a status filter makes the write
+            // conditional in one atomic operation instead of a separate
+            // read-then-write that could itself race.
+            const reservedResult = await db.booking.updateMany({
+              where: { bookingId, status: BookingStatus.PENDING },
               data: {
                 status: BookingStatus.RESERVED,
                 reservationPaid: true,
@@ -448,6 +479,16 @@ export async function verifyPayment(
                 gasFeeUSD: gasFeeUSD,
               },
             });
+            if (reservedResult.count === 0) {
+              console.error(
+                `[Verification] ❌ STATUS CHANGED: booking ${bookingId} is no longer PENDING (expired or already processed) — not overwriting`
+              );
+              await updateBookingStatus(bookingId, BookingStatus.FAILED, {
+                error: 'This booking is no longer pending payment (it may have expired). Your payment was received — contact support.',
+                txHash,
+              });
+              return;
+            }
 
             // ✅ Slot is secured the moment the reservation is paid — hold it
             // now so it isn't double-booked while the remaining payment is
@@ -523,9 +564,13 @@ export async function verifyPayment(
             // REMAINING PAYMENT CONFIRMED (WITH NFT)
             // ==========================================
             console.log('[Verification] 💾 Updating booking status to CONFIRMED...');
-            
-            await db.booking.update({
-              where: { bookingId },
+
+            // Same guard as the reservation leg above: an abandoned-stay
+            // expiry (settleBookingIfStale, keyed off stay.endDate) could
+            // flip this RESERVED booking to EXPIRED — releasing its slot —
+            // while this remaining-payment tx is still mid-confirmation.
+            const confirmedResult = await db.booking.updateMany({
+              where: { bookingId, status: BookingStatus.RESERVED },
               data: {
                 status: BookingStatus.CONFIRMED,
                 remainingPaid: true,
@@ -537,6 +582,16 @@ export async function verifyPayment(
                 totalPaid: (booking.reservationAmount || 0) + expectedAmount,
               },
             });
+            if (confirmedResult.count === 0) {
+              console.error(
+                `[Verification] ❌ STATUS CHANGED: booking ${bookingId} is no longer RESERVED (expired or already processed) — not overwriting`
+              );
+              await updateBookingStatus(bookingId, BookingStatus.FAILED, {
+                error: 'This booking is no longer awaiting the remaining payment (it may have expired). Your payment was received — contact support.',
+                txHash,
+              });
+              return;
+            }
 
             // Log activity
             await db.activityLog.create({
@@ -566,90 +621,11 @@ export async function verifyPayment(
               console.error('[Verification] ⚠️ Ticket issuance failed:', ticketError);
             }
 
-            // ✅ ✅ ✅ MINT NFT AFTER FULL PAYMENT ✅ ✅ ✅
-            console.log('[Verification] 🎫 Starting NFT minting process...');
-            try {
-              const nftResult = await mintBookingNFT({
-                bookingId: booking.bookingId,
-                recipientAddress: tx.from,
-                chainId: chainId,
-                stayTitle: booking.stay.title,
-                location: booking.stay.location,
-                checkInDate: booking.checkInDate!,
-                checkOutDate: booking.checkOutDate!,
-                guestName: booking.guestName || booking.user?.name || 'Guest',
-                numberOfNights: booking.numberOfNights || 0,
-              });
+            // Issue a self-claim voucher — no gas spent by the platform. The
+            // guest mints it themselves from the dashboard whenever they
+            // choose to.
+            await issueNftClaimVoucher(booking, chainId, tx);
 
-              if (nftResult.success) {
-                console.log(`[Verification] ✅ NFT minted successfully! Token ID: ${nftResult.tokenId}`);
-                
-                // Update booking with NFT details
-                await db.booking.update({
-                  where: { bookingId },
-                  data: {
-                    nftTokenId: nftResult.tokenId?.toString(),
-                    nftContractAddress: nftResult.contractAddress,
-                    nftMinted: true,
-                  },
-                });
-
-                // Log NFT minting
-                await db.activityLog.create({
-                  data: {
-                    bookingId: booking.id,
-                    userId: booking.userId,
-                    action: 'nft_minted',
-                    entity: 'booking',
-                    entityId: booking.id,
-                    details: {
-                      tokenId: nftResult.tokenId,
-                      contractAddress: nftResult.contractAddress,
-                      txHash: nftResult.txHash,
-                      chainId: chainId,
-                    },
-                  },
-                });
-
-                console.log('[Verification] 🎉 NFT ticket successfully minted and saved!');
-              } else {
-                console.error(`[Verification] ⚠️ NFT minting failed: ${nftResult.error}`);
-                
-                // Log NFT minting failure (but don't fail the booking)
-                await db.activityLog.create({
-                  data: {
-                    bookingId: booking.id,
-                    userId: booking.userId,
-                    action: 'nft_mint_failed',
-                    entity: 'booking',
-                    entityId: booking.id,
-                    details: {
-                      error: nftResult.error,
-                      chainId: chainId,
-                    },
-                  },
-                });
-              }
-            } catch (nftError) {
-              console.error('[Verification] ⚠️ NFT minting error:', nftError);
-              
-              // Log error but don't fail the booking
-              await db.activityLog.create({
-                data: {
-                  bookingId: booking.id,
-                  userId: booking.userId,
-                  action: 'nft_mint_error',
-                  entity: 'booking',
-                  entityId: booking.id,
-                  details: {
-                    error: (nftError as Error).message,
-                    chainId: chainId,
-                  },
-                },
-              });
-            }
-            // ✅ ✅ ✅ END NFT MINTING ✅ ✅ ✅
-            
             // Send full confirmation email
             if (booking.user?.email && booking.stay) {
               try {
@@ -683,9 +659,10 @@ export async function verifyPayment(
             // FULL PAYMENT - NO RESERVATION (WITH NFT)
             // ==========================================
             console.log('[Verification] 💾 Updating booking status to CONFIRMED...');
-            
-            await db.booking.update({
-              where: { bookingId },
+
+            // Same PENDING guard as the reservation leg above.
+            const fullPaymentResult = await db.booking.updateMany({
+              where: { bookingId, status: BookingStatus.PENDING },
               data: {
                 status: BookingStatus.CONFIRMED,
                 confirmedAt: new Date(),
@@ -697,6 +674,16 @@ export async function verifyPayment(
                 totalPaid: booking.paymentAmount,
               },
             });
+            if (fullPaymentResult.count === 0) {
+              console.error(
+                `[Verification] ❌ STATUS CHANGED: booking ${bookingId} is no longer PENDING (expired or already processed) — not overwriting`
+              );
+              await updateBookingStatus(bookingId, BookingStatus.FAILED, {
+                error: 'This booking is no longer pending payment (it may have expired). Your payment was received — contact support.',
+                txHash,
+              });
+              return;
+            }
 
             // ✅ Non-reservation stays hold the slot at full-payment confirmation.
             await recomputeStayAvailability(booking.stayId);
@@ -729,90 +716,9 @@ export async function verifyPayment(
               console.error('[Verification] ⚠️ Ticket issuance failed:', ticketError);
             }
 
-            // ✅ ✅ ✅ MINT NFT AFTER FULL PAYMENT ✅ ✅ ✅
-            console.log('[Verification] 🎫 Starting NFT minting process...');
-            try {
-              const nftResult = await mintBookingNFT({
-                bookingId: booking.bookingId,
-                recipientAddress: tx.from,
-                chainId: chainId,
-                stayTitle: booking.stay.title,
-                location: booking.stay.location,
-                checkInDate: booking.checkInDate!,
-                checkOutDate: booking.checkOutDate!,
-                guestName: booking.guestName || booking.user?.name || 'Guest',
-                numberOfNights: booking.numberOfNights || 0,
-              });
+            // Issue a self-claim voucher — no gas spent by the platform.
+            await issueNftClaimVoucher(booking, chainId, tx);
 
-              if (nftResult.success) {
-                console.log(`[Verification] ✅ NFT minted successfully! Token ID: ${nftResult.tokenId}`);
-                
-                // Update booking with NFT details
-                await db.booking.update({
-                  where: { bookingId },
-                  data: {
-                    nftTokenId: nftResult.tokenId?.toString(),
-                    nftContractAddress: nftResult.contractAddress,
-                    nftMinted: true,
-                  },
-                });
-
-                // Log NFT minting
-                await db.activityLog.create({
-                  data: {
-                    bookingId: booking.id,
-                    userId: booking.userId,
-                    action: 'nft_minted',
-                    entity: 'booking',
-                    entityId: booking.id,
-                    details: {
-                      tokenId: nftResult.tokenId,
-                      contractAddress: nftResult.contractAddress,
-                      txHash: nftResult.txHash,
-                      chainId: chainId,
-                    },
-                  },
-                });
-
-                console.log('[Verification] 🎉 NFT ticket successfully minted and saved!');
-              } else {
-                console.error(`[Verification] ⚠️ NFT minting failed: ${nftResult.error}`);
-                
-                // Log NFT minting failure
-                await db.activityLog.create({
-                  data: {
-                    bookingId: booking.id,
-                    userId: booking.userId,
-                    action: 'nft_mint_failed',
-                    entity: 'booking',
-                    entityId: booking.id,
-                    details: {
-                      error: nftResult.error,
-                      chainId: chainId,
-                    },
-                  },
-                });
-              }
-            } catch (nftError) {
-              console.error('[Verification] ⚠️ NFT minting error:', nftError);
-              
-              // Log error but don't fail the booking
-              await db.activityLog.create({
-                data: {
-                  bookingId: booking.id,
-                  userId: booking.userId,
-                  action: 'nft_mint_error',
-                  entity: 'booking',
-                  entityId: booking.id,
-                  details: {
-                    error: (nftError as Error).message,
-                    chainId: chainId,
-                  },
-                },
-              });
-            }
-            // ✅ ✅ ✅ END NFT MINTING ✅ ✅ ✅
-            
             // Send confirmation email
             if (booking.user?.email && booking.stay) {
               try {
@@ -871,6 +777,85 @@ export async function verifyPayment(
         await new Promise(resolve => setTimeout(resolve, retryDelayMs));
       }
     }
+  }
+}
+
+/**
+ * Issues a self-claim NFT voucher for a just-confirmed booking (shared by
+ * both the reservation-remaining and no-reservation-full payment paths).
+ * Replaces the old server-broadcast mintBookingNFT() call: signing a
+ * voucher costs no gas, so this can never fail because the platform wallet
+ * is out of native token — the guest pays gas themselves when they claim.
+ */
+async function issueNftClaimVoucher(booking: NftVoucherBooking, chainId: number, tx: PaymentTransaction): Promise<void> {
+  if (!NFTS_ENABLED) {
+    console.log('[Verification] NFT claim vouchers are disabled.');
+    return;
+  }
+
+  console.log('[Verification] 🎫 Issuing self-claim NFT voucher...');
+  try {
+    const voucher = await issueClaimVoucher({
+      bookingId: booking.bookingId,
+      recipientAddress: tx.from,
+      chainId,
+      stayTitle: booking.stay.title,
+      location: booking.stay.location,
+      checkInDate: booking.checkInDate!,
+      checkOutDate: booking.checkOutDate!,
+      guestName: booking.guestName || booking.user?.name || 'Guest',
+      numberOfNights: booking.numberOfNights || 0,
+    });
+
+    if (voucher.success) {
+      await db.booking.update({
+        where: { bookingId: booking.bookingId },
+        data: {
+          nftClaimable: true,
+          nftVoucherSignature: voucher.signature,
+          nftVoucherExpiry: voucher.expiry ? new Date(voucher.expiry * 1000) : null,
+          nftMetadataURI: voucher.metadataURI,
+          nftContractAddress: voucher.contractAddress,
+        },
+      });
+
+      await db.activityLog.create({
+        data: {
+          bookingId: booking.id,
+          userId: booking.userId,
+          action: 'nft_voucher_issued',
+          entity: 'booking',
+          entityId: booking.id,
+          details: { contractAddress: voucher.contractAddress, chainId, expiry: voucher.expiry },
+        },
+      });
+
+      console.log('[Verification] ✅ NFT claim voucher ready — guest can self-mint from the dashboard.');
+    } else {
+      console.error(`[Verification] ⚠️ NFT voucher issuance failed: ${voucher.error}`);
+      await db.activityLog.create({
+        data: {
+          bookingId: booking.id,
+          userId: booking.userId,
+          action: 'nft_voucher_failed',
+          entity: 'booking',
+          entityId: booking.id,
+          details: { error: voucher.error, chainId },
+        },
+      });
+    }
+  } catch (error) {
+    console.error('[Verification] ⚠️ NFT voucher issuance error:', error);
+    await db.activityLog.create({
+      data: {
+        bookingId: booking.id,
+        userId: booking.userId,
+        action: 'nft_voucher_error',
+        entity: 'booking',
+        entityId: booking.id,
+        details: { error: (error as Error).message, chainId },
+      },
+    });
   }
 }
 

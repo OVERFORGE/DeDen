@@ -331,7 +331,13 @@ export async function POST(
     // night over the guest's actual requested range, not the whole stay
     // window, so a short booking can still fit into a gap a longer one
     // couldn't.
-    if (!isExtendable) {
+    // Skipped for stays that require approval: a waitlist is meant to accept
+    // applications even when the stay looks full right now — the admin has
+    // final say at approve-time, where capacity is checked for real (see
+    // approve/route.ts). Applying doesn't claim any capacity either way
+    // (only RESERVED/CONFIRMED bookings do), so nothing is at risk by
+    // letting the application through.
+    if (!isExtendable && !stay.requiresApproval) {
       const range = await checkRangeAvailability(stay.id, submittedGuestCount, checkInDate, checkOutDate);
       if (!range.ok) {
         return NextResponse.json(
@@ -482,6 +488,14 @@ export async function POST(
       // Fresh booking — either no prior booking, or the prior one is in a
       // terminal state (FAILED/EXPIRED/CANCELLED/REFUNDED) and this is a
       // clean re-application, not an extension.
+      //
+      // Stays with requiresApproval land as WAITLISTED instead of PENDING —
+      // the guest sits in review until an admin approves them (which is what
+      // actually sends the "complete your payment" email and opens the real
+      // payment window). No expiry until then; a WAITLISTED booking isn't on
+      // a clock.
+      const initialStatus = stay.requiresApproval ? BookingStatus.WAITLISTED : BookingStatus.PENDING;
+
       const commonBookingFields = {
         preferredRoomId: body.selectedRoomId || null,
         selectedRoomId: body.selectedRoomId || null,
@@ -506,14 +520,14 @@ export async function POST(
         reservationAmount: pricing.reservationAmount,
         remainingAmount: pricing.remainingAmountUSDC,
         remainingDueDate: pricing.requiresReservation ? checkInDate : null,
-        expiresAt: paymentWindowExpiresAt,
+        expiresAt: stay.requiresApproval ? null : paymentWindowExpiresAt,
       };
 
       if (existingBooking) {
         resultBooking = await db.booking.update({
           where: { id: existingBooking.id },
           data: {
-            status: BookingStatus.PENDING,
+            status: initialStatus,
             ...commonBookingFields,
             guestName: user.displayName,
             guestEmail: bookingContactEmail,
@@ -535,7 +549,7 @@ export async function POST(
         resultBooking = await db.booking.create({
           data: {
             bookingId: `${stayId}-${Date.now()}`,
-            status: BookingStatus.PENDING,
+            status: initialStatus,
             userId: user.id,
             stayId: stay.id,
             guestName: user.displayName,
@@ -592,6 +606,8 @@ export async function POST(
       responseMessage = `Added ${addedGuestCount} guest(s)! An extra $${extensionDelta} is due — you'll be taken to pay it.`;
     } else if (isExtendable) {
       responseMessage = `Added ${addedGuestCount} guest(s) to your application.`;
+    } else if (resultBooking.status === BookingStatus.WAITLISTED) {
+      responseMessage = "Application submitted! It's under review — you'll get an email with a payment link once it's approved.";
     } else {
       responseMessage = pricing.requiresReservation
         ? `Application submitted! ${pricing.discountPercent > 0 ? `${pricing.discountPercent}% discount applied.` : ''} Reservation payment ($${pricing.reservationAmount}) required.`
@@ -605,7 +621,7 @@ export async function POST(
         booking: {
           bookingId: resultBooking.bookingId,
           status: resultBooking.status,
-          nextAction: 'PROCEED_TO_PAYMENT',
+          nextAction: resultBooking.status === BookingStatus.WAITLISTED ? 'AWAIT_APPROVAL' : 'PROCEED_TO_PAYMENT',
           stayTitle: stay.title,
           selectedRoomName: pricing.roomName,
           numberOfNights,
