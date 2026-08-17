@@ -27,7 +27,7 @@ jobs:
             exit 1
           fi
 
-          http_code=$(curl -s -o /tmp/response.txt -w "%{http_code}" -X POST \
+          http_code=$(curl -s -o /tmp/response.txt -w "%{http_code}" -L -X POST \
             "${{ secrets.APP_URL }}/api/bookings/check-expiry" \
             -H "Authorization: Bearer ${{ secrets.JOB_SECRET }}" \
             -H "Content-Type: application/json")
